@@ -1,0 +1,10 @@
+[tools]
+rust = "latest"
+
+[tasks.dev]
+description = "Run the app"
+run = "cargo run -- /tmp/tuxedo-sample.txt"
+
+[tasks.test]
+description = "Run unit tests"
+run = "cargo test"

@@ -1,0 +1,152 @@
+use ratatui::Frame;
+use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::style::Style;
+use ratatui::widgets::{Block, Clear};
+
+use crate::app::{App, Mode, View};
+
+pub mod archive;
+pub mod detail;
+pub mod dialog;
+pub mod empty;
+pub mod filters;
+pub mod header;
+pub mod help;
+pub mod list;
+pub mod settings;
+pub mod status;
+pub mod task_row;
+pub mod today;
+
+// Pane and overlay sizing. Promoted out of inline literals so the three
+// `MIN_BODY_W` references below stay in sync, and so tweaking a sidebar
+// width is a one-line change.
+const LEFT_PANE_W: u16 = 26;
+const RIGHT_PANE_W: u16 = 34;
+const MIN_BODY_W: u16 = 40;
+
+const DIALOG_H: u16 = 8;
+const DIALOG_MIN_W: u16 = 40;
+const DIALOG_MAX_W: u16 = 100;
+
+const HELP_MAX_H: u16 = 22;
+const HELP_MIN_W: u16 = 76;
+const HELP_MAX_W: u16 = 120;
+
+const PROMPT_H: u16 = 5;
+const PROMPT_MAX_W: u16 = 50;
+
+pub fn draw(frame: &mut Frame, app: &App) {
+    let theme = app.theme();
+    let area = frame.area();
+
+    // Paint full background.
+    frame.render_widget(Block::default().style(Style::default().bg(theme.bg)), area);
+
+    let bottom = if app.prefs.layout.status_bar { 1 } else { 0 };
+    let [body_area, bottom_area] =
+        Layout::vertical([Constraint::Min(1), Constraint::Length(bottom)]).areas(area);
+
+    // Determine pane widths.
+    let show_left = app.prefs.layout.left && matches!(app.view(), View::List | View::Today);
+    let show_right = app.prefs.layout.right && matches!(app.view(), View::List | View::Today);
+    let left_w = if show_left { LEFT_PANE_W } else { 0 };
+    let right_w = if show_right { RIGHT_PANE_W } else { 0 };
+
+    let constraints = match (show_left, show_right) {
+        (true, true) => vec![
+            Constraint::Length(left_w),
+            Constraint::Min(MIN_BODY_W),
+            Constraint::Length(right_w),
+        ],
+        (true, false) => vec![Constraint::Length(left_w), Constraint::Min(MIN_BODY_W)],
+        (false, true) => vec![Constraint::Min(MIN_BODY_W), Constraint::Length(right_w)],
+        (false, false) => vec![Constraint::Min(1)],
+    };
+    let chunks = Layout::horizontal(constraints).split(body_area);
+
+    let (left_area, center_area, right_area) = match (show_left, show_right) {
+        (true, true) => (Some(chunks[0]), chunks[1], Some(chunks[2])),
+        (true, false) => (Some(chunks[0]), chunks[1], None),
+        (false, true) => (None, chunks[0], Some(chunks[1])),
+        (false, false) => (None, chunks[0], None),
+    };
+
+    if let Some(la) = left_area {
+        filters::render(frame, la, app);
+    }
+    match app.view() {
+        View::List => list::render(frame, center_area, app),
+        View::Today => today::render(frame, center_area, app),
+        View::Archive => archive::render(frame, center_area, app),
+    }
+    if let Some(ra) = right_area {
+        detail::render(frame, ra, app);
+    }
+
+    if app.prefs.layout.status_bar {
+        if app.mode == Mode::Search {
+            status::render_command_line(frame, bottom_area, app);
+        } else {
+            status::render(frame, bottom_area, app);
+        }
+    }
+
+    // Overlays
+    match app.mode {
+        Mode::Insert => {
+            let dlg_w: u16 = (u32::from(center_area.width) * 4 / 5)
+                .clamp(u32::from(DIALOG_MIN_W), u32::from(DIALOG_MAX_W))
+                as u16;
+            let dlg = centered_in(area, dlg_w, DIALOG_H);
+            frame.render_widget(Clear, dlg);
+            dialog::render(frame, dlg, app);
+            dialog::render_autocomplete(frame, dlg, area, app);
+        }
+        Mode::Help => {
+            let h: u16 = area.height.saturating_sub(4).min(HELP_MAX_H);
+            let w: u16 = (u32::from(area.width) * 9 / 10)
+                .clamp(u32::from(HELP_MIN_W), u32::from(HELP_MAX_W))
+                as u16;
+            let r = centered_in(area, w, h);
+            frame.render_widget(Clear, r);
+            help::render(frame, r, app);
+        }
+        Mode::Settings => {
+            frame.render_widget(Clear, body_area);
+            settings::render(frame, body_area, app);
+        }
+        Mode::PromptProject | Mode::PromptContext => {
+            let w: u16 = PROMPT_MAX_W.min(area.width.saturating_sub(4));
+            let r = centered_in(area, w, PROMPT_H);
+            frame.render_widget(Clear, r);
+            dialog::render_prompt(frame, r, app);
+        }
+        _ => {}
+    }
+}
+
+pub(crate) fn centered_in(parent: Rect, w: u16, h: u16) -> Rect {
+    let w = w.min(parent.width);
+    let h = h.min(parent.height);
+    let x = parent.x + (parent.width - w) / 2;
+    let y = parent.y + (parent.height - h) / 2;
+    Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    }
+}
+
+pub(crate) fn fill_bg(frame: &mut Frame, area: Rect, style: Style) {
+    frame.render_widget(Block::default().style(style), area);
+}
+
+pub(crate) fn density_blank_lines(d: crate::app::Density) -> usize {
+    match d {
+        crate::app::Density::Compact => 0,
+        crate::app::Density::Comfortable => 1,
+        crate::app::Density::Cozy => 2,
+    }
+}

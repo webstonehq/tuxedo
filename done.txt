@@ -1,0 +1,8 @@
+x 2026-05-06 2026-05-06 Add a README with screenshot + keybindings table due:2026-08-08
+x 2026-05-06 2026-05-06 test
+x 2026-05-07 2026-05-06 Can't move left/right in the add/edit dialog input due:2026-05-05
+x 2026-05-07 2026-05-06 I marked a todo as done then pressed A twice and see nothing
+x 2026-05-07 2026-05-06 Why do we need color-eyre?
+x 2026-05-07 2026-05-07 Testing @home +shop
+x 2026-05-07 2026-05-07 Add/edit dialog input doesn't scroll / wrap when it's long
+x 2026-05-07 2026-05-07 Add/edit dialog, Enter doesn't work when a project or context is at the end

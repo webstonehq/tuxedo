@@ -1,0 +1,17 @@
+[package]
+name = "tuxedo"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0"
+chrono = "0.4.44"
+crossterm = "0.29.0"
+ratatui = "0.30.0"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
+opt-level = "z"

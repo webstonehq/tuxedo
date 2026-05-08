@@ -124,3 +124,86 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
             dist/*.sha256
+
+  update-tap:
+    name: Update Homebrew tap
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tap
+        uses: actions/checkout@v6
+        with:
+          repository: webstonehq/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Render formula
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          fetch_sha() {
+            curl -fsSL \
+              "https://github.com/webstonehq/tuxedo/releases/download/${TAG}/tuxedo-${TAG}-$1.tar.gz.sha256" \
+              | awk '{print $1}'
+          }
+          sha_darwin_arm=$(fetch_sha aarch64-apple-darwin)
+          sha_darwin_intel=$(fetch_sha x86_64-apple-darwin)
+          sha_linux_arm=$(fetch_sha aarch64-unknown-linux-gnu)
+          sha_linux_intel=$(fetch_sha x86_64-unknown-linux-gnu)
+
+          cat > tap/Formula/tuxedo.rb <<EOF
+          class Tuxedo < Formula
+            desc "Fast, keyboard-driven terminal UI for todo.txt"
+            homepage "https://github.com/webstonehq/tuxedo"
+            version "${version}"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/webstonehq/tuxedo/releases/download/v#{version}/tuxedo-v#{version}-aarch64-apple-darwin.tar.gz"
+                sha256 "${sha_darwin_arm}"
+              end
+              on_intel do
+                url "https://github.com/webstonehq/tuxedo/releases/download/v#{version}/tuxedo-v#{version}-x86_64-apple-darwin.tar.gz"
+                sha256 "${sha_darwin_intel}"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "https://github.com/webstonehq/tuxedo/releases/download/v#{version}/tuxedo-v#{version}-aarch64-unknown-linux-gnu.tar.gz"
+                sha256 "${sha_linux_arm}"
+              end
+              on_intel do
+                url "https://github.com/webstonehq/tuxedo/releases/download/v#{version}/tuxedo-v#{version}-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "${sha_linux_intel}"
+              end
+            end
+
+            def install
+              bin.install "tuxedo"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/tuxedo --version")
+            end
+          end
+          EOF
+
+      - name: Commit and push
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          cd tap
+          git config user.name  "tuxedo-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          if git diff --quiet Formula/tuxedo.rb; then
+            echo "Formula already up to date; nothing to commit."
+            exit 0
+          fi
+          git add Formula/tuxedo.rb
+          git commit -m "tuxedo ${TAG}"
+          git push

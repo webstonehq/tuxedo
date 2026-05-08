@@ -50,6 +50,12 @@ hand-tuned themes — all in a single static binary.
 
 ## Install
 
+### Homebrew (macOS, Linux)
+
+```sh
+brew install webstonehq/tap/tuxedo
+```
+
 ### Prebuilt binaries
 
 Download the archive for your platform from the [latest release](https://github.com/webstonehq/tuxedo/releases/latest) and put `tuxedo` on your `PATH`.

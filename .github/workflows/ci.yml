@@ -29,10 +29,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: cargo fmt
-        run: cargo fmt --all -- --check
+        run: mise run fmt
 
       - name: cargo clippy
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: mise run clippy
 
       - name: cargo test
-        run: cargo test --locked
+        run: mise run test

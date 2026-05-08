@@ -1,10 +1,14 @@
 [tools]
 rust = "latest"
 
-[tasks.dev]
-description = "Run the app"
-run = "cargo run -- /tmp/tuxedo-sample.txt"
+[tasks.clippy]
+run = "cargo clippy --all-targets --locked -- -D warnings"
+
+[tasks.fmt]
+run = "cargo fmt --all"
+
+[tasks.fmt_check]
+run = "cargo fmt --all --check"
 
 [tasks.test]
-description = "Run unit tests"
-run = "cargo test"
+run = "cargo test --locked"

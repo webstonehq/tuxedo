@@ -412,25 +412,13 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char('j') | KeyCode::Down => Action::CursorDown,
         KeyCode::Char('k') | KeyCode::Up => Action::CursorUp,
         KeyCode::Char('G') => Action::CursorBottom,
-        KeyCode::Char('g') => {
-            // First 'g' arms the chord; second 'g' fires CursorTop.
-            if app.chord.toggle('g') {
-                Action::CursorTop
-            } else {
-                return None;
-            }
-        }
+        // First 'g' arms the chord; second 'g' fires CursorTop.
+        KeyCode::Char('g') if app.chord.toggle('g') => Action::CursorTop,
         KeyCode::Char('a') => Action::BeginAdd,
         KeyCode::Char('e' | 'i') => Action::BeginEdit,
         KeyCode::Char('x') => Action::ToggleComplete,
-        KeyCode::Char('d') => {
-            // 'dd' chord. First press arms; second fires.
-            if app.chord.toggle('d') {
-                Action::Delete
-            } else {
-                return None;
-            }
-        }
+        // 'dd' chord. First press arms; second fires.
+        KeyCode::Char('d') if app.chord.toggle('d') => Action::Delete,
         KeyCode::Char('p') => {
             // After 'f' arms, 'fp' opens the project picker. Otherwise plain
             // 'p' cycles priority.

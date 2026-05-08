@@ -1,10 +1,26 @@
 # tuxedo
 
-A terminal UI for [todo.txt](http://todotxt.org/) files. Vim-flavored
-keybindings, atomic file writes, external-edit detection, sibling-file
-archive, four built-in themes.
+A fast, keyboard-driven terminal UI for [todo.txt](http://todotxt.org/).
+Vim-style bindings, atomic writes, instant external-edit detection, and four
+hand-tuned themes — all in a single static binary.
+
+[![CI](https://github.com/webstonehq/tuxedo/actions/workflows/ci.yml/badge.svg)](https://github.com/webstonehq/tuxedo/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/webstonehq/tuxedo?logo=github)](https://github.com/webstonehq/tuxedo/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
+[![Rust](https://img.shields.io/badge/rust-2024-orange.svg?logo=rust)](https://www.rust-lang.org)
 
 ![list view](docs/screenshots/list.svg)
+
+## Highlights
+
+- **Pure todo.txt.** Reads and writes the [standard format](https://github.com/todotxt/todo.txt) — every line is plain text you can edit with anything else.
+- **Vim keys, no surprises.** `j` / `k` to move, `dd` to delete, `gg` / `G` to jump, `u` to undo (50 levels), chord prompts (`gg`, `dd`, `fp`, `fc`) with a 600 ms window.
+- **Atomic, sync-friendly writes.** Every change goes through write-temp-then-rename. If another process — Dropbox, an editor, a script — modifies the file, tuxedo reloads on the next keypress (or within ~250 ms while idle) and flashes a notice.
+- **Built-in agenda.** `t` opens a focused view that groups overdue, due-today, and upcoming tasks.
+- **Sibling-file archive.** `A` moves completed tasks to `done.txt` next to your file, atomically.
+- **Filter, sort, multi-select.** Cycle by `+project` or `@context`, sort by priority / due / file order, and bulk-complete or bulk-delete in visual mode.
+- **Four themes, three densities.** Cycle with `T` and `D`. Choices persist across runs.
+- **No daemon, no database, no cloud.** One file in, one file out.
 
 ## Screens
 
@@ -25,42 +41,50 @@ archive, four built-in themes.
 
 `T` cycles through four built-in themes.
 
-### Muted Slate (default)
-
-![muted slate](docs/screenshots/theme-muted-slate.svg)
-
-### Dawn
-
-![dawn](docs/screenshots/theme-dawn.svg)
-
-### Nord
-
-![nord](docs/screenshots/theme-nord.svg)
-
-### Matrix
-
-![matrix](docs/screenshots/theme-matrix.svg)
+| Muted Slate (default) | Dawn |
+| --- | --- |
+| ![muted slate](docs/screenshots/theme-muted-slate.svg) | ![dawn](docs/screenshots/theme-dawn.svg) |
+| **Nord** | **Matrix** |
+| ![nord](docs/screenshots/theme-nord.svg) | ![matrix](docs/screenshots/theme-matrix.svg) |
 
 ## Install
 
-    cargo install --path .
+### Prebuilt binaries
 
-Or build locally:
+Download the archive for your platform from the [latest release](https://github.com/webstonehq/tuxedo/releases/latest) and put `tuxedo` on your `PATH`.
 
-    cargo build --release
-    ./target/release/tuxedo [FILE]
+Targets: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`. Each archive ships with a `.sha256` checksum.
+
+### From source
+
+```sh
+cargo install --git https://github.com/webstonehq/tuxedo
+```
+
+Or clone and build:
+
+```sh
+git clone https://github.com/webstonehq/tuxedo
+cd tuxedo
+cargo build --release
+./target/release/tuxedo [FILE]
+```
+
+Requires the Rust 2024 edition (recent stable toolchain).
 
 ## Usage
 
-    tuxedo [FILE]
-    tuxedo --sample
-    tuxedo --help
-    tuxedo --version
+```sh
+tuxedo [FILE]      # open FILE (created if missing)
+tuxedo             # open ./todo.txt, or a sample file if none
+tuxedo --sample    # open the bundled sample file in the temp dir
+tuxedo --help
+tuxedo --version
+```
 
 If `FILE` is omitted, tuxedo opens `./todo.txt` from the current working
-directory if it exists. Otherwise it opens a sample todo.txt in the system
-temp directory so you can poke around without committing to a path. Pass
-`--sample` to open the sample file explicitly, regardless of the current working directory.
+directory if it exists. Otherwise it falls back to a sample todo.txt in the
+system temp directory so you can poke around without committing to a path.
 
 Edits are persisted on every change via atomic write (write `.tmp`, rename).
 
@@ -138,7 +162,9 @@ window is 600 ms.
 
 Standard [todo.txt](https://github.com/todotxt/todo.txt) lines:
 
-    (A) 2026-04-28 Call dentist @phone +health due:2026-05-08
+```
+(A) 2026-04-28 Call dentist @phone +health due:2026-05-08
+```
 
 - `(A)` — priority, A through Z (omit for none)
 - `2026-04-28` — creation date in ISO 8601
@@ -149,15 +175,39 @@ Standard [todo.txt](https://github.com/todotxt/todo.txt) lines:
 
 Completed tasks are prefixed with `x ` and a completion date:
 
-    x 2026-05-05 2026-05-01 Submit expense report +work
+```
+x 2026-05-05 2026-05-01 Submit expense report +work
+```
 
 ## Configuration
 
 Persisted to `${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/config.toml`. Cycling
-theme, density, or sort, and toggling sidebars/line-numbers/done-visibility,
+theme, density, or sort, and toggling sidebars / line-numbers / done-visibility
 all update the file. Unknown keys are ignored, so older binaries don't break
 on newer files.
 
+## Development
+
+```sh
+mise run fmt      # cargo fmt --all
+mise run clippy   # cargo clippy --all-targets --locked -- -D warnings
+mise run test     # cargo test --locked
+```
+
+CI runs all three on every push and pull request. Tasks are also runnable as
+plain `cargo` commands if you don't use [mise](https://mise.jdx.dev/).
+
+## Acknowledgments
+
+- [todo.txt](http://todotxt.org/) by Gina Trapani — the format that makes a tool like this possible.
+- [ratatui](https://ratatui.rs/) and [crossterm](https://github.com/crossterm-rs/crossterm) — the rendering and terminal-input crates tuxedo is built on.
+
+## Contributing
+
+Issues and pull requests are welcome. For larger changes, please open an
+issue first to discuss the approach. Run `mise run fmt clippy test` (or the
+plain cargo equivalents) before submitting.
+
 ## License
 
-MIT (see `Cargo.toml`).
+Released under the [MIT License](https://opensource.org/licenses/MIT).

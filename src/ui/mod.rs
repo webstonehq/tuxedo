@@ -13,6 +13,7 @@ pub mod filters;
 pub mod header;
 pub mod help;
 pub mod list;
+pub mod logo;
 pub mod settings;
 pub mod status;
 pub mod task_row;
@@ -29,7 +30,7 @@ const DIALOG_H: u16 = 8;
 const DIALOG_MIN_W: u16 = 40;
 const DIALOG_MAX_W: u16 = 100;
 
-const HELP_MAX_H: u16 = 22;
+const HELP_MAX_H: u16 = 28;
 const HELP_MIN_W: u16 = 76;
 const HELP_MAX_W: u16 = 120;
 

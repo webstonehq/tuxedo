@@ -69,7 +69,20 @@ fn main() -> std::io::Result<()> {
     app.set_project_filter(Some("work".to_string()));
     save(&app, &out.join("filter.svg"))?;
 
-    // 6. List view in every built-in theme — for the README's themes section.
+    // 6. Empty state — fresh file, cell-bowtie logo and quick-start panel.
+    // Sidebars hidden so the centered panel reads as the focal point.
+    let mut app = App::new(
+        PathBuf::from("/tmp/tuxedo-screenshots-empty.txt"),
+        String::new(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.prefs.density = Density::Compact;
+    app.prefs.layout.left = false;
+    app.prefs.layout.right = false;
+    save(&app, &out.join("empty.svg"))?;
+
+    // 7. List view in every built-in theme — for the README's themes section.
     for (i, t) in theme::ALL.iter().enumerate() {
         let mut app = make();
         app.prefs.set_theme_idx(i);

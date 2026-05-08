@@ -8,4 +8,5 @@
 2026-05-07 Hook scripts for pre and post add complete and delete events +tuxedo @dev
 2026-05-07 Copy todo to clipboard, consider OS support
 2026-05-07 Add `toxido update` via github releases
-2026-05-07 Remove all .unwrap and similar calls
+x 2026-05-08 2026-05-07 Remove all .unwrap and similar calls
+2026-05-08 When in the archive or today view, j/k navigates the normal view and details update on the right. We want navigation to apply to the currently active mode

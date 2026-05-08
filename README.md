@@ -26,6 +26,7 @@ hand-tuned themes — all in a single static binary.
 
 | | |
 | --- | --- |
+| **Empty state** • cell-bowtie mark and quick-start when the file has no tasks | ![empty](docs/screenshots/empty.svg) |
 | **Today / agenda** • overdue, due-today, and upcoming groups | ![agenda](docs/screenshots/today.svg) |
 | **Archive** • completed tasks grouped by completion date | ![archive](docs/screenshots/archive.svg) |
 | **Filter sidebar active** • `fp` cycles projects with j/k, `fc` cycles contexts | ![filter](docs/screenshots/filter.svg) |

@@ -9,7 +9,7 @@ use crate::app::App;
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     let w = 56u16.min(area.width.saturating_sub(4));
-    let h = 13u16.min(area.height.saturating_sub(2));
+    let h = 16u16.min(area.height.saturating_sub(2));
     let r = super::centered_in(area, w, h);
 
     let block = Block::default()
@@ -37,7 +37,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     ];
 
     let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::raw(""));
+    if inner.width >= super::logo::WIDTH {
+        lines.extend(super::logo::centered_lines(theme, inner.width));
+        lines.push(Line::raw(""));
+    }
     lines.push(Line::from(Span::styled(
         "  no tasks yet — let's get started".to_string(),
         Style::default().fg(theme.fg),

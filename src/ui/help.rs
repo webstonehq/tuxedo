@@ -80,12 +80,34 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
+    // Reserve a header strip for the cell-bowtie mark when the overlay is
+    // tall enough to spare the rows; on cramped terminals the columns get
+    // priority. +1 row gives the mark a breath before the sections. The
+    // 20 covers the right column's intrinsic height (VIEW + SYSTEM).
+    let logo_h: u16 = if inner.width >= super::logo::WIDTH
+        && inner.height >= super::logo::HEIGHT + 1 + 20
+    {
+        super::logo::HEIGHT + 1
+    } else {
+        0
+    };
+    let [header, body] =
+        Layout::vertical([Constraint::Length(logo_h), Constraint::Min(0)]).areas(inner);
+
+    let bg = Style::default().bg(theme.panel).fg(theme.fg);
+
+    if logo_h > 0 {
+        frame.render_widget(
+            Paragraph::new(super::logo::centered_lines(theme, header.width)).style(bg),
+            header,
+        );
+    }
+
     let [left, right] =
-        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(inner);
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(body);
 
     let left_lines = render_sections(theme, &[NAVIGATION, EDITING]);
     let right_lines = render_sections(theme, &[VIEW, SYSTEM]);
-    let bg = Style::default().bg(theme.panel).fg(theme.fg);
     frame.render_widget(Paragraph::new(left_lines).style(bg), left);
     frame.render_widget(Paragraph::new(right_lines).style(bg), right);
 }

@@ -23,7 +23,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         header_area,
         theme,
         header::HeaderProps {
-            title: env!("CARGO_PKG_NAME"),
+            title: concat!(env!("CARGO_PKG_NAME"), " • ", env!("CARGO_PKG_VERSION")),
             file: "settings",
             count: app.tasks().len(),
             sort: app.sort_label(),

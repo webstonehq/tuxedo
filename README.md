@@ -209,6 +209,10 @@ plain `cargo` commands if you don't use [mise](https://mise.jdx.dev/).
 - [todo.txt](http://todotxt.org/) by Gina Trapani — the format that makes a tool like this possible.
 - [ratatui](https://ratatui.rs/) and [crossterm](https://github.com/crossterm-rs/crossterm) — the rendering and terminal-input crates tuxedo is built on.
 
+## Roadmap
+
+Planned and in-flight work lives in [`todo.txt`](./todo.txt) — eat your own dog food.
+
 ## Contributing
 
 Issues and pull requests are welcome. For larger changes, please open an

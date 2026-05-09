@@ -76,13 +76,14 @@ impl App {
     /// idle ticks pick up edits the same way `check_external_changes` does
     /// for `todo.txt`.
     pub fn poll_archive(&mut self) -> bool {
+        let mut changed = false;
         if let Some(rx) = &self.archive.loader {
             match rx.try_recv() {
                 Ok((body, tasks)) => {
                     self.archive.last_disk = body;
                     self.archive.tasks = tasks;
                     self.archive.loader = None;
-                    return true;
+                    changed = true;
                 }
                 Err(TryRecvError::Empty) => return false,
                 // Defensive: loader thread dropped its sender without
@@ -93,8 +94,17 @@ impl App {
                 }
             }
         }
-        let read = std::fs::read_to_string(&self.archive.path);
-        self.apply_archive_read(read)
+        if !changed {
+            let read = std::fs::read_to_string(&self.archive.path);
+            changed = self.apply_archive_read(read);
+        }
+        if changed && matches!(self.view, super::View::Archive) {
+            // The archive feeds visible_cache in Archive view; refresh so
+            // the next frame mirrors the new archive contents.
+            self.recompute_visible();
+            self.clamp_cursor();
+        }
+        changed
     }
 
     /// Apply a read result for `done.txt`. NotFound is treated as an empty
@@ -149,6 +159,68 @@ impl App {
         self.tasks.retain(|t| !t.done);
         self.flash(format!("archived {}", to_move.len()));
         self.persist();
+        self.recompute_visible();
+        self.clamp_cursor();
+    }
+
+    /// Move an archived task back into the live list. `archive_idx` is an
+    /// index into `self.archive.tasks()` (the cursor source in Archive view).
+    pub fn unarchive(&mut self, archive_idx: usize) {
+        if !self.check_external_changes() {
+            return;
+        }
+        if archive_idx >= self.archive.tasks.len() {
+            return;
+        }
+        let mut task = self.archive.tasks[archive_idx].clone();
+        if let Err(e) = task.unmark_done() {
+            self.flash(format!("unarchive failed: {e}"));
+            return;
+        }
+        // Persist done.txt without the moved row first; if that fails, abort
+        // before touching todo.txt so we never duplicate the row.
+        let new_archive: Vec<Task> = self
+            .archive
+            .tasks
+            .iter()
+            .enumerate()
+            .filter_map(|(i, t)| if i != archive_idx { Some(t.clone()) } else { None })
+            .collect();
+        let archive_body = todo::serialize(&new_archive);
+        if let Err(e) = todo::write_atomic(&self.archive.path, &archive_body) {
+            self.flash(format!("unarchive failed: {e}"));
+            return;
+        }
+        self.archive.tasks = new_archive;
+        self.archive.last_disk = archive_body;
+        self.push_history();
+        self.tasks.push(task);
+        self.persist();
+        self.flash("unarchived");
+        self.recompute_visible();
+        self.clamp_cursor();
+    }
+
+    /// Permanently remove an archived task from `done.txt`.
+    pub fn archive_delete(&mut self, archive_idx: usize) {
+        if archive_idx >= self.archive.tasks.len() {
+            return;
+        }
+        let new_archive: Vec<Task> = self
+            .archive
+            .tasks
+            .iter()
+            .enumerate()
+            .filter_map(|(i, t)| if i != archive_idx { Some(t.clone()) } else { None })
+            .collect();
+        let archive_body = todo::serialize(&new_archive);
+        if let Err(e) = todo::write_atomic(&self.archive.path, &archive_body) {
+            self.flash(format!("delete failed: {e}"));
+            return;
+        }
+        self.archive.tasks = new_archive;
+        self.archive.last_disk = archive_body;
+        self.flash("deleted from archive");
         self.recompute_visible();
         self.clamp_cursor();
     }

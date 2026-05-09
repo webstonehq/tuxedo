@@ -33,7 +33,7 @@ pub use selection::Selection;
 pub use types::{
     AUTOCOMPLETE_CAP, Density, FLASH_TTL, Filter, LEADER_WINDOW, Mode, Sort, UNDO_LIMIT, View,
 };
-pub use visibility::ordered_unique;
+pub use visibility::{GroupKey, TodayBucket, ordered_unique};
 
 pub struct App {
     /// Crate-private: external mutation would bypass `push_history`,
@@ -46,6 +46,10 @@ pub struct App {
     pub mode: Mode,
     pub prefs: Prefs,
     pub cursor: usize,
+    /// Per-view saved cursor, indexed by `View::idx()`. `set_view` snapshots
+    /// the outgoing view's cursor here and restores the incoming view's, so
+    /// each view remembers where the user last was.
+    pub(crate) view_cursor: [usize; 3],
     /// Crate-private: same reason as `view` — `visible_cache` would drift.
     /// Read via `filter()`; mutate via `set_search`/`set_project`/etc.
     pub(crate) filter: Filter,
@@ -58,6 +62,10 @@ pub struct App {
     pub today: String,
     pub should_quit: bool,
     visible_cache: Vec<usize>,
+    /// Parallel to `visible_cache`: `visible_groups[i]` is the group key for
+    /// the row at `visible_cache[i]`. `GroupKey::None` for List; bucket/date
+    /// keys for Today/Archive. Renderers read this to draw section headers.
+    visible_groups: Vec<crate::app::visibility::GroupKey>,
     /// Snapshot of the file body the last time we read or wrote it.
     /// Used by `check_external_changes` to detect edits made outside the TUI.
     last_disk: String,
@@ -76,6 +84,7 @@ impl App {
             mode: Mode::Normal,
             prefs: Prefs::from_config(cfg),
             cursor: 0,
+            view_cursor: [0; 3],
             filter: Filter::default(),
             draft: DraftState::default(),
             selection: Selection::default(),
@@ -86,6 +95,7 @@ impl App {
             today,
             should_quit: false,
             visible_cache: Vec::new(),
+            visible_groups: Vec::new(),
             last_disk: body,
             archive,
         };
@@ -148,6 +158,26 @@ impl App {
         self.tasks.get(abs).map(|t| t.raw.clone())
     }
 
+    /// Task under the cursor, resolved against the active view's source:
+    /// `archive.tasks()` in Archive view, `tasks` otherwise.
+    pub fn cur_task(&self) -> Option<&Task> {
+        let i = self.cur_abs()?;
+        match self.view {
+            View::Archive => self.archive.tasks().get(i),
+            _ => self.tasks.get(i),
+        }
+    }
+
+    /// Index of the task under the cursor *into `self.tasks`*. Returns `None`
+    /// in Archive view because the cursor there points into `archive.tasks()`.
+    /// Use this — not `cur_abs()` — for any write that mutates `self.tasks`.
+    pub fn cur_task_index_in_tasks(&self) -> Option<usize> {
+        if matches!(self.view, View::Archive) {
+            return None;
+        }
+        self.cur_abs()
+    }
+
     /// Read-only view of the active filter.
     pub fn filter(&self) -> &Filter {
         &self.filter
@@ -158,15 +188,18 @@ impl App {
         self.view
     }
 
-    /// Switch top-level view. Resets cursor to the top of the new visible
-    /// list and recomputes the cache so the next frame reflects the change.
+    /// Switch top-level view. Recomputes the cache so the next frame reflects
+    /// the change, snapshots the outgoing view's cursor, and restores the
+    /// incoming view's saved cursor (clamped to the new visible length).
     pub fn set_view(&mut self, view: View) {
         if self.view == view {
             return;
         }
+        self.view_cursor[self.view.idx()] = self.cursor;
         self.view = view;
-        self.cursor = 0;
         self.recompute_visible();
+        self.cursor = self.view_cursor[view.idx()];
+        self.clamp_cursor();
     }
 
     /// Set the search-filter text. Cursor resets and the cache is recomputed.

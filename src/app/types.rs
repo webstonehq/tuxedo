@@ -28,6 +28,18 @@ pub enum View {
     Archive,
 }
 
+impl View {
+    /// Stable slot index for keying per-view state arrays. Don't reorder the
+    /// `View` variants without updating this together.
+    pub fn idx(self) -> usize {
+        match self {
+            View::List => 0,
+            View::Today => 1,
+            View::Archive => 2,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sort {
     Priority,

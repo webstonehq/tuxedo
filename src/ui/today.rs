@@ -4,11 +4,9 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::App;
+use crate::app::{App, GroupKey, Mode, TodayBucket};
 use crate::theme::Theme;
-use crate::todo::Task;
-use crate::ui::header;
-use crate::ui::task_row;
+use crate::ui::{header, task_row};
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
@@ -21,22 +19,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     ])
     .areas(area);
 
-    let today = app.today.as_str();
-    let mut overdue: Vec<&Task> = Vec::new();
-    let mut due_today: Vec<&Task> = Vec::new();
-    let mut upcoming: Vec<&Task> = Vec::new();
-    for &i in app.visible_indices() {
-        let t = &app.tasks[i];
-        let Some(d) = t.due.as_deref() else { continue };
-        match d.cmp(today) {
-            std::cmp::Ordering::Less => overdue.push(t),
-            std::cmp::Ordering::Equal => due_today.push(t),
-            std::cmp::Ordering::Greater => upcoming.push(t),
-        }
-    }
-    upcoming.sort_by(|a, b| a.due.cmp(&b.due));
-
-    let agenda_count = overdue.len() + due_today.len() + upcoming.len();
+    let agenda_count = app.visible_indices().len();
     let filter_label = header::filter_label(&app.filter);
     header::render(
         frame,
@@ -52,66 +35,124 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     );
 
     let blank = super::density_blank_lines(app.prefs.density);
+    let canonical = [
+        TodayBucket::Overdue,
+        TodayBucket::Today,
+        TodayBucket::Upcoming,
+    ];
+
+    // Per-bucket counts so the header can show "OVERDUE  3" without rescanning
+    // mid-loop.
+    let mut counts = [0usize; 3];
+    for g in app.visible_groups() {
+        if let GroupKey::TodayBucket(b) = g {
+            counts[b.idx()] += 1;
+        }
+    }
+
     let mut lines: Vec<Line> = Vec::new();
-    section(&mut lines, theme, "OVERDUE", &overdue, theme.overdue, today);
-    push_blanks(&mut lines, blank);
-    section(&mut lines, theme, "TODAY", &due_today, theme.today, today);
-    push_blanks(&mut lines, blank);
-    section(
-        &mut lines,
-        theme,
-        "UPCOMING",
-        &upcoming,
-        theme.accent,
-        today,
-    );
+    let mut emitted = [false; 3];
+    let mut last_bucket: Option<TodayBucket> = None;
+    let cursor_active = app.mode != Mode::Help && app.mode != Mode::Settings;
+    let needle: Option<&str> = if app.filter.search.is_empty() {
+        None
+    } else {
+        Some(&app.filter.search)
+    };
+
+    let visible = app.visible_indices();
+    let groups = app.visible_groups();
+
+    for (i, (&abs, gk)) in visible.iter().zip(groups.iter()).enumerate() {
+        let bucket = match gk {
+            GroupKey::TodayBucket(b) => *b,
+            _ => continue,
+        };
+
+        // Emit any earlier-canonical bucket that has zero items and hasn't
+        // been seen yet, before showing the first present row of `bucket`.
+        for &earlier in &canonical {
+            if earlier.idx() >= bucket.idx() {
+                break;
+            }
+            if !emitted[earlier.idx()] {
+                push_blanks(&mut lines, blank);
+                lines.push(section_header(theme, earlier, 0));
+                lines.push(nothing_line(theme));
+                emitted[earlier.idx()] = true;
+            }
+        }
+
+        if last_bucket != Some(bucket) {
+            push_blanks(&mut lines, blank);
+            lines.push(section_header(theme, bucket, counts[bucket.idx()]));
+            emitted[bucket.idx()] = true;
+            last_bucket = Some(bucket);
+        }
+
+        let task = &app.tasks[abs];
+        let opts = task_row::RowOpts {
+            idx_label: i,
+            cursor: i == app.cursor && cursor_active,
+            multi_mode: app.mode == Mode::Visual,
+            multi_checked: app.selection.is_selected(abs),
+            selected: app.selection.is_selected(abs),
+            show_line_num: app.prefs.layout.line_num,
+            match_term: needle,
+            today: &app.today,
+        };
+        lines.push(task_row::build_line(task, opts, theme));
+    }
+
+    // Trailing empty buckets — emit headers + "nothing" placeholder so the
+    // user sees the full canonical list.
+    for &b in &canonical {
+        if !emitted[b.idx()] {
+            push_blanks(&mut lines, blank);
+            lines.push(section_header(theme, b, 0));
+            lines.push(nothing_line(theme));
+            emitted[b.idx()] = true;
+        }
+    }
 
     let para = Paragraph::new(lines).style(Style::default().bg(theme.bg).fg(theme.fg));
     frame.render_widget(para, body_area);
 }
 
-fn section<'a>(
-    lines: &mut Vec<Line<'a>>,
-    theme: &Theme,
-    label: &str,
-    list: &[&'a Task],
-    color: Color,
-    today: &'a str,
-) {
-    lines.push(Line::from(vec![
+fn section_header<'a>(theme: &Theme, bucket: TodayBucket, count: usize) -> Line<'a> {
+    let color = bucket_color(theme, bucket);
+    Line::from(vec![
         Span::raw(" "),
         Span::styled(
-            label.to_string(),
+            bucket.label().to_string(),
             Style::default().fg(color).add_modifier(Modifier::BOLD),
         ),
         Span::raw("  "),
-        Span::styled(format!("{}", list.len()), Style::default().fg(theme.dim)),
+        Span::styled(format!("{}", count), Style::default().fg(theme.dim)),
         Span::raw("  "),
         Span::styled("─".repeat(80), Style::default().fg(theme.border)),
-    ]));
-    if list.is_empty() {
-        lines.push(Line::from(Span::styled(
-            "   nothing".to_string(),
-            Style::default().fg(theme.dim),
-        )));
-        return;
-    }
-    for (i, t) in list.iter().enumerate() {
-        let opts = task_row::RowOpts {
-            idx_label: i,
-            cursor: false,
-            multi_mode: false,
-            multi_checked: false,
-            selected: false,
-            show_line_num: false,
-            match_term: None,
-            today,
-        };
-        lines.push(task_row::build_line(t, opts, theme));
+    ])
+}
+
+fn bucket_color(theme: &Theme, bucket: TodayBucket) -> Color {
+    match bucket {
+        TodayBucket::Overdue => theme.overdue,
+        TodayBucket::Today => theme.today,
+        TodayBucket::Upcoming => theme.accent,
     }
 }
 
+fn nothing_line<'a>(theme: &Theme) -> Line<'a> {
+    Line::from(Span::styled(
+        "   nothing".to_string(),
+        Style::default().fg(theme.dim),
+    ))
+}
+
 fn push_blanks(lines: &mut Vec<Line>, n: usize) {
+    if lines.is_empty() {
+        return;
+    }
     for _ in 0..n {
         lines.push(Line::raw(" "));
     }

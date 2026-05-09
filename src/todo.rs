@@ -218,6 +218,29 @@ impl Task {
         self.replace_from_raw(&new_raw)
     }
 
+    /// Reverse `mark_done`: drop the leading `x ` and the done-date token.
+    /// Priority that was stripped at completion time is not recovered — the
+    /// user can re-set it after un-archiving.
+    pub fn unmark_done(&mut self) -> Result<(), ParseError> {
+        if !self.done {
+            return Ok(());
+        }
+        let after_x = self.raw.strip_prefix("x ").unwrap_or(&self.raw);
+        let body = if self.done_date.is_some() {
+            // mark_done emits "x DONE_DATE CREATED BODY". Drop the 10-char
+            // date plus its trailing space.
+            let bytes = after_x.as_bytes();
+            if bytes.len() >= 11 && (bytes[10] == b' ' || bytes[10] == b'\t') {
+                after_x[11..].trim_start().to_string()
+            } else {
+                after_x.to_string()
+            }
+        } else {
+            after_x.to_string()
+        };
+        self.replace_from_raw(&body)
+    }
+
     /// Set or clear this task's priority. The priority byte is replaced in
     /// place at the start of the line; nothing else changes.
     pub fn set_priority(&mut self, priority: Option<char>) -> Result<(), ParseError> {

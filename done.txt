@@ -6,3 +6,4 @@ x 2026-05-07 2026-05-06 Why do we need color-eyre?
 x 2026-05-07 2026-05-07 Testing @home +shop
 x 2026-05-07 2026-05-07 Add/edit dialog input doesn't scroll / wrap when it's long
 x 2026-05-07 2026-05-07 Add/edit dialog, Enter doesn't work when a project or context is at the end
+x 2026-05-08 2026-05-07 Remove all .unwrap and similar calls

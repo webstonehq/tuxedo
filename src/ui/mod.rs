@@ -48,9 +48,10 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let [body_area, bottom_area] =
         Layout::vertical([Constraint::Min(1), Constraint::Length(bottom)]).areas(area);
 
-    // Determine pane widths.
-    let show_left = app.prefs.layout.left && matches!(app.view(), View::List | View::Today);
-    let show_right = app.prefs.layout.right && matches!(app.view(), View::List | View::Today);
+    // Determine pane widths. Sidebars apply to every view; navigation +
+    // detail pane track the cursor regardless of which view is active.
+    let show_left = app.prefs.layout.left;
+    let show_right = app.prefs.layout.right;
     let left_w = if show_left { LEFT_PANE_W } else { 0 };
     let right_w = if show_right { RIGHT_PANE_W } else { 0 };
 

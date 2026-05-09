@@ -458,6 +458,44 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent) -> Option<Action> {
 }
 
 fn apply_action(app: &mut App, action: Action) {
+    // Archive view is read-only with two exceptions: `x` un-archives the
+    // row at the cursor, `dd` permanently removes it from done.txt. Other
+    // mutating actions flash a hint and abort. Navigation, view-switch,
+    // theme/density/layout toggles, and overlays (help/settings) fall
+    // through to the normal handler below.
+    if app.view() == View::Archive {
+        match action {
+            Action::ToggleComplete => {
+                if let Some(idx) = app.cur_abs() {
+                    app.unarchive(idx);
+                }
+                return;
+            }
+            Action::Delete => {
+                if let Some(idx) = app.cur_abs() {
+                    app.archive_delete(idx);
+                }
+                return;
+            }
+            Action::BeginAdd
+            | Action::BeginEdit
+            | Action::CyclePriority
+            | Action::ToggleVisual
+            | Action::ToggleSelected
+            | Action::BeginSearch
+            | Action::BeginPromptProject
+            | Action::BeginPromptContext
+            | Action::PickProject
+            | Action::PickContext
+            | Action::CycleSort
+            | Action::ToggleShowDone
+            | Action::Undo => {
+                app.flash("read-only in archive");
+                return;
+            }
+            _ => {}
+        }
+    }
     let len = app.visible_indices().len();
     match action {
         Action::Quit => app.should_quit = true,
@@ -711,5 +749,100 @@ mod tests {
         assert_eq!(app.cursor, 0);
         apply_action(&mut app, Action::CursorUp);
         assert_eq!(app.cursor, 0);
+    }
+
+    /// Build an isolated App rooted in a fresh temp dir, optionally seeding
+    /// done.txt and waiting for the startup loader to land.
+    fn build_app_with_archive(todo_raw: &str, done_raw: Option<&str>) -> App {
+        use std::time::{Duration, Instant};
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "tuxedo-bindings-{}-{}",
+            std::process::id(),
+            n
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create test dir");
+        let todo_path = dir.join("todo.txt");
+        std::fs::write(&todo_path, todo_raw).expect("write todo.txt");
+        if let Some(body) = done_raw {
+            std::fs::write(dir.join("done.txt"), body).expect("write done.txt");
+        }
+        let mut app = App::new(
+            todo_path,
+            todo_raw.into(),
+            "2026-05-06".into(),
+            Config::default(),
+        );
+        if done_raw.is_some() {
+            // Drain the startup archive loader so app.archive is populated.
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < deadline {
+                let _ = app.poll_archive();
+                if !app.archive.is_empty() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            assert!(!app.archive.is_empty(), "archive failed to load in time");
+        }
+        app
+    }
+
+    #[test]
+    fn cursor_navigation_works_in_today_and_archive() {
+        let mut app = build_app_with_archive(
+            "a due:2026-05-04\nb due:2026-05-06\nc due:2026-05-08\n",
+            Some("x 2026-05-01 2026-04-01 first\nx 2026-05-02 2026-04-02 second\n"),
+        );
+        app.set_view(View::Today);
+        assert_eq!(app.cursor, 0);
+        apply_action(&mut app, Action::CursorDown);
+        assert_eq!(app.cursor, 1, "Today view must allow CursorDown");
+        apply_action(&mut app, Action::CursorBottom);
+        assert_eq!(app.cursor, 2);
+
+        app.set_view(View::Archive);
+        assert_eq!(app.cursor, 0);
+        apply_action(&mut app, Action::CursorDown);
+        assert_eq!(app.cursor, 1, "Archive view must allow CursorDown");
+        apply_action(&mut app, Action::CursorTop);
+        assert_eq!(app.cursor, 0);
+    }
+
+    #[test]
+    fn archive_x_unarchives_task_under_cursor() {
+        let mut app =
+            build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done one\n"));
+        app.set_view(View::Archive);
+        apply_action(&mut app, Action::ToggleComplete);
+        assert_eq!(app.archive.len(), 0, "task must leave the archive");
+        assert!(
+            app.tasks().iter().any(|t| t.raw.contains("done one") && !t.done),
+            "un-completed entry must rejoin live tasks"
+        );
+    }
+
+    #[test]
+    fn archive_dd_permanently_deletes_task_under_cursor() {
+        let mut app =
+            build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done one\n"));
+        app.set_view(View::Archive);
+        apply_action(&mut app, Action::Delete);
+        assert_eq!(app.archive.len(), 0);
+        assert_eq!(app.tasks().len(), 1, "todo.txt must be untouched");
+    }
+
+    #[test]
+    fn archive_e_and_p_flash_readonly() {
+        let mut app =
+            build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done one\n"));
+        app.set_view(View::Archive);
+        apply_action(&mut app, Action::BeginEdit);
+        assert_eq!(app.flash_active(), Some("read-only in archive"));
+        apply_action(&mut app, Action::CyclePriority);
+        assert_eq!(app.flash_active(), Some("read-only in archive"));
+        assert!(app.archive.tasks()[0].done);
     }
 }

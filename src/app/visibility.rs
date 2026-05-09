@@ -4,41 +4,149 @@ use super::App;
 use super::types::{Filter, Sort, View};
 use crate::todo::{self, Task};
 
+/// Which canonical group a Today row belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TodayBucket {
+    Overdue,
+    Today,
+    Upcoming,
+}
+
+impl TodayBucket {
+    pub fn idx(self) -> usize {
+        match self {
+            TodayBucket::Overdue => 0,
+            TodayBucket::Today => 1,
+            TodayBucket::Upcoming => 2,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            TodayBucket::Overdue => "OVERDUE",
+            TodayBucket::Today => "TODAY",
+            TodayBucket::Upcoming => "UPCOMING",
+        }
+    }
+}
+
+/// One entry per visible row, parallel to `visible_cache`. Renderers detect
+/// group transitions by comparing successive entries; List has no groups so
+/// every row is `None`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GroupKey {
+    None,
+    TodayBucket(TodayBucket),
+    ArchiveDate(String),
+}
+
 impl App {
-    /// Indices into `self.tasks` after filter + sort, for the active view.
-    /// Reads the cache populated by `recompute_visible`.
+    /// Indices into the active view's task source after filter + sort, in
+    /// display order. The source is `self.archive.tasks()` in Archive view,
+    /// `self.tasks` otherwise. Reads the cache populated by `recompute_visible`.
     pub fn visible_indices(&self) -> &[usize] {
         &self.visible_cache
     }
 
-    /// Recompute the cached visible-index list. Call after any mutation that
-    /// affects filter/sort/view/tasks.
+    /// Group key per row, parallel to `visible_indices()`. `GroupKey::None`
+    /// for List view; bucket/date keys for Today/Archive.
+    pub fn visible_groups(&self) -> &[GroupKey] {
+        &self.visible_groups
+    }
+
+    /// Recompute the cached visible-index list and parallel group keys. Call
+    /// after any mutation that affects filter/sort/view/tasks/archive.
     pub fn recompute_visible(&mut self) {
+        match self.view {
+            View::List => self.rebuild_list_cache(),
+            View::Today => self.rebuild_today_cache(),
+            View::Archive => self.rebuild_archive_cache(),
+        }
+    }
+
+    fn rebuild_list_cache(&mut self) {
         let needle_owned =
             (!self.filter.search.is_empty()).then(|| self.filter.search.to_lowercase());
         let needle = needle_owned.as_deref();
 
         let mut idxs: Vec<usize> = (0..self.tasks.len())
-            .filter(|&i| match self.view {
-                View::List => {
-                    list_predicate(&self.tasks[i], self.prefs.show_done, &self.filter, needle)
-                }
-                View::Today => today_predicate(&self.tasks[i], &self.filter, needle),
-                View::Archive => archive_predicate(&self.tasks[i]),
-            })
+            .filter(|&i| list_predicate(&self.tasks[i], self.prefs.show_done, &self.filter, needle))
             .collect();
 
-        match self.prefs.sort {
-            Sort::Priority => idxs.sort_by(cmp_priority(&self.tasks)),
-            Sort::Due => idxs.sort_by(cmp_due(&self.tasks)),
-            Sort::File => { /* preserve order */ }
-        }
+        sort_by_prefs(&mut idxs, &self.tasks, self.prefs.sort);
 
-        if matches!(self.view, View::Archive) {
-            idxs.sort_by(cmp_archive_done_date(&self.tasks));
-        }
-
+        self.visible_groups = vec![GroupKey::None; idxs.len()];
         self.visible_cache = idxs;
+    }
+
+    fn rebuild_today_cache(&mut self) {
+        let needle_owned =
+            (!self.filter.search.is_empty()).then(|| self.filter.search.to_lowercase());
+        let needle = needle_owned.as_deref();
+        let today_str = self.today.as_str();
+
+        let mut overdue: Vec<usize> = Vec::new();
+        let mut due_today: Vec<usize> = Vec::new();
+        let mut upcoming: Vec<usize> = Vec::new();
+        for i in 0..self.tasks.len() {
+            if !today_predicate(&self.tasks[i], &self.filter, needle) {
+                continue;
+            }
+            let Some(d) = self.tasks[i].due.as_deref() else {
+                continue;
+            };
+            match d.cmp(today_str) {
+                Ordering::Less => overdue.push(i),
+                Ordering::Equal => due_today.push(i),
+                Ordering::Greater => upcoming.push(i),
+            }
+        }
+        sort_by_prefs(&mut overdue, &self.tasks, self.prefs.sort);
+        sort_by_prefs(&mut due_today, &self.tasks, self.prefs.sort);
+        // Upcoming: always due-asc within bucket so the soonest-due is at top
+        // regardless of the user's global Sort preference.
+        upcoming.sort_by(cmp_due(&self.tasks));
+
+        let mut idxs: Vec<usize> = Vec::with_capacity(overdue.len() + due_today.len() + upcoming.len());
+        let mut groups: Vec<GroupKey> = Vec::with_capacity(idxs.capacity());
+        for i in &overdue {
+            idxs.push(*i);
+            groups.push(GroupKey::TodayBucket(TodayBucket::Overdue));
+        }
+        for i in &due_today {
+            idxs.push(*i);
+            groups.push(GroupKey::TodayBucket(TodayBucket::Today));
+        }
+        for i in &upcoming {
+            idxs.push(*i);
+            groups.push(GroupKey::TodayBucket(TodayBucket::Upcoming));
+        }
+        self.visible_cache = idxs;
+        self.visible_groups = groups;
+    }
+
+    fn rebuild_archive_cache(&mut self) {
+        let archive = self.archive.tasks();
+        let mut idxs: Vec<usize> = (0..archive.len()).collect();
+        idxs.sort_by(|&a, &b| {
+            archive[b]
+                .done_date
+                .as_deref()
+                .unwrap_or("")
+                .cmp(archive[a].done_date.as_deref().unwrap_or(""))
+        });
+        let groups: Vec<GroupKey> = idxs
+            .iter()
+            .map(|&i| {
+                let date = archive[i]
+                    .done_date
+                    .clone()
+                    .unwrap_or_else(|| "unknown".into());
+                GroupKey::ArchiveDate(date)
+            })
+            .collect();
+        self.visible_cache = idxs;
+        self.visible_groups = groups;
     }
 
     pub fn cur_abs(&self) -> Option<usize> {
@@ -62,6 +170,14 @@ impl App {
         } else {
             self.clamp_cursor();
         }
+    }
+}
+
+fn sort_by_prefs(idxs: &mut [usize], tasks: &[Task], sort: Sort) {
+    match sort {
+        Sort::Priority => idxs.sort_by(cmp_priority(tasks)),
+        Sort::Due => idxs.sort_by(cmp_due(tasks)),
+        Sort::File => { /* preserve order */ }
     }
 }
 
@@ -98,10 +214,6 @@ fn today_predicate(t: &Task, filter: &Filter, needle: Option<&str>) -> bool {
     !t.done && passes_user_filter(t, filter, needle)
 }
 
-fn archive_predicate(t: &Task) -> bool {
-    t.done
-}
-
 /// Sort by priority asc (None last), tie-broken by due-date asc.
 fn cmp_priority(tasks: &[Task]) -> impl Fn(&usize, &usize) -> Ordering + '_ {
     |&a, &b| {
@@ -126,17 +238,6 @@ fn cmp_due(tasks: &[Task]) -> impl Fn(&usize, &usize) -> Ordering + '_ {
             .as_deref()
             .unwrap_or("z")
             .cmp(tasks[b].due.as_deref().unwrap_or("z"))
-    }
-}
-
-/// Archive view: most-recently-completed first.
-fn cmp_archive_done_date(tasks: &[Task]) -> impl Fn(&usize, &usize) -> Ordering + '_ {
-    |&a, &b| {
-        tasks[b]
-            .done_date
-            .as_deref()
-            .unwrap_or("")
-            .cmp(tasks[a].done_date.as_deref().unwrap_or(""))
     }
 }
 
@@ -202,6 +303,17 @@ mod tests {
     }
 
     #[test]
+    fn list_cursor_survives_archive_roundtrip() {
+        let mut app = build_app("a\nb\nc\nd\ne\n");
+        app.cursor = 3;
+        app.set_view(View::Archive);
+        // Archive's visible_cache may have a different length; the per-view
+        // cursor cache restores cursor on the way back regardless.
+        app.set_view(View::List);
+        assert_eq!(app.cursor, 3, "cursor lost on List → Archive → List");
+    }
+
+    #[test]
     fn today_view_respects_user_filters() {
         let raw = "(A) 2026-05-01 a +work due:2026-05-06\n\
                    (A) 2026-05-01 b +home due:2026-05-06\n\
@@ -217,5 +329,89 @@ mod tests {
         for &i in app.visible_indices() {
             assert!(app.tasks[i].projects.iter().any(|p| p == "work"));
         }
+    }
+
+    #[test]
+    fn today_indices_are_in_bucket_order() {
+        // 2026-05-06 is "today" per build_app. Build one task in each bucket.
+        let raw = "a due:2026-05-04\n\
+                   b due:2026-05-06\n\
+                   c due:2026-05-08\n";
+        let mut app = build_app(raw);
+        app.view = View::Today;
+        app.recompute_visible();
+        let groups = app.visible_groups();
+        assert_eq!(groups.len(), 3);
+        assert!(matches!(
+            groups[0],
+            GroupKey::TodayBucket(TodayBucket::Overdue)
+        ));
+        assert!(matches!(
+            groups[1],
+            GroupKey::TodayBucket(TodayBucket::Today)
+        ));
+        assert!(matches!(
+            groups[2],
+            GroupKey::TodayBucket(TodayBucket::Upcoming)
+        ));
+    }
+
+    #[test]
+    fn today_groups_align_with_indices() {
+        let raw = "x due:2026-05-04\n\
+                   a due:2026-05-04\n\
+                   b due:2026-05-08\n";
+        let mut app = build_app(raw);
+        // First task is done — must be excluded by today_predicate.
+        app.view = View::Today;
+        app.recompute_visible();
+        assert_eq!(app.visible_indices().len(), app.visible_groups().len());
+        assert_eq!(app.visible_indices().len(), 2);
+    }
+
+    #[test]
+    fn archive_indices_point_into_archive_tasks() {
+        let mut app = build_app("a\n");
+        let path = app.archive.path().to_path_buf();
+        app.archive = crate::app::Archive::for_test(
+            crate::todo::parse_file(
+                "x 2026-05-01 2026-04-01 first\nx 2026-05-02 2026-04-02 second\n",
+            ),
+            String::new(),
+            path,
+        );
+        app.set_view(View::Archive);
+        let idxs = app.visible_indices();
+        assert_eq!(idxs.len(), 2);
+        for &i in idxs {
+            assert!(app.archive.tasks().get(i).is_some());
+        }
+    }
+
+    #[test]
+    fn archive_visible_groups_are_done_date_desc() {
+        let mut app = build_app("a\n");
+        let path = app.archive.path().to_path_buf();
+        app.archive = crate::app::Archive::for_test(
+            crate::todo::parse_file(
+                "x 2026-04-01 2026-03-01 older\nx 2026-05-02 2026-04-02 newer\n",
+            ),
+            String::new(),
+            path,
+        );
+        app.set_view(View::Archive);
+        let groups = app.visible_groups();
+        assert_eq!(groups.len(), 2);
+        // First is most-recent done_date.
+        let first = match &groups[0] {
+            GroupKey::ArchiveDate(d) => d.as_str(),
+            _ => panic!("expected ArchiveDate"),
+        };
+        let second = match &groups[1] {
+            GroupKey::ArchiveDate(d) => d.as_str(),
+            _ => panic!("expected ArchiveDate"),
+        };
+        assert_eq!(first, "2026-05-02");
+        assert_eq!(second, "2026-04-01");
     }
 }

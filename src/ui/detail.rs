@@ -13,7 +13,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     super::fill_bg(frame, area, Style::default().bg(theme.panel));
 
-    let task = app.cur_abs().and_then(|i| app.tasks.get(i));
+    let task = app.cur_task();
     // Wrap to the actual pane width minus 1-char left padding and 1-char
     // safety margin on the right. Floor at 16 so a tiny pane still wraps.
     let wrap_w = (area.width as usize).saturating_sub(2).max(16);

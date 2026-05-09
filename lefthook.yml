@@ -1,0 +1,12 @@
+pre-commit:
+  jobs:
+    - name: fmt
+      run: mise run fmt
+      stage_fixed: true
+    - name: clippy
+      run: mise run clippy
+
+pre-push:
+  jobs:
+    - name: test
+      run: mise run test

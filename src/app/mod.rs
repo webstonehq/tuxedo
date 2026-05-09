@@ -59,6 +59,11 @@ pub struct App {
     flash_state: Flash,
     pub chord: Chord,
     pub file_path: PathBuf,
+    /// Resolved path of the on-disk config file. Set by the binary after
+    /// construction so the settings overlay can render a stable, real path
+    /// without the renderer having to reach into the environment itself.
+    /// `None` in tests/examples that don't care about the value.
+    pub config_path: Option<PathBuf>,
     pub today: String,
     pub should_quit: bool,
     visible_cache: Vec<usize>,
@@ -93,6 +98,7 @@ impl App {
             flash_state: Flash::default(),
             chord: Chord::default(),
             file_path,
+            config_path: None,
             today,
             should_quit: false,
             visible_cache: Vec::new(),

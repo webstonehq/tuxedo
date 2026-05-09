@@ -6,7 +6,7 @@ expression: buffer_to_text(&buf)
                                                                                                     
  FILES                                                                                              
    todo file                   /tmp/tuxedo-snapshot.txt                                             
-   config file                 /Users/m/.config/tuxedo/config.toml                                  
+   config file                 /tmp/tuxedo-snapshot.toml                                            
                                                                                                     
  DISPLAY                                                                                            
    theme                       Muted Slate ▾  (T to cycle)                                          

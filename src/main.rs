@@ -49,6 +49,7 @@ fn main() -> Result<()> {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let cfg = Config::load();
     let mut app_state = App::new(path.clone(), body, today, cfg);
+    app_state.config_path = Config::path();
 
     let terminal = ratatui::init();
     let result = run(terminal, &mut app_state);

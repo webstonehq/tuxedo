@@ -33,6 +33,12 @@ const ROWS: u16 = 32;
 /// machines. The file is never actually written; `App::new` only stores it.
 const FIXTURE_PATH: &str = "/tmp/tuxedo-snapshot.txt";
 
+/// Config-file path for the settings-overlay fixture. Hard-coded for the
+/// same reason as `FIXTURE_PATH`: `Config::path()` resolves `$HOME` at
+/// runtime, which would otherwise bake the author's home directory into
+/// the snapshot and break on any other machine (CI included).
+const FIXTURE_CONFIG_PATH: &str = "/tmp/tuxedo-snapshot.toml";
+
 fn make_app() -> App {
     let mut app = App::new(
         PathBuf::from(FIXTURE_PATH),
@@ -40,6 +46,7 @@ fn make_app() -> App {
         "2026-05-06".to_string(),
         Config::default(),
     );
+    app.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
     // Compact density keeps each scene dense and stable: blank-line counts
     // shift with density, which would churn snapshots without adding signal.
     app.prefs.density = Density::Compact;

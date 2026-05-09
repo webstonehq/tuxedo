@@ -1,5 +1,6 @@
 [tools]
 rust = "latest"
+lefthook = "latest"
 
 [tasks.clippy]
 run = "cargo clippy --all-targets --locked -- -D warnings"

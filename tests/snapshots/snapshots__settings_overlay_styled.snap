@@ -6,7 +6,7 @@ expression: buffer_to_styled(&buf)
 {bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}FILES{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                              {/}
 {fg=#c8ccd4 bg=#1a1d23}   todo file                   {/}{fg=#6b7280 bg=#1a1d23}/tmp/tuxedo-snapshot.txt{/}{fg=#c8ccd4 bg=#1a1d23}                                             {/}
-{fg=#c8ccd4 bg=#1a1d23}   config file                 {/}{fg=#6b7280 bg=#1a1d23}/Users/m/.config/tuxedo/config.toml{/}{fg=#c8ccd4 bg=#1a1d23}                                  {/}
+{fg=#c8ccd4 bg=#1a1d23}   config file                 {/}{fg=#6b7280 bg=#1a1d23}/tmp/tuxedo-snapshot.toml{/}{fg=#c8ccd4 bg=#1a1d23}                                            {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}DISPLAY{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                            {/}
 {fg=#c8ccd4 bg=#1a1d23}   theme                       {/}{fg=#6b7280 bg=#1a1d23}Muted Slate ▾  (T to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                          {/}

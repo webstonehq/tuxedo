@@ -40,7 +40,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     };
     let on = |b: bool| if b { "on" } else { "off" };
 
-    let config_path = crate::config::Config::path()
+    let config_path = app
+        .config_path
+        .as_ref()
         .map(|p| p.display().to_string())
         .unwrap_or_else(|| "(unavailable)".into());
 

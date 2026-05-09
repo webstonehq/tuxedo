@@ -33,4 +33,4 @@ expression: buffer_to_text(&buf)
      │                                                q                 quit                  │     
      └────────────────────────────────────────────────────────────────────────────────────────┘     
                                                                                                     
- HELP   ? close help                                         14 open · 2026-05-06 · tuxedo 2026.5.1
+ HELP   ? close help                                         14 open · 2026-05-06 · tuxedo 2026.5.2

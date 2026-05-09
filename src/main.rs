@@ -535,7 +535,7 @@ fn apply_action(app: &mut App, action: Action) {
             if app.mode == Mode::Visual && !app.selection.is_empty() {
                 app.complete_selected();
             } else if let Some(abs) = app.cur_abs() {
-                app.complete(abs);
+                app.toggle_complete(abs);
             }
         }
         Action::Delete => {

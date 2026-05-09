@@ -2,25 +2,31 @@ use super::App;
 use crate::todo::{self, TagError};
 
 impl App {
-    pub fn complete(&mut self, abs: usize) {
+    pub fn toggle_complete(&mut self, abs: usize) {
         if !self.check_external_changes() {
             return;
         }
         let Some(t) = self.tasks.get(abs) else {
             return;
         };
-        if t.done {
-            return;
-        }
+        let was_done = t.done;
         self.push_history();
-        match self.tasks[abs].mark_done(&self.today) {
+        let result = if was_done {
+            self.tasks[abs].unmark_done()
+        } else {
+            self.tasks[abs].mark_done(&self.today)
+        };
+        match result {
             Ok(()) => {
-                self.flash("completed");
+                self.flash(if was_done { "uncompleted" } else { "completed" });
                 self.persist();
                 self.recompute_visible();
                 self.follow_cursor(abs);
             }
-            Err(e) => self.flash(format!("complete failed: {e}")),
+            Err(e) => {
+                let verb = if was_done { "uncomplete" } else { "complete" };
+                self.flash(format!("{verb} failed: {e}"));
+            }
         }
     }
 
@@ -192,6 +198,24 @@ mod tests {
         assert_eq!(app.tasks[0].projects, vec!["life-admin_2026"]);
         app.add_project_to_current("café");
         assert_eq!(app.tasks[0].projects, vec!["life-admin_2026", "café"]);
+    }
+
+    #[test]
+    fn toggle_complete_marks_pending_task_done() {
+        let mut app = build_app("a\n");
+        app.toggle_complete(0);
+        assert!(app.tasks[0].done);
+        assert_eq!(app.flash_active(), Some("completed"));
+    }
+
+    #[test]
+    fn toggle_complete_undoes_done_task() {
+        let mut app = build_app("x 2026-05-05 2026-05-01 finish report\n");
+        assert!(app.tasks[0].done);
+        app.toggle_complete(0);
+        assert!(!app.tasks[0].done);
+        assert_eq!(app.tasks[0].raw, "2026-05-01 finish report");
+        assert_eq!(app.flash_active(), Some("uncompleted"));
     }
 
     #[test]

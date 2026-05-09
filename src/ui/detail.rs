@@ -45,20 +45,23 @@ fn build_lines<'a>(
         return rows;
     };
 
-    if let Some(p) = t.priority {
-        rows.push(line_panel(
-            theme,
-            vec![
-                Span::styled(" priority  ", Style::default().fg(theme.dim)),
-                Span::styled(
-                    format!("({p})"),
-                    Style::default()
-                        .fg(theme.priority_color(p))
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ],
-        ));
-    }
+    let priority_value = if let Some(p) = t.priority {
+        Span::styled(
+            format!("({p})"),
+            Style::default()
+                .fg(theme.priority_color(p))
+                .add_modifier(Modifier::BOLD),
+        )
+    } else {
+        Span::raw("")
+    };
+    rows.push(line_panel(
+        theme,
+        vec![
+            Span::styled(" priority  ", Style::default().fg(theme.dim)),
+            priority_value,
+        ],
+    ));
     rows.push(line_panel(
         theme,
         vec![
@@ -80,38 +83,34 @@ fn build_lines<'a>(
             ],
         ));
     }
-    if !t.projects.is_empty() {
-        rows.push(line_panel(
-            theme,
-            vec![
-                Span::styled(" projects  ", Style::default().fg(theme.dim)),
-                Span::styled(
-                    t.projects
-                        .iter()
-                        .map(|p| format!("+{p}"))
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                    Style::default().fg(theme.project),
-                ),
-            ],
-        ));
-    }
-    if !t.contexts.is_empty() {
-        rows.push(line_panel(
-            theme,
-            vec![
-                Span::styled(" contexts  ", Style::default().fg(theme.dim)),
-                Span::styled(
-                    t.contexts
-                        .iter()
-                        .map(|c| format!("@{c}"))
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                    Style::default().fg(theme.context),
-                ),
-            ],
-        ));
-    }
+    rows.push(line_panel(
+        theme,
+        vec![
+            Span::styled(" projects  ", Style::default().fg(theme.dim)),
+            Span::styled(
+                t.projects
+                    .iter()
+                    .map(|p| format!("+{p}"))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                Style::default().fg(theme.project),
+            ),
+        ],
+    ));
+    rows.push(line_panel(
+        theme,
+        vec![
+            Span::styled(" contexts  ", Style::default().fg(theme.dim)),
+            Span::styled(
+                t.contexts
+                    .iter()
+                    .map(|c| format!("@{c}"))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                Style::default().fg(theme.context),
+            ),
+        ],
+    ));
     if t.done {
         rows.push(line_panel(
             theme,

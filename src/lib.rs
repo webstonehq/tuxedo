@@ -1,6 +1,7 @@
 #![warn(clippy::unwrap_used)]
 
 pub mod app;
+pub mod clipboard;
 pub mod config;
 pub mod sample;
 pub mod theme;

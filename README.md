@@ -126,6 +126,8 @@ can browse, un-archive, or permanently delete past tasks.
 | `p` | cycle priority A → B → C → · |
 | `c` | add or remove a context |
 | `+` | add a project |
+| `yy` | copy current line to clipboard |
+| `yb` | copy current body only (no priority, dates, projects, contexts, `key:value`) |
 | `u` | undo (50 levels) |
 
 ### Filtering, sort, view
@@ -161,9 +163,14 @@ can browse, un-archive, or permanently delete past tasks.
 | `,` | settings overlay |
 | `q` | quit |
 
-Two-key chord prompts (`gg`, `dd`, `fp`, `fc`) show a `g…` / `d…` / `f…`
-indicator in the status-bar mode chip while the leader is armed; the
-window is 600 ms.
+Two-key chord prompts (`gg`, `dd`, `yy`, `yb`, `fp`, `fc`) show a `g…` /
+`d…` / `y…` / `f…` indicator in the status-bar mode chip while the
+leader is armed; the window is 600 ms.
+
+Copy uses the OSC 52 terminal escape, so it works locally and over SSH on
+any terminal that supports it (kitty, alacritty, wezterm, iTerm2, foot,
+modern xterm; tmux when `set -g set-clipboard on`). Older terminals will
+silently ignore the keystroke.
 
 ## todo.txt format
 

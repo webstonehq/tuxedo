@@ -30,6 +30,8 @@ const EDITING: Section = (
         ("p", "cycle priority A→B→C→·"),
         ("c", "add/remove context"),
         ("+", "add project"),
+        ("yy", "copy line to clipboard"),
+        ("yb", "copy body only"),
         ("u", "undo"),
     ],
 );

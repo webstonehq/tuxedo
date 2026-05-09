@@ -382,6 +382,39 @@ pub fn body_after_priority(raw: &str) -> &str {
     s
 }
 
+/// Description text only: strip the leading `x `, done/created dates, and
+/// priority via `body_after_priority`, then drop every `+project`,
+/// `@context`, and `key:value` token from what remains. Whitespace between
+/// surviving words collapses to single spaces. Returns an owned `String`
+/// because we're filtering tokens, not slicing a prefix.
+pub fn body_only(raw: &str) -> String {
+    body_after_priority(raw)
+        .split_whitespace()
+        .filter(|tok| !is_meta_token(tok))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn is_meta_token(tok: &str) -> bool {
+    if let Some(rest) = tok.strip_prefix('+')
+        && !rest.is_empty()
+    {
+        return true;
+    }
+    if let Some(rest) = tok.strip_prefix('@')
+        && !rest.is_empty()
+    {
+        return true;
+    }
+    if let Some((k, v)) = tok.split_once(':')
+        && is_valid_key(k)
+        && !v.is_empty()
+    {
+        return true;
+    }
+    false
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -450,6 +483,31 @@ mod tests {
         assert_eq!(body_after_priority(raw), "Hello world");
         let raw2 = "x 2026-05-05 2026-05-01 Hello world";
         assert_eq!(body_after_priority(raw2), "Hello world");
+    }
+
+    #[test]
+    fn body_only_drops_tags_and_kv_pairs() {
+        // Plain description survives unchanged.
+        assert_eq!(body_only("Hello world"), "Hello world");
+        // Priority + creation date prefix are stripped, +project / @context /
+        // due:... are filtered out, words collapse to single spaces.
+        assert_eq!(
+            body_only("(A) 2026-04-28 Call dentist @phone +health due:2026-05-08"),
+            "Call dentist",
+        );
+        // Completed lines lose `x` + done date + creation date as well.
+        assert_eq!(
+            body_only("x 2026-05-05 2026-05-01 Submit expense report +work @laptop"),
+            "Submit expense report",
+        );
+        // Sigils inside a word (not at the start of a token) are not tags
+        // and must be preserved.
+        assert_eq!(body_only("email a+b@example.com"), "email a+b@example.com");
+        // Lone sigils with no name are not valid tags either.
+        assert_eq!(body_only("type @ then context"), "type @ then context");
+        // Unknown key:value tokens still drop — todo.txt treats any
+        // alphanumeric `key:value` as an extension, so we mirror that.
+        assert_eq!(body_only("backup id:abc-123 nightly"), "backup nightly");
     }
 
     #[test]

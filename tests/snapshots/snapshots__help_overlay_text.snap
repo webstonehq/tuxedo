@@ -1,5 +1,6 @@
 ---
 source: tests/snapshots.rs
+assertion_line: 216
 expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  14 tas DETAIL                           
@@ -26,9 +27,9 @@ expression: buffer_to_text(&buf)
      │    p                 cycle priority A→B→C→·    T                 cycle theme           │     
      │    c                 add/remove context        D                 cycle density         │     
      │    +                 add project               L                 toggle line numbers   │     
-     │    u                 undo                                                              │     
-     │                                              SYSTEM                                    │     
-     │                                                ?                 this help             │     
+     │    yy                copy line to clipboard                                            │     
+     │    yb                copy body only          SYSTEM                                    │     
+     │    u                 undo                      ?                 this help             │     
      │                                                ,                 settings              │     
      │                                                q                 quit                  │     
      └────────────────────────────────────────────────────────────────────────────────────────┘     

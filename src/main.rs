@@ -11,7 +11,7 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 
 use tuxedo::app::{App, Mode, View};
 use tuxedo::config::Config;
-use tuxedo::{sample, ui};
+use tuxedo::{clipboard, sample, todo, ui};
 
 const EVENT_POLL: Duration = Duration::from_millis(250);
 
@@ -393,6 +393,8 @@ enum Action {
     CycleDensity,
     ToggleLineNum,
     ToggleShowDone,
+    CopyLine,
+    CopyBody,
     EscapeStack,
 }
 
@@ -425,6 +427,10 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char('x') => Action::ToggleComplete,
         // 'dd' chord. First press arms; second fires.
         KeyCode::Char('d') if app.chord.toggle('d') => Action::Delete,
+        // 'yy' chord copies the whole line; 'yb' (after 'y' is armed) copies
+        // the body only. Plain 'y' just arms the leader.
+        KeyCode::Char('y') if app.chord.toggle('y') => Action::CopyLine,
+        KeyCode::Char('b') if app.chord.consume('y') => Action::CopyBody,
         KeyCode::Char('p') => {
             // After 'f' arms, 'fp' opens the project picker. Otherwise plain
             // 'p' cycles priority.
@@ -625,6 +631,8 @@ fn apply_action(app: &mut App, action: Action) {
             app.recompute_visible();
             app.save_prefs();
         }
+        Action::CopyLine => copy_current_task(app, false),
+        Action::CopyBody => copy_current_task(app, true),
         Action::EscapeStack => {
             let has_pc = app.filter().project.is_some() || app.filter().context.is_some();
             let has_search = !app.filter().search.is_empty();
@@ -650,6 +658,21 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         apply_action(app, action);
     }
     app.clamp_cursor();
+}
+
+fn copy_current_task(app: &mut App, body_only: bool) {
+    let Some(raw) = app.cur_task().map(|t| t.raw.clone()) else {
+        return;
+    };
+    let payload = if body_only {
+        todo::body_only(&raw)
+    } else {
+        raw
+    };
+    match clipboard::copy(&payload) {
+        Ok(()) => app.flash(if body_only { "copied (body)" } else { "copied" }),
+        Err(e) => app.flash(format!("copy failed: {e}")),
+    }
 }
 
 #[cfg(test)]
@@ -786,6 +809,37 @@ mod tests {
         let mut app = build_app();
         let k = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
         assert_eq!(resolve_normal_key(&mut app, k), None);
+    }
+
+    #[test]
+    fn yy_chord_only_fires_on_second_press() {
+        let mut app = build_app();
+        // First 'y' arms the chord but produces no action.
+        assert_eq!(resolve_normal_key(&mut app, key('y')), None);
+        // Second 'y' fires the line copy.
+        assert_eq!(
+            resolve_normal_key(&mut app, key('y')),
+            Some(Action::CopyLine)
+        );
+    }
+
+    #[test]
+    fn yb_chord_routes_to_copy_body() {
+        let mut app = build_app();
+        // 'y' arms the leader without firing.
+        assert_eq!(resolve_normal_key(&mut app, key('y')), None);
+        // 'b' after armed 'y' copies the body.
+        assert_eq!(
+            resolve_normal_key(&mut app, key('b')),
+            Some(Action::CopyBody)
+        );
+    }
+
+    #[test]
+    fn plain_b_without_y_armed_is_unhandled() {
+        let mut app = build_app();
+        // No leader → 'b' is not bound to anything else, so nothing fires.
+        assert_eq!(resolve_normal_key(&mut app, key('b')), None);
     }
 
     #[test]

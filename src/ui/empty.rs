@@ -30,7 +30,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(block, r);
 
     let shortcuts: &[(&str, &str)] = &[
-        ("a", "add a task"),
+        ("n", "add a task"),
         ("?", "show all keybindings"),
         (",", "settings"),
         ("q", "quit"),

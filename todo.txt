@@ -1,14 +1,13 @@
-(A) 2026-05-07 Recurring tasks (rec key) auto-spawn next occurrence on complete +tuxedo @dev
-(A) 2026-05-07 Threshold dates (t key) hide tasks until threshold date +tuxedo @dev
+(B) 2026-05-07 Recurring tasks (rec key) auto-spawn next occurrence on complete +tuxedo @dev
+(B) 2026-05-07 Threshold dates (t key) hide tasks until threshold date +tuxedo @dev
 2026-05-07 Natural-language quick-add parse dates contexts and recurrence from input +tuxedo @dev
-(A) 2026-05-07 Fuzzy command palette overlay for all actions +tuxedo @dev
+(B) 2026-05-07 Fuzzy command palette overlay for all actions +tuxedo @dev
 2026-05-07 Bulk project and context rename with preview across working and archive +tuxedo @dev
 2026-05-07 Calendar week strip view with reschedule keys +tuxedo @dev
 2026-05-07 Per-task Markdown notes sidecar in detail sidebar +tuxedo @dev
 2026-05-07 Hook scripts for pre and post add complete and delete events +tuxedo @dev
 2026-05-07 Copy todo to clipboard, consider OS support
 2026-05-07 Add `toxido update` via github releases
-2026-05-08 When in the archive or today view, j/k navigates the normal view and details update on the right. We want navigation to apply to the currently active mode
-2026-05-08 2026-05-08 TEST due:2026-05-08
-(A) 2026-05-08 Test with insta snapshots (https://ratatui.rs/recipes/testing/snapshots/)
-2026-05-08 TEST 2 due:2026-05-12
+x 2026-05-08 2026-05-08 When in the archive or today view, j/k navigates the normal view and details update on the right. We want navigation to apply to the currently active mode
+2026-05-08 Test with insta snapshots (https://ratatui.rs/recipes/testing/snapshots/)
+(A) 2026-05-08 Move "tuxedo • <version>" to the footer due:2026-05-08

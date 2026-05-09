@@ -102,7 +102,8 @@ again to act on the fresh state — and the status bar flashes a notice.
 
 Pressing `A` appends every completed task to a sibling `done.txt` and
 removes them from the working file (atomically: `done.txt` is written
-before the originals are dropped).
+before the originals are dropped). `a` toggles the archive view so you
+can browse, un-archive, or permanently delete past tasks.
 
 ## Keybindings
 
@@ -120,7 +121,7 @@ before the originals are dropped).
 
 | Key | Action |
 | --- | --- |
-| `a` | add task |
+| `n` | add task |
 | `e` / `i` | edit current task |
 | `x` | toggle complete |
 | `dd` | delete task |
@@ -136,10 +137,12 @@ before the originals are dropped).
 | `/` | search |
 | `fp` | filter by project (`j` / `k` cycles, `Esc` clears) |
 | `fc` | filter by context (`j` / `k` cycles, `Esc` clears) |
-| `s` | cycle sort: priority → due → file order |
+| `S` | cycle sort: priority → due → file order |
 | `v` | enter visual / multi-select; `space` toggles a row |
 | `x` / `dd` (in visual) | bulk-complete / bulk-delete the selection |
+| `l` | list (default) view |
 | `t` | today / agenda view |
+| `a` | toggle archive view |
 | `A` | archive completed tasks → `done.txt` |
 | `H` | toggle showing done tasks in the main list |
 

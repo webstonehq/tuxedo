@@ -23,7 +23,7 @@ const NAVIGATION: Section = (
 const EDITING: Section = (
     "EDITING",
     &[
-        ("a", "add task"),
+        ("n", "add task"),
         ("e / i", "edit current line"),
         ("x", "toggle complete"),
         ("dd", "delete task"),
@@ -40,9 +40,11 @@ const VIEW: Section = (
         ("/", "fuzzy search"),
         ("fp", "filter by project"),
         ("fc", "filter by context"),
-        ("s", "cycle sort"),
+        ("S", "cycle sort"),
         ("v", "visual / multi-select"),
+        ("l", "list view"),
         ("t", "today view"),
+        ("a", "archive view"),
         ("A", "archive completed"),
         ("H", "show done in list"),
         ("[", "toggle filter pane"),

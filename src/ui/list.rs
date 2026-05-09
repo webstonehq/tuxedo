@@ -1,10 +1,11 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::Style;
-use ratatui::text::Line;
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, Mode};
+use crate::app::{App, GroupKey, ListDueBucket, Mode};
+use crate::theme::Theme;
 use crate::ui::{header, task_row};
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
@@ -38,17 +39,32 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let visible = app.visible_indices();
+    let groups = app.visible_groups();
     let mut lines: Vec<Line> = Vec::new();
 
     if visible.is_empty() {
-        lines.push(Line::from(ratatui::text::Span::styled(
+        lines.push(Line::from(Span::styled(
             "   no tasks match".to_string(),
             Style::default().fg(theme.dim),
         )));
     } else {
         let blank = super::density_blank_lines(app.prefs.density);
+        let counts = group_counts(groups);
         let last = visible.len().saturating_sub(1);
-        for (i, &abs) in visible.iter().enumerate() {
+        let mut last_group: Option<&GroupKey> = None;
+
+        for (i, (&abs, gk)) in visible.iter().zip(groups.iter()).enumerate() {
+            // Emit a section header on group transitions. `GroupKey::None`
+            // means the active sort is `Sort::File`; we never render a header
+            // for it, so the layout is identical to the pre-grouping version.
+            if !matches!(gk, GroupKey::None) && last_group != Some(gk) {
+                if !lines.is_empty() {
+                    push_blanks(&mut lines, blank);
+                }
+                lines.push(group_header(theme, gk, counts.lookup(gk)));
+                last_group = Some(gk);
+            }
+
             let task = &app.tasks[abs];
             let opts = task_row::RowOpts {
                 idx_label: i,
@@ -65,7 +81,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 today: &app.today,
             };
             lines.push(task_row::build_line(task, opts, theme));
-            if i != last {
+            if matches!(gk, GroupKey::None) && i != last {
                 for _ in 0..blank {
                     lines.push(Line::raw(""));
                 }
@@ -84,4 +100,78 @@ fn display_path(p: &std::path::Path) -> String {
         return format!("~/{}", rel.display());
     }
     p.display().to_string()
+}
+
+/// Tally rows per `GroupKey` so each header can show its count without an
+/// extra rescan during the render loop. Keyed by a stable string form so
+/// `GroupKey::ListPriority(None)` and `ListPriority(Some('A'))` don't collide.
+struct GroupCounts {
+    inner: std::collections::HashMap<String, usize>,
+}
+
+impl GroupCounts {
+    fn lookup(&self, gk: &GroupKey) -> usize {
+        self.inner.get(&group_count_key(gk)).copied().unwrap_or(0)
+    }
+}
+
+fn group_counts(groups: &[GroupKey]) -> GroupCounts {
+    let mut inner: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for g in groups {
+        if matches!(g, GroupKey::None) {
+            continue;
+        }
+        *inner.entry(group_count_key(g)).or_insert(0) += 1;
+    }
+    GroupCounts { inner }
+}
+
+fn group_count_key(gk: &GroupKey) -> String {
+    match gk {
+        GroupKey::ListPriority(Some(c)) => format!("p:{c}"),
+        GroupKey::ListPriority(None) => "p:_".to_string(),
+        GroupKey::ListDue(b) => format!("d:{}", b.label()),
+        // Other variants aren't produced for List view; encode defensively.
+        GroupKey::TodayBucket(b) => format!("t:{}", b.label()),
+        GroupKey::ArchiveDate(d) => format!("a:{d}"),
+        GroupKey::None => String::new(),
+    }
+}
+
+fn group_header<'a>(theme: &Theme, gk: &GroupKey, count: usize) -> Line<'a> {
+    let (label, color) = match gk {
+        GroupKey::ListPriority(Some(c)) => (format!("PRIORITY {c}"), theme.priority_color(*c)),
+        GroupKey::ListPriority(None) => ("NO PRIORITY".to_string(), theme.dim),
+        GroupKey::ListDue(b) => (b.label().to_string(), due_bucket_color(theme, *b)),
+        // Defensive fallthroughs — not produced under List view.
+        GroupKey::TodayBucket(b) => (b.label().to_string(), theme.accent),
+        GroupKey::ArchiveDate(d) => (d.clone(), theme.accent),
+        GroupKey::None => (String::new(), theme.fg),
+    };
+    Line::from(vec![
+        Span::raw(" "),
+        Span::styled(
+            label,
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  "),
+        Span::styled(format!("{}", count), Style::default().fg(theme.dim)),
+        Span::raw("  "),
+        Span::styled("─".repeat(80), Style::default().fg(theme.border)),
+    ])
+}
+
+fn due_bucket_color(theme: &Theme, b: ListDueBucket) -> Color {
+    match b {
+        ListDueBucket::Overdue => theme.overdue,
+        ListDueBucket::Today => theme.today,
+        ListDueBucket::Upcoming => theme.accent,
+        ListDueBucket::NoDue => theme.dim,
+    }
+}
+
+fn push_blanks(lines: &mut Vec<Line>, n: usize) {
+    for _ in 0..n {
+        lines.push(Line::raw(" "));
+    }
 }

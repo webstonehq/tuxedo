@@ -376,7 +376,9 @@ enum Action {
     ToggleVisual,
     ToggleSelected,
     ToggleToday,
-    ArchiveOrToggleView,
+    GoList,
+    ToggleArchiveView,
+    ArchiveCompleted,
     ArmF,
     PickProject,
     PickContext,
@@ -414,7 +416,9 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char('G') => Action::CursorBottom,
         // First 'g' arms the chord; second 'g' fires CursorTop.
         KeyCode::Char('g') if app.chord.toggle('g') => Action::CursorTop,
-        KeyCode::Char('a') => Action::BeginAdd,
+        KeyCode::Char('n') => Action::BeginAdd,
+        KeyCode::Char('a') => Action::ToggleArchiveView,
+        KeyCode::Char('l') => Action::GoList,
         KeyCode::Char('e' | 'i') => Action::BeginEdit,
         KeyCode::Char('x') => Action::ToggleComplete,
         // 'dd' chord. First press arms; second fires.
@@ -442,9 +446,9 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char('v') => Action::ToggleVisual,
         KeyCode::Char(' ') => Action::ToggleSelected,
         KeyCode::Char('t') => Action::ToggleToday,
-        KeyCode::Char('A') => Action::ArchiveOrToggleView,
+        KeyCode::Char('A') => Action::ArchiveCompleted,
         KeyCode::Char('f') => Action::ArmF,
-        KeyCode::Char('s') => Action::CycleSort,
+        KeyCode::Char('S') => Action::CycleSort,
         KeyCode::Char('+') => Action::BeginPromptProject,
         KeyCode::Char('[') => Action::ToggleLeftPane,
         KeyCode::Char(']') => Action::ToggleRightPane,
@@ -578,16 +582,22 @@ fn apply_action(app: &mut App, action: Action) {
             };
             app.set_view(next);
         }
-        Action::ArchiveOrToggleView => {
-            if app.has_completed_tasks() && app.view() != View::Archive {
+        Action::GoList => app.set_view(View::List),
+        Action::ToggleArchiveView => {
+            let next = if app.view() == View::Archive {
+                View::List
+            } else {
+                View::Archive
+            };
+            app.set_view(next);
+        }
+        Action::ArchiveCompleted => {
+            if app.view() == View::Archive {
+                app.flash("already in archive");
+            } else if app.has_completed_tasks() {
                 app.archive_completed();
             } else {
-                let next = if app.view() == View::Archive {
-                    View::List
-                } else {
-                    View::Archive
-                };
-                app.set_view(next);
+                app.flash("no completed tasks to archive");
             }
         }
         Action::ArmF => app.chord.arm('f'),
@@ -694,6 +704,61 @@ mod tests {
             resolve_normal_key(&mut app, ctrl('d')),
             Some(Action::HalfPageDown),
         );
+        assert_eq!(
+            resolve_normal_key(&mut app, key('n')),
+            Some(Action::BeginAdd),
+        );
+        assert_eq!(
+            resolve_normal_key(&mut app, key('a')),
+            Some(Action::ToggleArchiveView),
+        );
+        assert_eq!(
+            resolve_normal_key(&mut app, key('A')),
+            Some(Action::ArchiveCompleted),
+        );
+        assert_eq!(
+            resolve_normal_key(&mut app, key('S')),
+            Some(Action::CycleSort),
+        );
+    }
+
+    #[test]
+    fn capital_a_archives_only_when_completed_tasks_exist() {
+        // No completed tasks → flash, no archive write.
+        let mut app =
+            build_app_with_archive("a\nb\nc\n", None);
+        apply_action(&mut app, Action::ArchiveCompleted);
+        assert_eq!(app.flash_active(), Some("no completed tasks to archive"));
+        assert_eq!(app.tasks().len(), 3);
+
+        // One completed task → archive_completed runs.
+        let mut app =
+            build_app_with_archive("x 2026-05-08 done one\nb\n", None);
+        apply_action(&mut app, Action::ArchiveCompleted);
+        assert_eq!(app.tasks().len(), 1, "completed task must be archived");
+    }
+
+    #[test]
+    fn lowercase_l_returns_to_list_from_any_view() {
+        let mut app =
+            build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done\n"));
+        app.set_view(View::Today);
+        apply_action(&mut app, Action::GoList);
+        assert_eq!(app.view(), View::List);
+        app.set_view(View::Archive);
+        apply_action(&mut app, Action::GoList);
+        assert_eq!(app.view(), View::List);
+    }
+
+    #[test]
+    fn lowercase_a_toggles_archive_view() {
+        let mut app =
+            build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done\n"));
+        assert_eq!(app.view(), View::List);
+        apply_action(&mut app, Action::ToggleArchiveView);
+        assert_eq!(app.view(), View::Archive);
+        apply_action(&mut app, Action::ToggleArchiveView);
+        assert_eq!(app.view(), View::List);
     }
 
     #[test]

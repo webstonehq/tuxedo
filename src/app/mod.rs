@@ -33,7 +33,7 @@ pub use selection::Selection;
 pub use types::{
     AUTOCOMPLETE_CAP, Density, FLASH_TTL, Filter, LEADER_WINDOW, Mode, Sort, UNDO_LIMIT, View,
 };
-pub use visibility::{GroupKey, TodayBucket, ordered_unique};
+pub use visibility::{GroupKey, ListDueBucket, TodayBucket, ordered_unique};
 
 pub struct App {
     /// Crate-private: external mutation would bypass `push_history`,

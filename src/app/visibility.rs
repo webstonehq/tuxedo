@@ -30,14 +30,38 @@ impl TodayBucket {
     }
 }
 
+/// Which canonical bucket a List-view row belongs to when the active sort is
+/// `Sort::Due`. `NoDue` covers tasks with no `due:` tag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListDueBucket {
+    Overdue,
+    Today,
+    Upcoming,
+    NoDue,
+}
+
+impl ListDueBucket {
+    pub fn label(self) -> &'static str {
+        match self {
+            ListDueBucket::Overdue => "OVERDUE",
+            ListDueBucket::Today => "TODAY",
+            ListDueBucket::Upcoming => "UPCOMING",
+            ListDueBucket::NoDue => "NO DUE DATE",
+        }
+    }
+}
+
 /// One entry per visible row, parallel to `visible_cache`. Renderers detect
-/// group transitions by comparing successive entries; List has no groups so
-/// every row is `None`.
+/// group transitions by comparing successive entries; under `Sort::File` every
+/// row is `None` so the renderer skips headers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GroupKey {
     None,
     TodayBucket(TodayBucket),
     ArchiveDate(String),
+    /// `Some('A'..='Z')` for a graded priority, `None` for unprioritized.
+    ListPriority(Option<char>),
+    ListDue(ListDueBucket),
 }
 
 impl App {
@@ -75,7 +99,20 @@ impl App {
 
         sort_by_prefs(&mut idxs, &self.tasks, self.prefs.sort);
 
-        self.visible_groups = vec![GroupKey::None; idxs.len()];
+        let groups: Vec<GroupKey> = match self.prefs.sort {
+            Sort::File => vec![GroupKey::None; idxs.len()],
+            Sort::Priority => idxs
+                .iter()
+                .map(|&i| GroupKey::ListPriority(self.tasks[i].priority))
+                .collect(),
+            Sort::Due => {
+                let today = self.today.as_str();
+                idxs.iter()
+                    .map(|&i| GroupKey::ListDue(due_bucket(&self.tasks[i], today)))
+                    .collect()
+            }
+        };
+        self.visible_groups = groups;
         self.visible_cache = idxs;
     }
 
@@ -170,6 +207,17 @@ impl App {
         } else {
             self.clamp_cursor();
         }
+    }
+}
+
+fn due_bucket(task: &Task, today: &str) -> ListDueBucket {
+    match task.due.as_deref() {
+        None => ListDueBucket::NoDue,
+        Some(d) => match d.cmp(today) {
+            Ordering::Less => ListDueBucket::Overdue,
+            Ordering::Equal => ListDueBucket::Today,
+            Ordering::Greater => ListDueBucket::Upcoming,
+        },
     }
 }
 
@@ -386,6 +434,50 @@ mod tests {
         for &i in idxs {
             assert!(app.archive.tasks().get(i).is_some());
         }
+    }
+
+    #[test]
+    fn list_groups_are_none_under_sort_file() {
+        let mut app = build_app("(A) a\n(B) b\nc\n");
+        app.prefs.sort = Sort::File;
+        app.recompute_visible();
+        let groups = app.visible_groups();
+        assert_eq!(groups.len(), 3);
+        for g in groups {
+            assert!(matches!(g, GroupKey::None));
+        }
+    }
+
+    #[test]
+    fn list_groups_track_priority_under_sort_priority() {
+        let mut app = build_app("(A) a\n(B) b\nc\n(A) a2\n");
+        app.prefs.sort = Sort::Priority;
+        app.recompute_visible();
+        // After priority sort: (A) a, (A) a2, (B) b, c (no priority).
+        let groups = app.visible_groups();
+        assert_eq!(groups.len(), 4);
+        assert_eq!(groups[0], GroupKey::ListPriority(Some('A')));
+        assert_eq!(groups[1], GroupKey::ListPriority(Some('A')));
+        assert_eq!(groups[2], GroupKey::ListPriority(Some('B')));
+        assert_eq!(groups[3], GroupKey::ListPriority(None));
+    }
+
+    #[test]
+    fn list_groups_bucket_due_dates_under_sort_due() {
+        // build_app uses today = 2026-05-06.
+        let raw = "a due:2026-05-04\n\
+                   b due:2026-05-06\n\
+                   c due:2026-05-08\n\
+                   d\n";
+        let mut app = build_app(raw);
+        app.prefs.sort = Sort::Due;
+        app.recompute_visible();
+        let groups = app.visible_groups();
+        assert_eq!(groups.len(), 4);
+        assert_eq!(groups[0], GroupKey::ListDue(ListDueBucket::Overdue));
+        assert_eq!(groups[1], GroupKey::ListDue(ListDueBucket::Today));
+        assert_eq!(groups[2], GroupKey::ListDue(ListDueBucket::Upcoming));
+        assert_eq!(groups[3], GroupKey::ListDue(ListDueBucket::NoDue));
     }
 
     #[test]

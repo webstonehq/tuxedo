@@ -95,13 +95,15 @@ fn resolve_path(arg: Option<String>) -> io::Result<PathBuf> {
 }
 
 fn sample_path() -> io::Result<PathBuf> {
-    let pb = std::env::temp_dir().join("tuxedo-sample.txt");
-    match OpenOptions::new().write(true).create_new(true).open(&pb) {
-        Ok(mut f) => {
-            use std::io::Write;
-            f.write_all(sample::TODO_RAW.as_bytes())?;
-        }
-        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+    let dir = std::env::temp_dir();
+    let pb = dir.join("tuxedo-sample.txt");
+    std::fs::write(&pb, sample::TODO_RAW)?;
+    // Also reset the sibling done.txt — otherwise archived rows from a
+    // previous session leak back as duplicates the next time the sample is
+    // opened.
+    match std::fs::remove_file(dir.join("done.txt")) {
+        Ok(_) => {}
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
         Err(e) => return Err(e),
     }
     Ok(pb)

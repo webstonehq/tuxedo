@@ -9,6 +9,9 @@ chrono = "0.4.44"
 crossterm = "0.29.0"
 ratatui = "0.30.0"
 
+[dev-dependencies]
+insta = "1.47"
+
 [profile.release]
 strip = true
 lto = true

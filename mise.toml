@@ -13,5 +13,8 @@ run = "cargo fmt --all --check"
 [tasks.test]
 run = "cargo test --locked"
 
+[tasks.test_update_snapshots]
+run = "INSTA_UPDATE=always cargo test --test snapshots --locked"
+
 [tasks.screenshots]
 run = "cargo run --example screenshots"

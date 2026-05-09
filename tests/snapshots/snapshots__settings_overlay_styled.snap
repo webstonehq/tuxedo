@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_styled(&buf)
+---
+{bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}▶{/}{fg=#e07a7a bg=#1f232b}▮{/}{fg=#8aa9c9 bg=#1f232b}◀{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b mod=bold}settings{/}{fg=#6b7280 bg=#1f232b}  •  17 tasks  •  {/}{fg=#8aa9c9 bg=#1f232b}sort:priority{/}{bg=#1f232b}                                                        {/}
+{bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}FILES{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                              {/}
+{fg=#c8ccd4 bg=#1a1d23}   todo file                   {/}{fg=#6b7280 bg=#1a1d23}/tmp/tuxedo-snapshot.txt{/}{fg=#c8ccd4 bg=#1a1d23}                                             {/}
+{fg=#c8ccd4 bg=#1a1d23}   config file                 {/}{fg=#6b7280 bg=#1a1d23}/Users/m/.config/tuxedo/config.toml{/}{fg=#c8ccd4 bg=#1a1d23}                                  {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}DISPLAY{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                            {/}
+{fg=#c8ccd4 bg=#1a1d23}   theme                       {/}{fg=#6b7280 bg=#1a1d23}Muted Slate ▾  (T to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                          {/}
+{fg=#c8ccd4 bg=#1a1d23}   density                     {/}{fg=#6b7280 bg=#1a1d23}compact ▾  (D to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                              {/}
+{fg=#c8ccd4 bg=#1a1d23}   line numbers                {/}{fg=#6b7280 bg=#1a1d23}on  (L to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}   status bar                  {/}{fg=#6b7280 bg=#1a1d23}on{/}{fg=#c8ccd4 bg=#1a1d23}                                                                   {/}
+{fg=#c8ccd4 bg=#1a1d23}   filter sidebar              {/}{fg=#6b7280 bg=#1a1d23}on  ([ to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}   detail sidebar              {/}{fg=#6b7280 bg=#1a1d23}on  (] to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}   show done in list           {/}{fg=#6b7280 bg=#1a1d23}off  (H to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                   {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}BEHAVIOR{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                           {/}
+{fg=#c8ccd4 bg=#1a1d23}   default sort                {/}{fg=#6b7280 bg=#1a1d23}priority (s to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                                {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}KEYBINDINGS{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                        {/}
+{fg=#c8ccd4 bg=#1a1d23}                               {/}{fg=#6b7280 bg=#1a1d23}press ? for the full list{/}{fg=#c8ccd4 bg=#1a1d23}                                            {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
+{fg=#1a1d23 bg=#8aa9c9 mod=bold} SETTINGS {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}Esc back{/}{bg=#252a33}                                         {/}{fg=#6b7280 bg=#252a33}14 open · 2026-05-06 · tuxedo 2026.5.1 {/}

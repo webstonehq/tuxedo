@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_styled(&buf)
+---
+{fg=#6b7280 bg=#1f232b mod=bold} FILTERS{/}{fg=#c8ccd4 bg=#1f232b}                  {/}{bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}▶{/}{fg=#e07a7a bg=#1f232b}▮{/}{fg=#8aa9c9 bg=#1f232b}◀{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b mod=bold}done.txt{/}{fg=#6b7280 bg=#1f232b}  •  0 tasks  •  {/}{fg=#8aa9c9 bg=#1f232b}sort:compl{/}{fg=#6b7280 bg=#1f232b mod=bold} DETAIL{/}{fg=#c8ccd4 bg=#1f232b}                           {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#7fb3a8 bg=#1f232b mod=bold} PROJECTS{/}{fg=#c8ccd4 bg=#1f232b}                 {/}{fg=#6b7280 bg=#1a1d23}   no completed tasks yet{/}{fg=#c8ccd4 bg=#1a1d23}               {/}{fg=#6b7280 bg=#1f232b} (no task){/}{fg=#c8ccd4 bg=#1f232b}                        {/}
+{fg=#c8ccd4 bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}  {/}{fg=#7fb3a8 bg=#1f232b}+work           {/}{fg=#6b7280 bg=#1f232b}  4{/}{fg=#c8ccd4 bg=#1f232b}    {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}  {/}{fg=#7fb3a8 bg=#1f232b}+health         {/}{fg=#6b7280 bg=#1f232b}  3{/}{fg=#c8ccd4 bg=#1f232b}    {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}  {/}{fg=#7fb3a8 bg=#1f232b}+finance        {/}{fg=#6b7280 bg=#1f232b}  1{/}{fg=#c8ccd4 bg=#1f232b}    {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}  {/}{fg=#7fb3a8 bg=#1f232b}+home           {/}{fg=#6b7280 bg=#1f232b}  1{/}{fg=#c8ccd4 bg=#1f232b}    {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}  {/}{fg=#7fb3a8 bg=#1f232b}+learning       {/}{fg=#6b7280 bg=#1f232b}  1{/}{fg=#c8ccd4 bg=#1f232b}    {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}  {/}{fg=#7fb3a8 bg=#1f232b}+personal       {/}{fg=#6b7280 bg=#1f232b}  1{/}{fg=#c8ccd4 bg=#1f232b}    {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}  {/}{fg=#7fb3a8 bg=#1f232b}+travel         {/}{fg=#6b7280 bg=#1f232b}  1{/}{fg=#c8ccd4 bg=#1f232b}    {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c89a6e bg=#1f232b mod=bold} CONTEXTS{/}{fg=#c8ccd4 bg=#1f232b}                 {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}  {/}{fg=#c89a6e bg=#1f232b}@errands        {/}{fg=#6b7280 bg=#1f232b}  4{/}{fg=#c8ccd4 bg=#1f232b}    {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}  {/}{fg=#c89a6e bg=#1f232b}@laptop         {/}{fg=#6b7280 bg=#1f232b}  4{/}{fg=#c8ccd4 bg=#1f232b}    {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}  {/}{fg=#c89a6e bg=#1f232b}@home           {/}{fg=#6b7280 bg=#1f232b}  3{/}{fg=#c8ccd4 bg=#1f232b}    {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}  {/}{fg=#c89a6e bg=#1f232b}@phone          {/}{fg=#6b7280 bg=#1f232b}  3{/}{fg=#c8ccd4 bg=#1f232b}    {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{fg=#c8ccd4 bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#1a1d23 bg=#8aa9c9 mod=bold} ARCHIVE {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}j/k · a add · x done · / search · ? help · u un{/}{fg=#6b7280 bg=#252a33}0 archived · 2026-05-06 · tuxedo 2026.5.1 {/}

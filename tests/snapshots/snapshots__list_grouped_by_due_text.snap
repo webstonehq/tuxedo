@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(&buf)
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  14 tas DETAIL                           
+                                                                                                    
+ PROJECTS                  TODAY  1  ───────────────────────────── priority  (A)                    
+   +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   2026-05-01             
+   +health           3     UPCOMING  5  ────────────────────────── due       2026-05-06  today      
+   +finance          1      2   (B) Review pull requests for auth  projects  +work                  
+   +home             1      3   (A) Call dentist to reschedule cle contexts  @laptop                
+   +learning         1      4       Migrate analytics to new pipel                                  
+   +personal         1      5   (B) Renew passport before summer t RAW                              
+   +travel           1      6   (C) Pay quarterly estimated taxes                                   
+                           NO DUE DATE  8  ─────────────────────── (A) 2026-05-01 Finish Q2 board   
+ CONTEXTS                   7   (B) Draft hiring rubric for senior deck +work @laptop               
+   @errands          4      8   (C) Order new running shoes +healt due:2026-05-06                   
+   @laptop           4      9       Pick up dry cleaning @errands                                   
+   @home             3     10       Schedule annual physical @phon                                  
+   @phone            3     11       Read "Designing Data-Intensive                                  
+                           12       Send thank-you note to mentor                                   
+                           13       Plan Saturday hike with K. @ph                                  
+                           14       Replace bathroom faucet washer                                  
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ NORMAL · sort: due   j/k · a add · x done · / search · ? hel14 open · 2026-05-06 · tuxedo 2026.5.1

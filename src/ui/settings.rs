@@ -23,8 +23,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         header_area,
         theme,
         header::HeaderProps {
-            title: concat!(env!("CARGO_PKG_NAME"), " • ", env!("CARGO_PKG_VERSION")),
-            file: "settings",
+            title: Some("settings"),
+            // title: None,
+            // file: "settings",
             count: app.tasks().len(),
             sort: app.sort_label(),
             filter: None,

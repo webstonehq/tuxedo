@@ -26,8 +26,8 @@ pub fn filter_label(filter: &Filter) -> Option<String> {
 /// sites pass labelled fields instead of positional `&str` args (which were
 /// trivially swappable — `title` and `file` have the same type).
 pub struct HeaderProps<'a> {
-    pub title: &'a str,
-    pub file: &'a str,
+    pub title: Option<&'a str>,
+    // pub file: &'a str,
     pub count: usize,
     pub sort: &'a str,
     pub filter: Option<&'a str>,
@@ -43,23 +43,27 @@ pub fn render(frame: &mut Frame, area: Rect, theme: &Theme, props: HeaderProps<'
         Span::styled("▮", Style::default().fg(theme.pri_a)),
         Span::styled("◀", Style::default().fg(theme.accent)),
         Span::raw(" "),
-        Span::styled(
-            props.title.to_string(),
+    ];
+    if let Some(t) = props.title {
+        spans.push(Span::styled(
+            t.to_string(),
             Style::default().fg(theme.fg).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-        Span::styled(props.file.to_string(), Style::default().fg(theme.dim)),
-        Span::raw("   "),
+        ));
+        // spans.push(Span::styled("  •  ", Style::default().fg(theme.dim)),);
+    }
+    spans.extend([
+        // Span::styled(props.file.to_string(), Style::default().fg(theme.dim)),
+        Span::styled("  •  ", Style::default().fg(theme.dim)),
         Span::styled(
             format!("{} tasks", props.count),
             Style::default().fg(theme.dim),
         ),
-        Span::raw("   "),
+        Span::styled("  •  ", Style::default().fg(theme.dim)),
         Span::styled(
             format!("sort:{}", props.sort),
             Style::default().fg(theme.accent),
         ),
-    ];
+    ]);
     if let Some(f) = props.filter {
         spans.push(Span::raw("   "));
         spans.push(Span::styled(

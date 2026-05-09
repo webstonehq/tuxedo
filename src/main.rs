@@ -500,6 +500,10 @@ fn apply_action(app: &mut App, action: Action) {
             _ => {}
         }
     }
+    if app.view() == View::Today && matches!(action, Action::CycleSort) {
+        app.flash("sort fixed to due in agenda");
+        return;
+    }
     let len = app.visible_indices().len();
     match action {
         Action::Quit => app.should_quit = true,

@@ -23,7 +23,7 @@ const NAVIGATION: Section = (
 const EDITING: Section = (
     "EDITING",
     &[
-        ("n", "add task"),
+        ("n", "new task"),
         ("e / i", "edit current line"),
         ("x", "toggle complete"),
         ("dd", "delete task"),

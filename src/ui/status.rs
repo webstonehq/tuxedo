@@ -52,6 +52,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         right_parts.push(format!("{} selected", app.selection.len()));
     }
     right_parts.push(app.today.clone());
+    right_parts.push(concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION")).to_string());
     let right_text = right_parts.join(" · ");
 
     // Append a chord indicator (e.g. " g…") so two-key sequences like gg/dd/fp

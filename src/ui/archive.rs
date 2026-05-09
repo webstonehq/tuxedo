@@ -23,8 +23,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         header_area,
         theme,
         header::HeaderProps {
-            title: "done.txt",
-            file: "completed",
+            title: Some("done.txt"),
+            // file: "completed",
             count: app.archive.len(),
             sort: "completion-date",
             filter: None,

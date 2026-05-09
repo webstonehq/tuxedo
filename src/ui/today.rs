@@ -26,8 +26,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         header_area,
         theme,
         header::HeaderProps {
-            title: concat!(env!("CARGO_PKG_NAME"), " • ", env!("CARGO_PKG_VERSION")),
-            file: "agenda · today",
+            title: Some("agenda"),
+            // title: None,
+            // file: "agenda · today",
             count: agenda_count,
             sort: "due",
             filter: filter_label.as_deref(),

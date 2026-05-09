@@ -49,27 +49,22 @@ fn main() -> std::io::Result<()> {
     // 1. Default list view, fresh sample data, cursor on first task.
     save(&make(), &out.join("list.svg"))?;
 
-    // 2. Today / agenda view — overdue · today · upcoming sections.
-    let mut app = make();
-    app.set_view(View::Today);
-    save(&app, &out.join("today.svg"))?;
-
-    // 3. Archive view — completed tasks grouped by completion date.
+    // 2. Archive view — completed tasks grouped by completion date.
     let mut app = make();
     app.set_view(View::Archive);
     save(&app, &out.join("archive.svg"))?;
 
-    // 4. Help overlay.
+    // 3. Help overlay.
     let mut app = make();
     app.mode = Mode::Help;
     save(&app, &out.join("help.svg"))?;
 
-    // 5. List with an active project filter — sidebar shows the selection.
+    // 4. List with an active project filter — sidebar shows the selection.
     let mut app = make();
     app.set_project_filter(Some("work".to_string()));
     save(&app, &out.join("filter.svg"))?;
 
-    // 6. Empty state — fresh file, cell-bowtie logo and quick-start panel.
+    // 5. Empty state — fresh file, cell-bowtie logo and quick-start panel.
     // Sidebars hidden so the centered panel reads as the focal point.
     let mut app = App::new(
         PathBuf::from("/tmp/tuxedo-screenshots-empty.txt"),
@@ -82,7 +77,7 @@ fn main() -> std::io::Result<()> {
     app.prefs.layout.right = false;
     save(&app, &out.join("empty.svg"))?;
 
-    // 7. List view in every built-in theme — for the README's themes section.
+    // 6. List view in every built-in theme — for the README's themes section.
     for (i, t) in theme::ALL.iter().enumerate() {
         let mut app = make();
         app.prefs.set_theme_idx(i);

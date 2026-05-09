@@ -17,7 +17,6 @@ pub mod logo;
 pub mod settings;
 pub mod status;
 pub mod task_row;
-pub mod today;
 
 // Pane and overlay sizing. Promoted out of inline literals so the three
 // `MIN_BODY_W` references below stay in sync, and so tweaking a sidebar
@@ -79,7 +78,6 @@ pub fn draw(frame: &mut Frame, app: &App) {
     }
     match app.view() {
         View::List => list::render(frame, center_area, app),
-        View::Today => today::render(frame, center_area, app),
         View::Archive => archive::render(frame, center_area, app),
     }
     if let Some(ra) = right_area {

@@ -107,7 +107,7 @@ fn strip_prefix_x(s: &str) -> Option<&str> {
 
 /// Strip a leading `YYYY-MM-DD` token. Returns `(date_string, rest)` only if
 /// the prefix is a *real* calendar date — `9999-99-99` and other invalid
-/// month/day combos are rejected so they don't poison sort/agenda code that
+/// month/day combos are rejected so they don't poison sort/grouping code that
 /// later trusts the value.
 fn take_iso_date_prefix(s: &str) -> Option<(String, &str)> {
     if s.len() < 10 {
@@ -408,7 +408,7 @@ mod tests {
     fn rejects_invalid_calendar_dates() {
         // `9999-99-99` is well-formed lexically but not a real date —
         // earlier versions accepted it and let the bogus value flow into
-        // sort/agenda code as a string. The parser now refuses.
+        // sort/grouping code as a string. The parser now refuses.
         let t = parse_line("9999-99-99 not a date").unwrap();
         assert_eq!(t.created_date, None);
         assert!(t.raw.starts_with("9999-99-99"));

@@ -24,7 +24,6 @@ pub enum Mode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
     List,
-    Today,
     Archive,
 }
 
@@ -34,8 +33,7 @@ impl View {
     pub fn idx(self) -> usize {
         match self {
             View::List => 0,
-            View::Today => 1,
-            View::Archive => 2,
+            View::Archive => 1,
         }
     }
 }

@@ -4,32 +4,6 @@ use super::App;
 use super::types::{Filter, Sort, View};
 use crate::todo::{self, Task};
 
-/// Which canonical group a Today row belongs to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TodayBucket {
-    Overdue,
-    Today,
-    Upcoming,
-}
-
-impl TodayBucket {
-    pub fn idx(self) -> usize {
-        match self {
-            TodayBucket::Overdue => 0,
-            TodayBucket::Today => 1,
-            TodayBucket::Upcoming => 2,
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            TodayBucket::Overdue => "OVERDUE",
-            TodayBucket::Today => "TODAY",
-            TodayBucket::Upcoming => "UPCOMING",
-        }
-    }
-}
-
 /// Which canonical bucket a List-view row belongs to when the active sort is
 /// `Sort::Due`. `NoDue` covers tasks with no `due:` tag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,7 +31,6 @@ impl ListDueBucket {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GroupKey {
     None,
-    TodayBucket(TodayBucket),
     ArchiveDate(String),
     /// `Some('A'..='Z')` for a graded priority, `None` for unprioritized.
     ListPriority(Option<char>),
@@ -73,7 +46,8 @@ impl App {
     }
 
     /// Group key per row, parallel to `visible_indices()`. `GroupKey::None`
-    /// for List view; bucket/date keys for Today/Archive.
+    /// when List is sorted by file order; priority/due bucket keys under
+    /// other List sorts; date keys under Archive.
     pub fn visible_groups(&self) -> &[GroupKey] {
         &self.visible_groups
     }
@@ -83,7 +57,6 @@ impl App {
     pub fn recompute_visible(&mut self) {
         match self.view {
             View::List => self.rebuild_list_cache(),
-            View::Today => self.rebuild_today_cache(),
             View::Archive => self.rebuild_archive_cache(),
         }
     }
@@ -114,52 +87,6 @@ impl App {
         };
         self.visible_groups = groups;
         self.visible_cache = idxs;
-    }
-
-    fn rebuild_today_cache(&mut self) {
-        let needle_owned =
-            (!self.filter.search.is_empty()).then(|| self.filter.search.to_lowercase());
-        let needle = needle_owned.as_deref();
-        let today_str = self.today.as_str();
-
-        let mut overdue: Vec<usize> = Vec::new();
-        let mut due_today: Vec<usize> = Vec::new();
-        let mut upcoming: Vec<usize> = Vec::new();
-        for i in 0..self.tasks.len() {
-            if !today_predicate(&self.tasks[i], &self.filter, needle) {
-                continue;
-            }
-            let Some(d) = self.tasks[i].due.as_deref() else {
-                continue;
-            };
-            match d.cmp(today_str) {
-                Ordering::Less => overdue.push(i),
-                Ordering::Equal => due_today.push(i),
-                Ordering::Greater => upcoming.push(i),
-            }
-        }
-        sort_by_prefs(&mut overdue, &self.tasks, self.prefs.sort);
-        sort_by_prefs(&mut due_today, &self.tasks, self.prefs.sort);
-        // Upcoming: always due-asc within bucket so the soonest-due is at top
-        // regardless of the user's global Sort preference.
-        upcoming.sort_by(cmp_due(&self.tasks));
-
-        let mut idxs: Vec<usize> = Vec::with_capacity(overdue.len() + due_today.len() + upcoming.len());
-        let mut groups: Vec<GroupKey> = Vec::with_capacity(idxs.capacity());
-        for i in &overdue {
-            idxs.push(*i);
-            groups.push(GroupKey::TodayBucket(TodayBucket::Overdue));
-        }
-        for i in &due_today {
-            idxs.push(*i);
-            groups.push(GroupKey::TodayBucket(TodayBucket::Today));
-        }
-        for i in &upcoming {
-            idxs.push(*i);
-            groups.push(GroupKey::TodayBucket(TodayBucket::Upcoming));
-        }
-        self.visible_cache = idxs;
-        self.visible_groups = groups;
     }
 
     fn rebuild_archive_cache(&mut self) {
@@ -256,10 +183,6 @@ fn list_predicate(t: &Task, show_done: bool, filter: &Filter, needle: Option<&st
         return false;
     }
     passes_user_filter(t, filter, needle)
-}
-
-fn today_predicate(t: &Task, filter: &Filter, needle: Option<&str>) -> bool {
-    !t.done && passes_user_filter(t, filter, needle)
 }
 
 /// Sort by priority asc (None last), tie-broken by due-date asc.
@@ -359,62 +282,6 @@ mod tests {
         // cursor cache restores cursor on the way back regardless.
         app.set_view(View::List);
         assert_eq!(app.cursor, 3, "cursor lost on List → Archive → List");
-    }
-
-    #[test]
-    fn today_view_respects_user_filters() {
-        let raw = "(A) 2026-05-01 a +work due:2026-05-06\n\
-                   (A) 2026-05-01 b +home due:2026-05-06\n\
-                   (A) 2026-05-01 c +work due:2026-05-10\n";
-        let mut app = build_app(raw);
-        app.view = View::Today;
-        app.recompute_visible();
-        assert_eq!(app.visible_indices().len(), 3);
-        app.filter.project = Some("work".into());
-        app.recompute_visible();
-        // Only the two +work tasks should remain in the agenda.
-        assert_eq!(app.visible_indices().len(), 2);
-        for &i in app.visible_indices() {
-            assert!(app.tasks[i].projects.iter().any(|p| p == "work"));
-        }
-    }
-
-    #[test]
-    fn today_indices_are_in_bucket_order() {
-        // 2026-05-06 is "today" per build_app. Build one task in each bucket.
-        let raw = "a due:2026-05-04\n\
-                   b due:2026-05-06\n\
-                   c due:2026-05-08\n";
-        let mut app = build_app(raw);
-        app.view = View::Today;
-        app.recompute_visible();
-        let groups = app.visible_groups();
-        assert_eq!(groups.len(), 3);
-        assert!(matches!(
-            groups[0],
-            GroupKey::TodayBucket(TodayBucket::Overdue)
-        ));
-        assert!(matches!(
-            groups[1],
-            GroupKey::TodayBucket(TodayBucket::Today)
-        ));
-        assert!(matches!(
-            groups[2],
-            GroupKey::TodayBucket(TodayBucket::Upcoming)
-        ));
-    }
-
-    #[test]
-    fn today_groups_align_with_indices() {
-        let raw = "x due:2026-05-04\n\
-                   a due:2026-05-04\n\
-                   b due:2026-05-08\n";
-        let mut app = build_app(raw);
-        // First task is done — must be excluded by today_predicate.
-        app.view = View::Today;
-        app.recompute_visible();
-        assert_eq!(app.visible_indices().len(), app.visible_groups().len());
-        assert_eq!(app.visible_indices().len(), 2);
     }
 
     #[test]

@@ -21,9 +21,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Mode::PickProject => "PICK +PROJECT".into(),
         Mode::PickContext => "PICK @CONTEXT".into(),
     };
-    if matches!(app.view, View::Today) {
-        mode_label = "AGENDA".into();
-    } else if matches!(app.view, View::Archive) {
+    if matches!(app.view, View::Archive) {
         mode_label = "ARCHIVE".into();
     }
     if let Some(f) = app.flash_active() {

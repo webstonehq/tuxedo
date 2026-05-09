@@ -16,7 +16,6 @@ hand-tuned themes — all in a single static binary.
 - **Pure todo.txt.** Reads and writes the [standard format](https://github.com/todotxt/todo.txt) — every line is plain text you can edit with anything else.
 - **Vim keys, no surprises.** `j` / `k` to move, `dd` to delete, `gg` / `G` to jump, `u` to undo (50 levels), chord prompts (`gg`, `dd`, `fp`, `fc`) with a 600 ms window.
 - **Atomic, sync-friendly writes.** Every change goes through write-temp-then-rename. If another process — Dropbox, an editor, a script — modifies the file, tuxedo reloads on the next keypress (or within ~250 ms while idle) and flashes a notice.
-- **Built-in agenda.** `t` opens a focused view that groups overdue, due-today, and upcoming tasks.
 - **Sibling-file archive.** `A` moves completed tasks to `done.txt` next to your file, atomically.
 - **Filter, sort, multi-select.** Cycle by `+project` or `@context`, sort by priority / due / file order, and bulk-complete or bulk-delete in visual mode.
 - **Four themes, three densities.** Cycle with `T` and `D`. Choices persist across runs.
@@ -27,7 +26,6 @@ hand-tuned themes — all in a single static binary.
 | | |
 | --- | --- |
 | **Empty state** • cell-bowtie mark and quick-start when the file has no tasks | ![empty](docs/screenshots/empty.svg) |
-| **Today / agenda** • overdue, due-today, and upcoming groups | ![agenda](docs/screenshots/today.svg) |
 | **Archive** • completed tasks grouped by completion date | ![archive](docs/screenshots/archive.svg) |
 | **Filter sidebar active** • `fp` cycles projects with j/k, `fc` cycles contexts | ![filter](docs/screenshots/filter.svg) |
 | **Help** • `?` opens the full keybindings overlay | ![help](docs/screenshots/help.svg) |
@@ -35,7 +33,7 @@ hand-tuned themes — all in a single static binary.
 <details>
     <summary>How to generate screenshots</summary>
     <p>The screenshots above are checked-in SVGs. Regenerate them with:</p>
-    <pre>cargo run --example screenshots</pre>
+    <pre>mise run screenshots</pre>
 </details>
 
 ## Themes
@@ -141,7 +139,6 @@ can browse, un-archive, or permanently delete past tasks.
 | `v` | enter visual / multi-select; `space` toggles a row |
 | `x` / `dd` (in visual) | bulk-complete / bulk-delete the selection |
 | `l` | list (default) view |
-| `t` | today / agenda view |
 | `a` | toggle archive view |
 | `A` | archive completed tasks → `done.txt` |
 | `H` | toggle showing done tasks in the main list |
@@ -181,7 +178,7 @@ Standard [todo.txt](https://github.com/todotxt/todo.txt) lines:
 - `+project` — project tag
 - `@context` — context tag
 - `key:value` — extension; `due:YYYY-MM-DD` is recognized for sort and
-  agenda grouping
+  due-bucket grouping in the list view
 
 Completed tasks are prefixed with `x ` and a completion date:
 

@@ -43,7 +43,6 @@ const VIEW: Section = (
         ("S", "cycle sort"),
         ("v", "visual / multi-select"),
         ("l", "list view"),
-        ("t", "today view"),
         ("a", "archive view"),
         ("A", "archive completed"),
         ("H", "show done in list"),
@@ -86,13 +85,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     // tall enough to spare the rows; on cramped terminals the columns get
     // priority. +1 row gives the mark a breath before the sections. The
     // 20 covers the right column's intrinsic height (VIEW + SYSTEM).
-    let logo_h: u16 = if inner.width >= super::logo::WIDTH
-        && inner.height >= super::logo::HEIGHT + 1 + 20
-    {
-        super::logo::HEIGHT + 1
-    } else {
-        0
-    };
+    let logo_h: u16 =
+        if inner.width >= super::logo::WIDTH && inner.height >= super::logo::HEIGHT + 1 + 20 {
+            super::logo::HEIGHT + 1
+        } else {
+            0
+        };
     let [header, body] =
         Layout::vertical([Constraint::Length(logo_h), Constraint::Min(0)]).areas(inner);
 

@@ -33,7 +33,7 @@ pub use selection::Selection;
 pub use types::{
     AUTOCOMPLETE_CAP, Density, FLASH_TTL, Filter, LEADER_WINDOW, Mode, Sort, UNDO_LIMIT, View,
 };
-pub use visibility::{GroupKey, ListDueBucket, TodayBucket, ordered_unique};
+pub use visibility::{GroupKey, ListDueBucket, ordered_unique};
 
 pub struct App {
     /// Crate-private: external mutation would bypass `push_history`,
@@ -49,7 +49,7 @@ pub struct App {
     /// Per-view saved cursor, indexed by `View::idx()`. `set_view` snapshots
     /// the outgoing view's cursor here and restores the incoming view's, so
     /// each view remembers where the user last was.
-    pub(crate) view_cursor: [usize; 3],
+    pub(crate) view_cursor: [usize; 2],
     /// Crate-private: same reason as `view` — `visible_cache` would drift.
     /// Read via `filter()`; mutate via `set_search`/`set_project`/etc.
     pub(crate) filter: Filter,
@@ -63,8 +63,9 @@ pub struct App {
     pub should_quit: bool,
     visible_cache: Vec<usize>,
     /// Parallel to `visible_cache`: `visible_groups[i]` is the group key for
-    /// the row at `visible_cache[i]`. `GroupKey::None` for List; bucket/date
-    /// keys for Today/Archive. Renderers read this to draw section headers.
+    /// the row at `visible_cache[i]`. `GroupKey::None` for List under
+    /// `Sort::File`; priority/due bucket keys under other List sorts; date
+    /// keys for Archive. Renderers read this to draw section headers.
     visible_groups: Vec<crate::app::visibility::GroupKey>,
     /// Snapshot of the file body the last time we read or wrote it.
     /// Used by `check_external_changes` to detect edits made outside the TUI.
@@ -84,7 +85,7 @@ impl App {
             mode: Mode::Normal,
             prefs: Prefs::from_config(cfg),
             cursor: 0,
-            view_cursor: [0; 3],
+            view_cursor: [0; 2],
             filter: Filter::default(),
             draft: DraftState::default(),
             selection: Selection::default(),
@@ -183,7 +184,7 @@ impl App {
         &self.filter
     }
 
-    /// Active top-level view (List/Today/Archive).
+    /// Active top-level view (List/Archive).
     pub fn view(&self) -> View {
         self.view
     }

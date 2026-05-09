@@ -375,7 +375,6 @@ enum Action {
     Undo,
     ToggleVisual,
     ToggleSelected,
-    ToggleToday,
     GoList,
     ToggleArchiveView,
     ArchiveCompleted,
@@ -445,7 +444,6 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char('u') => Action::Undo,
         KeyCode::Char('v') => Action::ToggleVisual,
         KeyCode::Char(' ') => Action::ToggleSelected,
-        KeyCode::Char('t') => Action::ToggleToday,
         KeyCode::Char('A') => Action::ArchiveCompleted,
         KeyCode::Char('f') => Action::ArmF,
         KeyCode::Char('S') => Action::CycleSort,
@@ -499,10 +497,6 @@ fn apply_action(app: &mut App, action: Action) {
             }
             _ => {}
         }
-    }
-    if app.view() == View::Today && matches!(action, Action::CycleSort) {
-        app.flash("sort fixed to due in agenda");
-        return;
     }
     let len = app.visible_indices().len();
     match action {
@@ -577,14 +571,6 @@ fn apply_action(app: &mut App, action: Action) {
             {
                 app.selection.toggle(abs);
             }
-        }
-        Action::ToggleToday => {
-            let next = if app.view() == View::Today {
-                View::List
-            } else {
-                View::Today
-            };
-            app.set_view(next);
         }
         Action::GoList => app.set_view(View::List),
         Action::ToggleArchiveView => {
@@ -729,26 +715,20 @@ mod tests {
     #[test]
     fn capital_a_archives_only_when_completed_tasks_exist() {
         // No completed tasks → flash, no archive write.
-        let mut app =
-            build_app_with_archive("a\nb\nc\n", None);
+        let mut app = build_app_with_archive("a\nb\nc\n", None);
         apply_action(&mut app, Action::ArchiveCompleted);
         assert_eq!(app.flash_active(), Some("no completed tasks to archive"));
         assert_eq!(app.tasks().len(), 3);
 
         // One completed task → archive_completed runs.
-        let mut app =
-            build_app_with_archive("x 2026-05-08 done one\nb\n", None);
+        let mut app = build_app_with_archive("x 2026-05-08 done one\nb\n", None);
         apply_action(&mut app, Action::ArchiveCompleted);
         assert_eq!(app.tasks().len(), 1, "completed task must be archived");
     }
 
     #[test]
     fn lowercase_l_returns_to_list_from_any_view() {
-        let mut app =
-            build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done\n"));
-        app.set_view(View::Today);
-        apply_action(&mut app, Action::GoList);
-        assert_eq!(app.view(), View::List);
+        let mut app = build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done\n"));
         app.set_view(View::Archive);
         apply_action(&mut app, Action::GoList);
         assert_eq!(app.view(), View::List);
@@ -756,8 +736,7 @@ mod tests {
 
     #[test]
     fn lowercase_a_toggles_archive_view() {
-        let mut app =
-            build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done\n"));
+        let mut app = build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done\n"));
         assert_eq!(app.view(), View::List);
         apply_action(&mut app, Action::ToggleArchiveView);
         assert_eq!(app.view(), View::Archive);
@@ -826,11 +805,8 @@ mod tests {
         use std::time::{Duration, Instant};
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "tuxedo-bindings-{}-{}",
-            std::process::id(),
-            n
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("tuxedo-bindings-{}-{}", std::process::id(), n));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("create test dir");
         let todo_path = dir.join("todo.txt");
@@ -860,18 +836,11 @@ mod tests {
     }
 
     #[test]
-    fn cursor_navigation_works_in_today_and_archive() {
+    fn cursor_navigation_works_in_archive() {
         let mut app = build_app_with_archive(
             "a due:2026-05-04\nb due:2026-05-06\nc due:2026-05-08\n",
             Some("x 2026-05-01 2026-04-01 first\nx 2026-05-02 2026-04-02 second\n"),
         );
-        app.set_view(View::Today);
-        assert_eq!(app.cursor, 0);
-        apply_action(&mut app, Action::CursorDown);
-        assert_eq!(app.cursor, 1, "Today view must allow CursorDown");
-        apply_action(&mut app, Action::CursorBottom);
-        assert_eq!(app.cursor, 2);
-
         app.set_view(View::Archive);
         assert_eq!(app.cursor, 0);
         apply_action(&mut app, Action::CursorDown);
@@ -882,21 +851,21 @@ mod tests {
 
     #[test]
     fn archive_x_unarchives_task_under_cursor() {
-        let mut app =
-            build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done one\n"));
+        let mut app = build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done one\n"));
         app.set_view(View::Archive);
         apply_action(&mut app, Action::ToggleComplete);
         assert_eq!(app.archive.len(), 0, "task must leave the archive");
         assert!(
-            app.tasks().iter().any(|t| t.raw.contains("done one") && !t.done),
+            app.tasks()
+                .iter()
+                .any(|t| t.raw.contains("done one") && !t.done),
             "un-completed entry must rejoin live tasks"
         );
     }
 
     #[test]
     fn archive_dd_permanently_deletes_task_under_cursor() {
-        let mut app =
-            build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done one\n"));
+        let mut app = build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done one\n"));
         app.set_view(View::Archive);
         apply_action(&mut app, Action::Delete);
         assert_eq!(app.archive.len(), 0);
@@ -905,8 +874,7 @@ mod tests {
 
     #[test]
     fn archive_e_and_p_flash_readonly() {
-        let mut app =
-            build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done one\n"));
+        let mut app = build_app_with_archive("a\n", Some("x 2026-05-02 2026-04-02 done one\n"));
         app.set_view(View::Archive);
         apply_action(&mut app, Action::BeginEdit);
         assert_eq!(app.flash_active(), Some("read-only in archive"));

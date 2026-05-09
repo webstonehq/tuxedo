@@ -15,13 +15,7 @@ const BLOCK: &str = "██";
 const SPACE: &str = "  ";
 
 // 7 columns × 5 rows. 'b' = body, 'k' = knot, ' ' = empty.
-const GRID: [&[u8; 7]; 5] = [
-    b"b     b",
-    b"bb k bb",
-    b"bbbkbbb",
-    b"bb k bb",
-    b"b     b",
-];
+const GRID: [&[u8; 7]; 5] = [b"b     b", b"bb k bb", b"bbbkbbb", b"bb k bb", b"b     b"];
 
 #[cfg(test)]
 pub(crate) fn ascii_rows() -> Vec<String> {

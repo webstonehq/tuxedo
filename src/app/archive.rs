@@ -184,7 +184,13 @@ impl App {
             .tasks
             .iter()
             .enumerate()
-            .filter_map(|(i, t)| if i != archive_idx { Some(t.clone()) } else { None })
+            .filter_map(|(i, t)| {
+                if i != archive_idx {
+                    Some(t.clone())
+                } else {
+                    None
+                }
+            })
             .collect();
         let archive_body = todo::serialize(&new_archive);
         if let Err(e) = todo::write_atomic(&self.archive.path, &archive_body) {
@@ -211,7 +217,13 @@ impl App {
             .tasks
             .iter()
             .enumerate()
-            .filter_map(|(i, t)| if i != archive_idx { Some(t.clone()) } else { None })
+            .filter_map(|(i, t)| {
+                if i != archive_idx {
+                    Some(t.clone())
+                } else {
+                    None
+                }
+            })
             .collect();
         let archive_body = todo::serialize(&new_archive);
         if let Err(e) = todo::write_atomic(&self.archive.path, &archive_body) {

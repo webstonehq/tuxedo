@@ -12,3 +12,6 @@ run = "cargo fmt --all --check"
 
 [tasks.test]
 run = "cargo test --locked"
+
+[tasks.screenshots]
+run = "cargo run --example screenshots"

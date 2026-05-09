@@ -8,6 +8,5 @@
 2026-05-07 Hook scripts for pre and post add complete and delete events +tuxedo @dev
 2026-05-07 Copy todo to clipboard, consider OS support
 2026-05-07 Add `toxido update` via github releases
-x 2026-05-08 2026-05-08 When in the archive or today view, j/k navigates the normal view and details update on the right. We want navigation to apply to the currently active mode
 2026-05-08 Test with insta snapshots (https://ratatui.rs/recipes/testing/snapshots/)
-(A) 2026-05-08 Move "tuxedo • <version>" to the footer due:2026-05-08
+x 2026-05-08 2026-05-08 Remove the AGENDA mode, it's no longer needed now that the normal mode has groupings

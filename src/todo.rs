@@ -46,6 +46,10 @@ pub struct Task {
     pub projects: Vec<String>,
     pub contexts: Vec<String>,
     pub due: Option<String>,
+    /// Raw value of the `rec:` tag if present, e.g. `"+1m"` or `"3b"`. Stored
+    /// as the unparsed string so a malformed value round-trips intact through
+    /// `serialize` — only the spawn-on-complete code path needs to parse it.
+    pub rec: Option<String>,
 }
 
 pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
@@ -81,6 +85,7 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
     let projects = collect_tokens(rest, '+');
     let contexts = collect_tokens(rest, '@');
     let due = find_kv(rest, "due");
+    let rec = find_kv(rest, "rec");
 
     Ok(Task {
         raw: line.to_string(),
@@ -91,6 +96,7 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
         projects,
         contexts,
         due,
+        rec,
     })
 }
 
@@ -456,6 +462,14 @@ mod tests {
         assert_eq!(t.projects, vec!["health"]);
         assert_eq!(t.contexts, vec!["phone"]);
         assert!(!t.done);
+        assert_eq!(t.rec, None);
+    }
+
+    #[test]
+    fn parses_rec_tag() {
+        let t = parse_line("2026-05-09 Pay rent due:2026-05-15 rec:+1m").unwrap();
+        assert_eq!(t.rec.as_deref(), Some("+1m"));
+        assert_eq!(t.due.as_deref(), Some("2026-05-15"));
     }
 
     #[test]
@@ -470,11 +484,13 @@ mod tests {
     #[test]
     fn parses_all_sample_lines() {
         let parsed = parse_file(crate::sample::TODO_RAW);
-        assert_eq!(parsed.len(), 17);
+        assert_eq!(parsed.len(), 18);
         let done = parsed.iter().filter(|t| t.done).count();
         assert_eq!(done, 3);
         let with_due = parsed.iter().filter(|t| t.due.is_some()).count();
-        assert_eq!(with_due, 6);
+        assert_eq!(with_due, 7);
+        let with_rec = parsed.iter().filter(|t| t.rec.is_some()).count();
+        assert_eq!(with_rec, 1);
     }
 
     #[test]

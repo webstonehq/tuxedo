@@ -1,5 +1,6 @@
 ---
 source: tests/snapshots.rs
+assertion_line: 216
 expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ done.txt  •  0 tasks  •  sort:compl DETAIL                           
@@ -7,7 +8,7 @@ expression: buffer_to_text(&buf)
  PROJECTS                    no completed tasks yet                (no task)                        
    +work             4                                                                              
    +health           3                                                                              
-   +finance          1                                                                              
+   +finance          2                                                                              
    +home             1                                                                              
    +learning         1                                                                              
    +personal         1                                                                              
@@ -15,8 +16,8 @@ expression: buffer_to_text(&buf)
                                                                                                     
  CONTEXTS                                                                                           
    @errands          4                                                                              
+   @home             4                                                                              
    @laptop           4                                                                              
-   @home             3                                                                              
    @phone            3                                                                              
                                                                                                     
                                                                                                     

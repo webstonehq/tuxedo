@@ -13,6 +13,7 @@ pub const TODO_RAW: &str =
 2026-05-04 Send thank-you note to mentor @home
 2026-05-01 Plan Saturday hike with K. @phone +personal
 2026-04-20 Replace bathroom faucet washer +home @errands
+2026-05-09 Pay rent due:2026-05-15 rec:+1m +finance @home
 x 2026-05-05 2026-05-01 Submit expense report +work @laptop
 x 2026-05-04 2026-04-28 Renew domain registration +work @laptop
 x 2026-05-03 2026-04-30 Book flights for July trip +travel @home

@@ -1,4 +1,4 @@
-(B) 2026-05-07 Recurring tasks (rec key) auto-spawn next occurrence on complete +tuxedo @dev
+x 2026-05-09 2026-05-07 Recurring tasks (rec key) auto-spawn next occurrence on complete +tuxedo @dev
 (B) 2026-05-07 Threshold dates (t key) hide tasks until threshold date +tuxedo @dev
 2026-05-07 Natural-language quick-add parse dates contexts and recurrence from input +tuxedo @dev
 (B) 2026-05-07 Fuzzy command palette overlay for all actions +tuxedo @dev
@@ -7,9 +7,10 @@
 2026-05-07 Per-task Markdown notes sidecar in detail sidebar +tuxedo @dev
 2026-05-07 Hook scripts for pre and post add complete and delete events +tuxedo @dev
 x 2026-05-09 2026-05-07 Copy todo to clipboard, consider OS support
-2026-05-07 Add `toxido update` via github releases
+(A) 2026-05-07 Add `toxido update` via github releases
 x 2026-05-08 2026-05-08 Test with insta snapshots (https://ratatui.rs/recipes/testing/snapshots/)
 x 2026-05-08 2026-05-08 Remove the AGENDA mode, it's no longer needed now that the normal mode has groupings
 x 2026-05-08 2026-05-08 Press x on a done item should undo it
 x 2026-05-08 2026-05-08 Configure lefthook
 x 2026-05-08 2026-05-08 Release 2025.5.2
+(A) 2026-05-09 Make fuzzy search actually fuzzy

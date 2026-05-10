@@ -1,5 +1,6 @@
 ---
 source: tests/snapshots.rs
+assertion_line: 216
 expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  4 task DETAIL                           
@@ -7,7 +8,7 @@ expression: buffer_to_text(&buf)
  PROJECTS                  PRIORITY A  1  ──────────────────────── priority  (A)                    
  ▸ +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   2026-05-01             
    +health           3     PRIORITY B  2  ──────────────────────── due       2026-05-06  today      
-   +finance          1      2   (B) Review pull requests for auth  projects  +work                  
+   +finance          2      2   (B) Review pull requests for auth  projects  +work                  
    +home             1      3   (B) Draft hiring rubric for senior contexts  @laptop                
    +learning         1     NO PRIORITY  1  ───────────────────────                                  
    +personal         1      4       Migrate analytics to new pipel RAW                              
@@ -15,8 +16,8 @@ expression: buffer_to_text(&buf)
                                                                    (A) 2026-05-01 Finish Q2 board   
  CONTEXTS                                                          deck +work @laptop               
    @errands          4                                             due:2026-05-06                   
+   @home             4                                                                              
    @laptop           4                                                                              
-   @home             3                                                                              
    @phone            3                                                                              
                                                                                                     
                                                                                                     

@@ -186,12 +186,28 @@ Standard [todo.txt](https://github.com/todotxt/todo.txt) lines:
 - `@context` — context tag
 - `key:value` — extension; `due:YYYY-MM-DD` is recognized for sort and
   due-bucket grouping in the list view
+- `rec:[+]N{d,b,w,m,y}` — recurrence; on completion (`x`), tuxedo inserts
+  a fresh copy of the task with `due:` advanced by `N` days, business
+  days (Mon–Fri), weeks, months, or years. The `+` prefix means
+  *strict* recurrence anchored to the previous due date (e.g.
+  `rec:+1m` for monthly rent on the 15th); without it, the new due is
+  computed from the completion date (e.g. `rec:1w` for "water plants
+  one week after I last did").
 
 Completed tasks are prefixed with `x ` and a completion date:
 
 ```
 x 2026-05-05 2026-05-01 Submit expense report +work
 ```
+
+Recurring example:
+
+```
+2026-05-09 Pay rent due:2026-05-15 rec:+1m
+```
+
+Pressing `x` on the line above marks the original complete *and* inserts
+`2026-05-09 Pay rent due:2026-06-15 rec:+1m`. `u` undoes both at once.
 
 ## Configuration
 

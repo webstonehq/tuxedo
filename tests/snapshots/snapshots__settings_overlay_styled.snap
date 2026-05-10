@@ -1,8 +1,9 @@
 ---
 source: tests/snapshots.rs
+assertion_line: 217
 expression: buffer_to_styled(&buf)
 ---
-{bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}▶{/}{fg=#e07a7a bg=#1f232b}▮{/}{fg=#8aa9c9 bg=#1f232b}◀{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b mod=bold}settings{/}{fg=#6b7280 bg=#1f232b}  •  17 tasks  •  {/}{fg=#8aa9c9 bg=#1f232b}sort:priority{/}{bg=#1f232b}                                                        {/}
+{bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}▶{/}{fg=#e07a7a bg=#1f232b}▮{/}{fg=#8aa9c9 bg=#1f232b}◀{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b mod=bold}settings{/}{fg=#6b7280 bg=#1f232b}  •  18 tasks  •  {/}{fg=#8aa9c9 bg=#1f232b}sort:priority{/}{bg=#1f232b}                                                        {/}
 {bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}FILES{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                              {/}
 {fg=#c8ccd4 bg=#1a1d23}   todo file                   {/}{fg=#6b7280 bg=#1a1d23}/tmp/tuxedo-snapshot.txt{/}{fg=#c8ccd4 bg=#1a1d23}                                             {/}
@@ -33,4 +34,4 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
-{fg=#1a1d23 bg=#8aa9c9 mod=bold} SETTINGS {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}Esc back{/}{bg=#252a33}                                         {/}{fg=#6b7280 bg=#252a33}14 open · 2026-05-06 · tuxedo 2026.5.3 {/}
+{fg=#1a1d23 bg=#8aa9c9 mod=bold} SETTINGS {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}Esc back{/}{bg=#252a33}                                         {/}{fg=#6b7280 bg=#252a33}15 open · 2026-05-06 · tuxedo 2026.5.3 {/}

@@ -4,6 +4,10 @@ A fast, keyboard-driven terminal UI for [todo.txt](http://todotxt.org/).
 Vim-style bindings, atomic writes, instant external-edit detection, and four
 hand-tuned themes — all in a single static binary.
 
+```sh
+brew install webstonehq/tap/tuxedo
+```
+
 [![CI](https://github.com/webstonehq/tuxedo/actions/workflows/ci.yml/badge.svg)](https://github.com/webstonehq/tuxedo/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/webstonehq/tuxedo?logo=github)](https://github.com/webstonehq/tuxedo/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license)

@@ -3,7 +3,7 @@ source: tests/snapshots.rs
 assertion_line: 217
 expression: buffer_to_styled(&buf)
 ---
-{bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}▶{/}{fg=#e07a7a bg=#1f232b}▮{/}{fg=#8aa9c9 bg=#1f232b}◀{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b mod=bold}settings{/}{fg=#6b7280 bg=#1f232b}  •  18 tasks  •  {/}{fg=#8aa9c9 bg=#1f232b}sort:priority{/}{bg=#1f232b}                                                        {/}
+{bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}▶{/}{fg=#e07a7a bg=#1f232b}▮{/}{fg=#8aa9c9 bg=#1f232b}◀{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b mod=bold}settings{/}{fg=#6b7280 bg=#1f232b}  •  19 tasks  •  {/}{fg=#8aa9c9 bg=#1f232b}sort:priority{/}{bg=#1f232b}                                                        {/}
 {bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}FILES{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                              {/}
 {fg=#c8ccd4 bg=#1a1d23}   todo file                   {/}{fg=#6b7280 bg=#1a1d23}/tmp/tuxedo-snapshot.txt{/}{fg=#c8ccd4 bg=#1a1d23}                                             {/}
@@ -17,13 +17,13 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}   filter sidebar              {/}{fg=#6b7280 bg=#1a1d23}on  ([ to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}   detail sidebar              {/}{fg=#6b7280 bg=#1a1d23}on  (] to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}   show done in list           {/}{fg=#6b7280 bg=#1a1d23}off  (H to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                   {/}
+{fg=#c8ccd4 bg=#1a1d23}   show future in list         {/}{fg=#6b7280 bg=#1a1d23}off  (F to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                   {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}BEHAVIOR{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                           {/}
 {fg=#c8ccd4 bg=#1a1d23}   default sort                {/}{fg=#6b7280 bg=#1a1d23}priority (s to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                                {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}KEYBINDINGS{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                        {/}
 {fg=#c8ccd4 bg=#1a1d23}                               {/}{fg=#6b7280 bg=#1a1d23}press ? for the full list{/}{fg=#c8ccd4 bg=#1a1d23}                                            {/}
-{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}

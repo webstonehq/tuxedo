@@ -50,6 +50,10 @@ pub struct Task {
     /// as the unparsed string so a malformed value round-trips intact through
     /// `serialize` — only the spawn-on-complete code path needs to parse it.
     pub rec: Option<String>,
+    /// Raw value of the `t:` (threshold) tag if present, e.g. `"2026-08-01"`
+    /// or `"-3d"`. Stored unparsed for round-trip integrity; the visibility
+    /// filter parses it on demand via `crate::threshold`.
+    pub threshold: Option<String>,
 }
 
 pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
@@ -86,6 +90,7 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
     let contexts = collect_tokens(rest, '@');
     let due = find_kv(rest, "due");
     let rec = find_kv(rest, "rec");
+    let threshold = find_kv(rest, "t");
 
     Ok(Task {
         raw: line.to_string(),
@@ -97,6 +102,7 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
         contexts,
         due,
         rec,
+        threshold,
     })
 }
 
@@ -473,6 +479,34 @@ mod tests {
     }
 
     #[test]
+    fn parses_absolute_threshold_tag() {
+        let t = parse_line("2026-04-01 Renew passport t:2026-08-01 +personal").unwrap();
+        assert_eq!(t.threshold.as_deref(), Some("2026-08-01"));
+    }
+
+    #[test]
+    fn parses_relative_threshold_tag() {
+        let t = parse_line("Pay rent due:2026-06-01 t:-3d +finance").unwrap();
+        assert_eq!(t.threshold.as_deref(), Some("-3d"));
+        assert_eq!(t.due.as_deref(), Some("2026-06-01"));
+    }
+
+    #[test]
+    fn body_only_strips_threshold_token() {
+        // The "no chip" rendering choice relies on body_only filtering `t:`
+        // out via is_meta_token. Asserting it here so a future change to
+        // is_valid_key can't regress this without an explicit test failure.
+        assert_eq!(
+            body_only("2026-04-01 Renew passport t:2026-08-01 +personal"),
+            "Renew passport",
+        );
+        assert_eq!(
+            body_only("Pay rent due:2026-06-01 t:-3d +finance"),
+            "Pay rent",
+        );
+    }
+
+    #[test]
     fn parses_completed() {
         let t = parse_line("x 2026-05-05 2026-05-01 Submit expense report +work @laptop").unwrap();
         assert!(t.done);
@@ -484,13 +518,15 @@ mod tests {
     #[test]
     fn parses_all_sample_lines() {
         let parsed = parse_file(crate::sample::TODO_RAW);
-        assert_eq!(parsed.len(), 18);
+        assert_eq!(parsed.len(), 19);
         let done = parsed.iter().filter(|t| t.done).count();
         assert_eq!(done, 3);
         let with_due = parsed.iter().filter(|t| t.due.is_some()).count();
         assert_eq!(with_due, 7);
         let with_rec = parsed.iter().filter(|t| t.rec.is_some()).count();
         assert_eq!(with_rec, 1);
+        let with_threshold = parsed.iter().filter(|t| t.threshold.is_some()).count();
+        assert_eq!(with_threshold, 1);
     }
 
     #[test]

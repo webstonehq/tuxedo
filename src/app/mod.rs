@@ -241,6 +241,20 @@ impl App {
         self.recompute_visible();
     }
 
+    /// Update the cached "today" string. When it changes, the visible cache
+    /// is recomputed so threshold-hidden tasks become visible the moment the
+    /// wall clock crosses midnight (without requiring an app restart).
+    /// Returns `true` iff the date actually advanced — callers use this to
+    /// trigger a redraw.
+    pub fn refresh_today(&mut self, now: String) -> bool {
+        if self.today == now {
+            return false;
+        }
+        self.today = now;
+        self.recompute_visible();
+        true
+    }
+
     /// Drop every filter component (project + context + search).
     pub fn clear_filter(&mut self) {
         if !self.filter.has_any() {

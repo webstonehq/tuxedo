@@ -17,4 +17,5 @@ pub const TODO_RAW: &str =
 x 2026-05-05 2026-05-01 Submit expense report +work @laptop
 x 2026-05-04 2026-04-28 Renew domain registration +work @laptop
 x 2026-05-03 2026-04-30 Book flights for July trip +travel @home
+2026-04-01 Plan winter ski trip t:2026-09-01
 ";

@@ -1,5 +1,5 @@
 x 2026-05-09 2026-05-07 Recurring tasks (rec key) auto-spawn next occurrence on complete +tuxedo @dev
-(B) 2026-05-07 Threshold dates (t key) hide tasks until threshold date +tuxedo @dev
+x 2026-05-10 2026-05-07 Threshold dates hide tasks until threshold date +tuxedo @dev
 2026-05-07 Natural-language quick-add parse dates contexts and recurrence from input +tuxedo @dev
 (B) 2026-05-07 Fuzzy command palette overlay for all actions +tuxedo @dev
 2026-05-07 Bulk project and context rename with preview across working and archive +tuxedo @dev

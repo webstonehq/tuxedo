@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 
 use super::App;
 use super::types::{Filter, Sort, View};
+use crate::threshold;
 use crate::todo::{self, Task};
 
 /// Which canonical bucket a List-view row belongs to when the active sort is
@@ -67,7 +68,16 @@ impl App {
         let needle = needle_owned.as_deref();
 
         let mut idxs: Vec<usize> = (0..self.tasks.len())
-            .filter(|&i| list_predicate(&self.tasks[i], self.prefs.show_done, &self.filter, needle))
+            .filter(|&i| {
+                list_predicate(
+                    &self.tasks[i],
+                    self.prefs.show_done,
+                    self.prefs.show_future,
+                    self.today.as_str(),
+                    &self.filter,
+                    needle,
+                )
+            })
             .collect();
 
         sort_by_prefs(&mut idxs, &self.tasks, self.prefs.sort);
@@ -178,11 +188,38 @@ fn passes_user_filter(t: &Task, filter: &Filter, needle: Option<&str>) -> bool {
     true
 }
 
-fn list_predicate(t: &Task, show_done: bool, filter: &Filter, needle: Option<&str>) -> bool {
+fn list_predicate(
+    t: &Task,
+    show_done: bool,
+    show_future: bool,
+    today: &str,
+    filter: &Filter,
+    needle: Option<&str>,
+) -> bool {
     if t.done && !show_done {
         return false;
     }
+    if !show_future && is_future_threshold(t, today) {
+        return false;
+    }
     passes_user_filter(t, filter, needle)
+}
+
+/// True when the task carries a `t:` value that resolves to a date strictly
+/// after `today`. Malformed values, missing anchors for relative offsets,
+/// and arithmetic overflow all leave the task visible — better to surface a
+/// task the user might miss than to hide it because of a bad threshold.
+fn is_future_threshold(t: &Task, today: &str) -> bool {
+    let Some(raw) = t.threshold.as_deref() else {
+        return false;
+    };
+    let Some(spec) = threshold::parse_threshold(raw) else {
+        return false;
+    };
+    let Some(date) = threshold::resolve(&spec, t.due.as_deref(), t.created_date.as_deref()) else {
+        return false;
+    };
+    date.format("%Y-%m-%d").to_string().as_str() > today
 }
 
 /// Sort by priority asc (None last), tie-broken by due-date asc.
@@ -345,6 +382,88 @@ mod tests {
         assert_eq!(groups[1], GroupKey::ListDue(ListDueBucket::Today));
         assert_eq!(groups[2], GroupKey::ListDue(ListDueBucket::Upcoming));
         assert_eq!(groups[3], GroupKey::ListDue(ListDueBucket::NoDue));
+    }
+
+    #[test]
+    fn future_absolute_threshold_hidden_by_default() {
+        // build_app uses today = 2026-05-06.
+        let mut app = build_app("future task t:2030-01-01\nvisible task\n");
+        assert_eq!(app.visible_indices().len(), 1);
+        assert_eq!(app.tasks[app.visible_indices()[0]].raw, "visible task");
+        // Toggling show_future reveals it.
+        app.prefs.show_future = true;
+        app.recompute_visible();
+        assert_eq!(app.visible_indices().len(), 2);
+    }
+
+    #[test]
+    fn past_absolute_threshold_always_visible() {
+        let app = build_app("past task t:2020-01-01\n");
+        assert_eq!(app.visible_indices().len(), 1);
+    }
+
+    #[test]
+    fn relative_threshold_anchors_on_due() {
+        // today = 2026-05-06; due = 2026-05-15; t:-3d → threshold 2026-05-12,
+        // which is after today → hidden.
+        let mut app = build_app("Pay rent due:2026-05-15 t:-3d\n");
+        assert_eq!(app.visible_indices().len(), 0);
+        // Bumping due into the past brings it back even with the same offset.
+        app.prefs.show_future = true;
+        app.recompute_visible();
+        assert_eq!(app.visible_indices().len(), 1);
+    }
+
+    #[test]
+    fn relative_threshold_falls_back_to_created_date() {
+        // today = 2026-05-06; created = 2026-04-01; t:7d → 2026-04-08, past → visible.
+        let app = build_app("2026-04-01 deferred task t:7d\n");
+        assert_eq!(app.visible_indices().len(), 1);
+        // Same task with t:60d → 2026-05-31, future → hidden.
+        let app = build_app("2026-04-01 deferred task t:60d\n");
+        assert_eq!(app.visible_indices().len(), 0);
+    }
+
+    #[test]
+    fn relative_threshold_without_anchor_is_ignored() {
+        // No due, no created_date, relative threshold → can't resolve →
+        // task stays visible (permissive fallback).
+        let app = build_app("orphan t:-3d\n");
+        assert_eq!(app.visible_indices().len(), 1);
+    }
+
+    #[test]
+    fn malformed_threshold_is_ignored() {
+        let app = build_app("buggy t:not-a-date\n");
+        assert_eq!(app.visible_indices().len(), 1);
+    }
+
+    #[test]
+    fn refresh_today_unhides_tasks_when_date_advances() {
+        // build_app uses today = 2026-05-06; threshold 2026-05-07 hides the
+        // task. Crossing midnight should reveal it without an app restart.
+        let mut app = build_app("future task t:2026-05-07\nvisible task\n");
+        assert_eq!(app.visible_indices().len(), 1);
+
+        let changed = app.refresh_today("2026-05-07".into());
+        assert!(
+            changed,
+            "refresh_today must report a change on date advance"
+        );
+        assert_eq!(app.today, "2026-05-07");
+        assert_eq!(
+            app.visible_indices().len(),
+            2,
+            "task whose threshold is now today must become visible"
+        );
+    }
+
+    #[test]
+    fn refresh_today_is_noop_when_date_unchanged() {
+        let mut app = build_app("a\n");
+        let changed = app.refresh_today("2026-05-06".into());
+        assert!(!changed, "same date must report no change");
+        assert_eq!(app.today, "2026-05-06");
     }
 
     #[test]

@@ -33,6 +33,7 @@ pub struct Prefs {
     pub sort: Sort,
     pub layout: Layout,
     pub show_done: bool,
+    pub show_future: bool,
 }
 
 impl Prefs {
@@ -53,6 +54,7 @@ impl Prefs {
                 status_bar: cfg.show_status_bar.unwrap_or(true),
             },
             show_done: cfg.show_done.unwrap_or(false),
+            show_future: cfg.show_future.unwrap_or(false),
         }
     }
 
@@ -114,6 +116,10 @@ impl Prefs {
         self.show_done = !self.show_done;
     }
 
+    pub fn toggle_show_future(&mut self) {
+        self.show_future = !self.show_future;
+    }
+
     /// Persist to the XDG config path. Returns the IO error so the caller
     /// can flash it (writing to stderr from inside the alt-screen would
     /// corrupt the TUI). Saving is best-effort — callers that don't care
@@ -128,6 +134,7 @@ impl Prefs {
             show_line_num: Some(self.layout.line_num),
             show_status_bar: Some(self.layout.status_bar),
             show_done: Some(self.show_done),
+            show_future: Some(self.show_future),
         };
         cfg.save()
     }

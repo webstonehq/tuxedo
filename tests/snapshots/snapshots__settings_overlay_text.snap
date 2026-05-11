@@ -3,7 +3,7 @@ source: tests/snapshots.rs
 assertion_line: 216
 expression: buffer_to_text(&buf)
 ---
- ▶▮◀ settings  •  18 tasks  •  sort:priority                                                        
+ ▶▮◀ settings  •  19 tasks  •  sort:priority                                                        
                                                                                                     
  FILES                                                                                              
    todo file                   /tmp/tuxedo-snapshot.txt                                             
@@ -17,13 +17,13 @@ expression: buffer_to_text(&buf)
    filter sidebar              on  ([ to toggle)                                                    
    detail sidebar              on  (] to toggle)                                                    
    show done in list           off  (H to toggle)                                                   
+   show future in list         off  (F to toggle)                                                   
                                                                                                     
  BEHAVIOR                                                                                           
    default sort                priority (s to cycle)                                                
                                                                                                     
  KEYBINDINGS                                                                                        
                                press ? for the full list                                            
-                                                                                                    
                                                                                                     
                                                                                                     
                                                                                                     

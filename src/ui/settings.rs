@@ -71,6 +71,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             "  show done in list",
             Some(format!("{}  (H to toggle)", on(app.prefs.show_done))),
         ),
+        (
+            "  show future in list",
+            Some(format!("{}  (F to toggle)", on(app.prefs.show_future))),
+        ),
         ("", Some("".into())),
         ("BEHAVIOR", None),
         (

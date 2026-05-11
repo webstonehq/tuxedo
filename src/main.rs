@@ -112,6 +112,11 @@ fn sample_path() -> io::Result<PathBuf> {
 fn run(mut terminal: DefaultTerminal, app: &mut App) -> Result<()> {
     let mut dirty = true;
     while !app.should_quit {
+        // Pick up midnight rollover so threshold-hidden tasks reveal
+        // themselves without requiring an app restart.
+        if app.refresh_today(chrono::Local::now().format("%Y-%m-%d").to_string()) {
+            dirty = true;
+        }
         // Drain the startup archive loader (and pick up external edits to
         // done.txt). Non-blocking: the first frame can render todo.txt
         // before the archive read completes.
@@ -393,6 +398,7 @@ enum Action {
     CycleDensity,
     ToggleLineNum,
     ToggleShowDone,
+    ToggleShowFuture,
     CopyLine,
     CopyBody,
     EscapeStack,
@@ -463,6 +469,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char('D') => Action::CycleDensity,
         KeyCode::Char('L') => Action::ToggleLineNum,
         KeyCode::Char('H') => Action::ToggleShowDone,
+        KeyCode::Char('F') => Action::ToggleShowFuture,
         KeyCode::Esc => Action::EscapeStack,
         _ => return None,
     })
@@ -500,6 +507,7 @@ fn apply_action(app: &mut App, action: Action) {
             | Action::PickContext
             | Action::CycleSort
             | Action::ToggleShowDone
+            | Action::ToggleShowFuture
             | Action::Undo => {
                 app.flash("read-only in archive");
                 return;
@@ -627,6 +635,12 @@ fn apply_action(app: &mut App, action: Action) {
         }
         Action::ToggleShowDone => {
             app.prefs.toggle_show_done();
+            app.cursor = 0;
+            app.recompute_visible();
+            app.save_prefs();
+        }
+        Action::ToggleShowFuture => {
+            app.prefs.toggle_show_future();
             app.cursor = 0;
             app.recompute_visible();
             app.save_prefs();

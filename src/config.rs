@@ -24,6 +24,7 @@ pub struct Config {
     pub show_line_num: Option<bool>,
     pub show_status_bar: Option<bool>,
     pub show_done: Option<bool>,
+    pub show_future: Option<bool>,
 }
 
 impl Config {
@@ -120,6 +121,7 @@ fn parse(s: &str) -> Config {
             "show_line_num" => c.show_line_num = parse_bool(v),
             "show_status_bar" => c.show_status_bar = parse_bool(v),
             "show_done" => c.show_done = parse_bool(v),
+            "show_future" => c.show_future = parse_bool(v),
             _ => {} // forward-compatible: ignore unknowns
         }
     }
@@ -152,6 +154,9 @@ fn serialize(c: &Config) -> String {
     }
     if let Some(v) = c.show_done {
         let _ = writeln!(out, "show_done = {v}");
+    }
+    if let Some(v) = c.show_future {
+        let _ = writeln!(out, "show_future = {v}");
     }
     out
 }
@@ -188,6 +193,7 @@ mod tests {
             show_line_num: Some(false),
             show_status_bar: Some(true),
             show_done: Some(true),
+            show_future: Some(true),
         };
         let s = serialize(&c);
         let parsed = parse(&s);
@@ -249,6 +255,7 @@ mod tests {
             show_line_num: Some(true),
             show_status_bar: Some(false),
             show_done: Some(true),
+            show_future: Some(false),
         };
         written.save_to(&path).expect("save should succeed");
         assert!(path.exists());

@@ -16,8 +16,8 @@ expression: buffer_to_text(&buf)
      │  EDITING                                       a                 archive view          │rd   
  CONT│    n                 new task                  A                 archive completed     │     
    @e│    e / i             edit current line         H                 show done in list     │     
-   @h│    x                 toggle complete           [                 toggle filter pane    │     
-   @l│    dd                delete task               ]                 toggle detail pane    │     
+   @h│    x                 toggle complete           F                 show future in list   │     
+   @l│    dd                delete task               [ / ]             toggle filter / detail│     
    @p│    p                 cycle priority A→B→C→·    T                 cycle theme           │     
      │    c                 add/remove context        D                 cycle density         │     
      │    +                 add project               L                 toggle line numbers   │     
@@ -30,8 +30,8 @@ expression: buffer_to_text(&buf)
      │  FORMAT                                                                                │     
      │    (A)               priority A-Z              due:YYYY-MM-DD    due date              │     
      │    YYYY-MM-DD        creation / done date      rec:Nu            recur (u in d/w/m/y/b)│     
-     │    +project          project tag               rec:+Nu           strict: anchor on due:│     
-     │    @context          context tag               x DATE BODY       completed task prefix │     
+     │    +project          project tag(s)            rec:+Nu           strict: anchor on due:│     
+     │    @context          context tag(s)            x DATE BODY       completed task prefix │     
      └────────────────────────────────────────────────────────────────────────────────────────┘     
                                                                                                     
  HELP   ? close help                                         15 open · 2026-05-06 · tuxedo 2026.5.3

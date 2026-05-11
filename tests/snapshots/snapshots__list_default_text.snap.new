@@ -1,0 +1,37 @@
+---
+source: tests/snapshots.rs
+assertion_line: 216
+expression: buffer_to_text(&buf)
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL                           
+                                                                                                    
+ PROJECTS                  PRIORITY A  2  ──────────────────────── priority  (A)                    
+   +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   2026-05-01             
+   +health           3      2   (A) Call dentist to reschedule cle due       2026-05-06  today      
+   +finance          2     PRIORITY B  3  ──────────────────────── projects  +work                  
+   +home             1      3   (B) Review pull requests for auth  contexts  @laptop                
+   +learning         1      4   (B) Renew passport before summer t                                  
+   +personal         1      5   (B) Draft hiring rubric for senior RAW                              
+   +travel           1     PRIORITY C  2  ────────────────────────                                  
+                            6   (C) Pay quarterly estimated taxes  (A) 2026-05-01 Finish Q2 board   
+ CONTEXTS                   7   (C) Order new running shoes +healt deck +work @laptop               
+   @errands          4     NO PRIORITY  8  ─────────────────────── due:2026-05-06                   
+   @home             4      8       Migrate analytics to new pipel                                  
+   @laptop           4      9       Pay rent due:2026-05-15 rec:+1                                  
+   @phone            3     10       Pick up dry cleaning @errands                                   
+                           11       Schedule annual physical @phon                                  
+                           12       Read "Designing Data-Intensive                                  
+                           13       Send thank-you note to mentor                                   
+                           14       Plan Saturday hike with K. @ph                                  
+                           15       Replace bathroom faucet washer                                  
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ NORMAL   j/k · a add · x done · / search · ? help · u undo ·15 open · 2026-05-06 · tuxedo 2026.5.2

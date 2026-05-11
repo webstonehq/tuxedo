@@ -83,9 +83,15 @@ Requires the Rust 2024 edition (recent stable toolchain).
 tuxedo [FILE]      # open FILE (created if missing)
 tuxedo             # open ./todo.txt, or a sample file if none
 tuxedo --sample    # open the bundled sample file in the temp dir
+tuxedo update      # print upgrade instructions for your install
 tuxedo --help
 tuxedo --version
 ```
+
+When a newer release is available, the status bar shows `↑ <version> (tuxedo
+update)` next to the version. The check runs in the background, is cached at
+`$XDG_CACHE_HOME/tuxedo/latest_version.json` for 24 h, and fails silently
+when offline. Set `TUXEDO_NO_UPDATE_CHECK=1` to disable.
 
 If `FILE` is omitted, tuxedo opens `./todo.txt` from the current working
 directory if it exists. Otherwise it falls back to a sample todo.txt in the

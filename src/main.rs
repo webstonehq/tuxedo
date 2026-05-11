@@ -11,7 +11,7 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 
 use tuxedo::app::{App, Mode, View};
 use tuxedo::config::Config;
-use tuxedo::{clipboard, sample, todo, ui};
+use tuxedo::{clipboard, sample, todo, ui, update};
 
 const EVENT_POLL: Duration = Duration::from_millis(250);
 
@@ -24,6 +24,10 @@ fn main() -> Result<()> {
         }
         Some("--version") | Some("-V") => {
             println!("tuxedo {}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
+        Some("update") => {
+            update::run()?;
             return Ok(());
         }
         Some("--sample") => sample_path()?,
@@ -50,6 +54,9 @@ fn main() -> Result<()> {
     let cfg = Config::load();
     let mut app_state = App::new(path.clone(), body, today, cfg);
     app_state.config_path = Config::path();
+    if std::env::var_os("TUXEDO_NO_UPDATE_CHECK").is_none() {
+        app_state.set_update_check(update::spawn_check());
+    }
 
     let terminal = ratatui::init();
     let result = run(terminal, &mut app_state);
@@ -63,9 +70,13 @@ fn main() -> Result<()> {
 
 fn print_usage() {
     println!("usage: tuxedo [FILE]");
+    println!("       tuxedo update");
     println!();
     println!("Without FILE, opens ./todo.txt if present, otherwise a sample");
     println!("todo.txt in the system temp dir.");
+    println!();
+    println!("Commands:");
+    println!("  update         print instructions for upgrading tuxedo");
     println!();
     println!("Options:");
     println!("  -h, --help     show this message and exit");
@@ -121,6 +132,11 @@ fn run(mut terminal: DefaultTerminal, app: &mut App) -> Result<()> {
         // done.txt). Non-blocking: the first frame can render todo.txt
         // before the archive read completes.
         if app.poll_archive() {
+            dirty = true;
+        }
+        // Pick up the update-check result so the status-bar indicator can
+        // appear without waiting for a keystroke.
+        if app.poll_update_check() {
             dirty = true;
         }
         if dirty {

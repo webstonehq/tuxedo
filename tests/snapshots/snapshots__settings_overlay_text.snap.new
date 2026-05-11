@@ -1,0 +1,37 @@
+---
+source: tests/snapshots.rs
+assertion_line: 216
+expression: buffer_to_text(&buf)
+---
+ ▶▮◀ settings  •  19 tasks  •  sort:priority                                                        
+                                                                                                    
+ FILES                                                                                              
+   todo file                   /tmp/tuxedo-snapshot.txt                                             
+   config file                 /tmp/tuxedo-snapshot.toml                                            
+                                                                                                    
+ DISPLAY                                                                                            
+   theme                       Muted Slate ▾  (T to cycle)                                          
+   density                     compact ▾  (D to cycle)                                              
+   line numbers                on  (L to toggle)                                                    
+   status bar                  on                                                                   
+   filter sidebar              on  ([ to toggle)                                                    
+   detail sidebar              on  (] to toggle)                                                    
+   show done in list           off  (H to toggle)                                                   
+   show future in list         off  (F to toggle)                                                   
+                                                                                                    
+ BEHAVIOR                                                                                           
+   default sort                priority (s to cycle)                                                
+                                                                                                    
+ KEYBINDINGS                                                                                        
+                               press ? for the full list                                            
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ SETTINGS   Esc back                                         15 open · 2026-05-06 · tuxedo 2026.5.2

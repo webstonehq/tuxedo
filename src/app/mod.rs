@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::mpsc::{Receiver, TryRecvError};
 
 use crate::config::Config;
 use crate::theme::Theme;
@@ -78,6 +79,14 @@ pub struct App {
     /// Sibling `done.txt`. Holds tasks the user has archived; populated
     /// off-thread at startup so the first frame doesn't wait on this I/O.
     pub archive: Archive,
+    /// Latest known release tag, populated asynchronously by the update
+    /// checker. `None` while we haven't heard back (or the check is disabled,
+    /// e.g. in tests). The UI compares this against `CARGO_PKG_VERSION` to
+    /// decide whether to surface an "update available" hint.
+    pub(crate) latest_version: Option<String>,
+    /// Receiver for the background update check. Drained each tick; cleared
+    /// once a result has been received or the sender hung up.
+    update_check: Option<Receiver<Option<String>>>,
 }
 
 impl App {
@@ -105,9 +114,51 @@ impl App {
             visible_groups: Vec::new(),
             last_disk: body,
             archive,
+            latest_version: None,
+            update_check: None,
         };
         app.recompute_visible();
         app
+    }
+
+    /// Install the receiver from [`update::spawn_check`](crate::update::spawn_check).
+    /// `main` calls this; tests leave it unset so the App stays inert and
+    /// doesn't spawn network work as a side effect of construction.
+    pub fn set_update_check(&mut self, rx: Receiver<Option<String>>) {
+        self.update_check = Some(rx);
+    }
+
+    /// Drain the update-check receiver. Returns `true` if a new latest
+    /// version was just received — callers use this to trigger a redraw so
+    /// the status bar can paint the indicator on the next frame.
+    pub fn poll_update_check(&mut self) -> bool {
+        let Some(rx) = &self.update_check else {
+            return false;
+        };
+        match rx.try_recv() {
+            Ok(maybe_tag) => {
+                self.latest_version = maybe_tag;
+                self.update_check = None;
+                self.latest_version.is_some()
+            }
+            Err(TryRecvError::Empty) => false,
+            Err(TryRecvError::Disconnected) => {
+                self.update_check = None;
+                false
+            }
+        }
+    }
+
+    /// Returns the latest known release tag *if* it is strictly newer than
+    /// the running binary. The status bar uses this to decide whether to
+    /// draw an "update available" hint.
+    pub fn update_available(&self) -> Option<&str> {
+        let latest = self.latest_version.as_deref()?;
+        if crate::update::is_newer(latest, env!("CARGO_PKG_VERSION")) {
+            Some(latest)
+        } else {
+            None
+        }
     }
 
     pub fn theme(&self) -> &'static Theme {

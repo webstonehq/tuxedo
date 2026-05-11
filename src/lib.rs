@@ -10,3 +10,4 @@ pub mod theme;
 pub mod threshold;
 pub mod todo;
 pub mod ui;
+pub mod update;

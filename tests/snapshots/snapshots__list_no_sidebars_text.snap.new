@@ -1,0 +1,37 @@
+---
+source: tests/snapshots.rs
+assertion_line: 216
+expression: buffer_to_text(&buf)
+---
+ ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tasks  •  sort:priority                                        
+                                                                                                    
+ PRIORITY A  2  ────────────────────────────────────────────────────────────────────────────────    
+  1 ▸ (A) Finish Q2 board deck +work @laptop due:2026-05-06                                         
+  2   (A) Call dentist to reschedule cleaning @phone +health due:2026-05-08                         
+ PRIORITY B  3  ────────────────────────────────────────────────────────────────────────────────    
+  3   (B) Review pull requests for auth refactor +work @laptop due:2026-05-07                       
+  4   (B) Renew passport before summer trip +travel @errands due:2026-05-20                         
+  5   (B) Draft hiring rubric for senior eng +work @laptop                                          
+ PRIORITY C  2  ────────────────────────────────────────────────────────────────────────────────    
+  6   (C) Pay quarterly estimated taxes @home +finance due:2026-06-15                               
+  7   (C) Order new running shoes +health @errands                                                  
+ NO PRIORITY  8  ────────────────────────────────────────────────────────────────────────────────   
+  8       Migrate analytics to new pipeline +work @laptop due:2026-05-15                            
+  9       Pay rent due:2026-05-15 rec:+1m +finance @home                                            
+ 10       Pick up dry cleaning @errands                                                             
+ 11       Schedule annual physical @phone +health                                                   
+ 12       Read "Designing Data-Intensive Applications" ch. 4 +learning @home                        
+ 13       Send thank-you note to mentor @home                                                       
+ 14       Plan Saturday hike with K. @phone +personal                                               
+ 15       Replace bathroom faucet washer +home @errands                                             
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ NORMAL   j/k · a add · x done · / search · ? help · u undo ·15 open · 2026-05-06 · tuxedo 2026.5.2

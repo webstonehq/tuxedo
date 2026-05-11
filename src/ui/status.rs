@@ -51,6 +51,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     }
     right_parts.push(app.today.clone());
     right_parts.push(concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION")).to_string());
+    // Track where the update suffix would slot in so we can paint it in the
+    // accent color (the rest of the right text is dim).
+    let update_suffix = app
+        .update_available()
+        .map(|tag| format!(" · ↑ {tag} (tuxedo update)"));
     let right_text = right_parts.join(" · ");
 
     // Append a chord indicator (e.g. " g…") so two-key sequences like gg/dd/fp
@@ -63,7 +68,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     // Layout: mode chip on left, hint in middle, right text right-aligned.
     let chip_text = format!(" {mode_label}{chord_suffix} ");
     let chip_w = chip_text.chars().count() as u16;
-    let right_w = right_text.chars().count() as u16 + 1;
+    let update_w = update_suffix
+        .as_deref()
+        .map(|s| s.chars().count() as u16)
+        .unwrap_or(0);
+    let right_w = right_text.chars().count() as u16 + update_w + 1;
     let middle_w = area.width.saturating_sub(chip_w).saturating_sub(right_w);
 
     let [chip_area, mid_area, right_area] = Layout::horizontal([
@@ -93,11 +102,25 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         mid_area,
     );
 
-    let right_line = Line::from(Span::styled(
-        format!("{right_text} "),
-        Style::default().fg(theme.dim),
-    ))
-    .style(Style::default().bg(theme.statusbar));
+    let right_line = if let Some(suffix) = update_suffix {
+        Line::from(vec![
+            Span::styled(right_text, Style::default().fg(theme.dim)),
+            Span::styled(
+                suffix,
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" ", Style::default().fg(theme.dim)),
+        ])
+        .style(Style::default().bg(theme.statusbar))
+    } else {
+        Line::from(Span::styled(
+            format!("{right_text} "),
+            Style::default().fg(theme.dim),
+        ))
+        .style(Style::default().bg(theme.statusbar))
+    };
     frame.render_widget(
         Paragraph::new(right_line)
             .style(Style::default().bg(theme.statusbar))

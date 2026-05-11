@@ -13,4 +13,4 @@ x 2026-05-08 2026-05-08 Remove the AGENDA mode, it's no longer needed now that t
 x 2026-05-08 2026-05-08 Press x on a done item should undo it
 x 2026-05-08 2026-05-08 Configure lefthook
 x 2026-05-08 2026-05-08 Release 2025.5.2
-(A) 2026-05-09 Make fuzzy search actually fuzzy
+x 2026-05-10 2026-05-09 Make fuzzy search actually fuzzy

@@ -1,6 +1,7 @@
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
+use crate::search::subseq_match_ci;
 use crate::theme::Theme;
 use crate::todo::{Task, body_after_priority};
 
@@ -67,6 +68,9 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     // straight from `task.raw`, so most rows allocate only for the format!()
     // calls above.
     let body = body_after_priority(&task.raw);
+    let body_match_positions: Option<Vec<usize>> =
+        opts.match_term.and_then(|n| subseq_match_ci(body, n));
+    let body_start = body.as_ptr() as usize;
     let mut rest = body;
     while !rest.is_empty() {
         let ws_end = rest
@@ -80,7 +84,17 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
             break;
         }
         let tok_end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-        push_token_spans(&mut spans, &rest[..tok_end], task, opts, theme);
+        let token = &rest[..tok_end];
+        let token_offset = token.as_ptr() as usize - body_start;
+        push_token_spans(
+            &mut spans,
+            token,
+            token_offset,
+            body_match_positions.as_deref(),
+            task,
+            opts,
+            theme,
+        );
         rest = &rest[tok_end..];
     }
     let line_style = if opts.cursor {
@@ -96,6 +110,8 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
 fn push_token_spans<'a>(
     spans: &mut Vec<Span<'a>>,
     token: &'a str,
+    token_offset_in_body: usize,
+    body_match_positions: Option<&[usize]>,
     task: &Task,
     opts: RowOpts<'a>,
     theme: &Theme,
@@ -125,40 +141,44 @@ fn push_token_spans<'a>(
         return;
     }
 
-    // plain word — apply match-term highlight
+    // plain word — highlight each matched subsequence char inside this token.
     let base_color = if task.done { theme.done } else { theme.fg };
-    let dim_done = task.done;
-    if let Some(needle) = opts.match_term
-        && let Some((start, end)) = match_range_ci(token, needle)
-    {
-        let before = &token[..start];
-        let mid = &token[start..end];
-        let after = &token[end..];
-        if !before.is_empty() {
-            spans.push(Span::styled(
-                before,
-                apply_dim(Style::default().fg(base_color), dim_done),
-            ));
-        }
-        spans.push(Span::styled(
-            mid,
-            Style::default()
-                .fg(theme.bg)
-                .bg(theme.matched)
-                .add_modifier(Modifier::BOLD),
-        ));
-        if !after.is_empty() {
-            spans.push(Span::styled(
-                after,
-                apply_dim(Style::default().fg(base_color), dim_done),
-            ));
-        }
+    let base_style = apply_dim(Style::default().fg(base_color), task.done);
+    let hl_style = Style::default()
+        .fg(theme.bg)
+        .bg(theme.matched)
+        .add_modifier(Modifier::BOLD);
+
+    let token_end = token_offset_in_body + token.len();
+    let mut local_positions = body_match_positions
+        .into_iter()
+        .flatten()
+        .copied()
+        .filter(|&p| p >= token_offset_in_body && p < token_end)
+        .map(|p| p - token_offset_in_body)
+        .peekable();
+
+    if local_positions.peek().is_none() {
+        spans.push(Span::styled(token, base_style));
         return;
     }
-    spans.push(Span::styled(
-        token,
-        apply_dim(Style::default().fg(base_color), dim_done),
-    ));
+
+    let mut cursor = 0usize;
+    for p in local_positions {
+        if cursor < p {
+            spans.push(Span::styled(&token[cursor..p], base_style));
+        }
+        let ch = token[p..]
+            .chars()
+            .next()
+            .expect("match offset lands on a char boundary");
+        let next = p + ch.len_utf8();
+        spans.push(Span::styled(&token[p..next], hl_style));
+        cursor = next;
+    }
+    if cursor < token.len() {
+        spans.push(Span::styled(&token[cursor..], base_style));
+    }
 }
 
 fn sigil_token_color(token: &str, task: &Task, theme: &Theme) -> Option<Color> {
@@ -223,36 +243,6 @@ fn day_diff(a: &str, b: &str) -> Option<i64> {
     let da = chrono::NaiveDate::from_ymd_opt(ay, am, ad)?;
     let db = chrono::NaiveDate::from_ymd_opt(by, bm, bd)?;
     Some(da.signed_duration_since(db).num_days())
-}
-
-/// Find the first case-insensitive occurrence of `needle` in `token`,
-/// returning a byte range in `token` that always lands on char boundaries.
-///
-/// The naive `token.to_lowercase().find(...)` then byte-slice approach is
-/// broken whenever a codepoint's lowercase has a different UTF-8 length
-/// (e.g. Turkish `İ` lowercases to `i` + combining dot, gaining a byte).
-/// Slicing the original token at offsets derived from the lowercased
-/// string then panics on the non-boundary cut.
-pub(crate) fn match_range_ci(token: &str, needle: &str) -> Option<(usize, usize)> {
-    if needle.is_empty() {
-        return None;
-    }
-    let n_lower = needle.to_lowercase();
-    let starts: Vec<usize> = token.char_indices().map(|(i, _)| i).collect();
-    for &start in &starts {
-        let mut remaining = n_lower.as_str();
-        for (off, ch) in token[start..].char_indices() {
-            let lower: String = ch.to_lowercase().collect();
-            let Some(rest) = remaining.strip_prefix(lower.as_str()) else {
-                break;
-            };
-            remaining = rest;
-            if remaining.is_empty() {
-                return Some((start, start + off + ch.len_utf8()));
-            }
-        }
-    }
-    None
 }
 
 pub(crate) fn due_token_style(task_done: bool, due: &str, today: &str, theme: &Theme) -> Style {
@@ -325,24 +315,29 @@ mod tests {
     }
 
     #[test]
-    fn match_range_ascii_finds_substring_case_insensitive() {
-        assert_eq!(match_range_ci("Hello", "ell"), Some((1, 4)));
-        assert_eq!(match_range_ci("HELLO", "ell"), Some((1, 4)));
-        assert_eq!(match_range_ci("hello", "ELL"), Some((1, 4)));
-    }
-
-    #[test]
-    fn match_range_returns_token_byte_range_for_unicode() {
-        // "Café" byte layout: C(0) a(1) f(2) é(3..5). Matching "fé" must
-        // return (2, 5) — pointing at the original token's bytes, on char
-        // boundaries — not a position derived from the lowercased copy.
-        assert_eq!(match_range_ci("Café", "fé"), Some((2, 5)));
-        assert_eq!(match_range_ci("Café", "FÉ"), Some((2, 5)));
-    }
-
-    #[test]
-    fn match_range_empty_or_missing_returns_none() {
-        assert_eq!(match_range_ci("anything", ""), None);
-        assert_eq!(match_range_ci("Hello", "xyz"), None);
+    fn build_line_highlights_subsequence_chars() {
+        // "cade" is a subsequence of "Call dentist": C(0), a(1), D(5), e(6).
+        // The renderer should emit highlighted single-char spans for those
+        // positions, with the unmatched chars rendered in the base style.
+        let task = parse_line("Call dentist").unwrap();
+        let opts = RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: Some("cade"),
+            today: "2026-05-06",
+        };
+        let line = build_line(&task, opts, &MUTED);
+        let highlight_bg = MUTED.matched;
+        let highlighted: String = line
+            .spans
+            .iter()
+            .filter(|s| s.style.bg == Some(highlight_bg))
+            .map(|s| s.content.as_ref())
+            .collect();
+        assert_eq!(highlighted, "Cade");
     }
 }

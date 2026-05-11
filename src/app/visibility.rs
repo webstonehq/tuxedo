@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 
 use super::App;
 use super::types::{Filter, Sort, View};
+use crate::search::subseq_match_ci;
 use crate::threshold;
 use crate::todo::{self, Task};
 
@@ -63,9 +64,7 @@ impl App {
     }
 
     fn rebuild_list_cache(&mut self) {
-        let needle_owned =
-            (!self.filter.search.is_empty()).then(|| self.filter.search.to_lowercase());
-        let needle = needle_owned.as_deref();
+        let needle = (!self.filter.search.is_empty()).then_some(self.filter.search.as_str());
 
         let mut idxs: Vec<usize> = (0..self.tasks.len())
             .filter(|&i| {
@@ -167,7 +166,8 @@ fn sort_by_prefs(idxs: &mut [usize], tasks: &[Task], sort: Sort) {
 }
 
 /// Project / context / search predicate, shared by every view that honors
-/// user filters. `needle` is pre-lowercased by the caller.
+/// user filters. `needle` matches as a case-insensitive subsequence of the
+/// task body — chars must appear in order, gaps allowed.
 fn passes_user_filter(t: &Task, filter: &Filter, needle: Option<&str>) -> bool {
     if let Some(p) = &filter.project
         && !t.projects.iter().any(|x| x == p)
@@ -180,8 +180,8 @@ fn passes_user_filter(t: &Task, filter: &Filter, needle: Option<&str>) -> bool {
         return false;
     }
     if let Some(needle) = needle {
-        let body = todo::body_after_priority(&t.raw).to_lowercase();
-        if !body.contains(needle) {
+        let body = todo::body_after_priority(&t.raw);
+        if subseq_match_ci(body, needle).is_none() {
             return false;
         }
     }
@@ -289,6 +289,15 @@ mod tests {
         let tasks = crate::todo::parse_file(raw);
         let projects = unique_values(&tasks, |t| &t.projects);
         assert_eq!(projects, vec!["health".to_string(), "work".to_string()]);
+    }
+
+    #[test]
+    fn search_matches_subsequence() {
+        // Subsequence match: "cade" finds C, a, D, e in "Call dentist".
+        let mut app = build_app("2026-05-01 Call dentist\n2026-05-01 buy milk\n");
+        app.filter.search = "cade".into();
+        app.recompute_visible();
+        assert_eq!(app.visible_indices().len(), 1);
     }
 
     #[test]

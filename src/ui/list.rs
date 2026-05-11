@@ -70,7 +70,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             let opts = task_row::RowOpts {
                 idx_label: i,
                 cursor: i == app.cursor && app.mode != Mode::Help && app.mode != Mode::Settings,
-                multi_mode: app.mode == Mode::Visual,
+                multi_mode: app.effective_mode() == Mode::Visual,
                 multi_checked: app.selection.is_selected(abs),
                 selected: app.selection.is_selected(abs),
                 show_line_num: app.prefs.layout.line_num,

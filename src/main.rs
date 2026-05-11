@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
+use tuxedo::action::Action;
 use tuxedo::app::{App, Mode, View};
 use tuxedo::config::Config;
 use tuxedo::{clipboard, sample, todo, ui, update};
@@ -194,6 +195,7 @@ fn handle_key(app: &mut App, key: KeyEvent) {
         Mode::Settings => handle_settings(app, key),
         Mode::PromptProject | Mode::PromptContext => handle_prompt(app, key),
         Mode::PickProject | Mode::PickContext => handle_pick(app, key),
+        Mode::CommandPalette => handle_command_palette(app, key),
         Mode::Normal | Mode::Visual => handle_normal(app, key),
     }
 }
@@ -352,6 +354,55 @@ fn handle_pick(app: &mut App, key: KeyEvent) {
     }
 }
 
+fn handle_command_palette(app: &mut App, key: KeyEvent) {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    // List navigation. Plain j/k must type into the search box — the user
+    // might be searching for "jump" — so navigation goes via arrows or
+    // Ctrl-N/Ctrl-P (matches the autocomplete popup in handle_insert).
+    match key.code {
+        KeyCode::Esc => {
+            app.mode = app.command_palette.take_prior();
+            app.draft_clear();
+            return;
+        }
+        KeyCode::Enter => {
+            let chosen = app.command_palette.current_action();
+            // Restore the prior mode (Normal or Visual) *before* dispatching
+            // so visual-aware actions (ToggleComplete, Delete, ToggleSelected)
+            // see the selection. The dispatched action may then set its own
+            // mode (BeginAdd → Insert, etc.); we don't stomp it after.
+            app.mode = app.command_palette.take_prior();
+            app.draft_clear();
+            if let Some(action) = chosen {
+                apply_action(app, action);
+            }
+            return;
+        }
+        KeyCode::Down => {
+            app.command_palette.step(1);
+            return;
+        }
+        KeyCode::Up => {
+            app.command_palette.step(-1);
+            return;
+        }
+        KeyCode::Char('n') if ctrl => {
+            app.command_palette.step(1);
+            return;
+        }
+        KeyCode::Char('p') if ctrl => {
+            app.command_palette.step(-1);
+            return;
+        }
+        _ => {}
+    }
+    if apply_to_draft(app, key) == DraftEffect::TextChanged {
+        // `refresh` resets the cursor when the needle actually changes; a
+        // same-needle call (e.g. typed-and-deleted character) is a no-op.
+        app.command_palette.refresh(app.draft.text());
+    }
+}
+
 fn handle_prompt(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Esc => {
@@ -375,50 +426,9 @@ fn handle_prompt(app: &mut App, key: KeyEvent) {
     }
 }
 
-/// One discrete behavior triggered from Normal/Visual mode. Keeping the key
-/// table and the side-effects in separate functions lets us unit-test each
-/// half: `resolve_normal_key` proves the binding is correct, `apply_action`
-/// proves the effect is correct.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Action {
-    Quit,
-    CursorDown,
-    CursorUp,
-    CursorTop,
-    CursorBottom,
-    HalfPageDown,
-    HalfPageUp,
-    BeginAdd,
-    BeginEdit,
-    ToggleComplete,
-    Delete,
-    CyclePriority,
-    BeginSearch,
-    OpenHelp,
-    OpenSettings,
-    Undo,
-    ToggleVisual,
-    ToggleSelected,
-    GoList,
-    ToggleArchiveView,
-    ArchiveCompleted,
-    ArmF,
-    PickProject,
-    PickContext,
-    CycleSort,
-    BeginPromptProject,
-    BeginPromptContext,
-    ToggleLeftPane,
-    ToggleRightPane,
-    CycleTheme,
-    CycleDensity,
-    ToggleLineNum,
-    ToggleShowDone,
-    ToggleShowFuture,
-    CopyLine,
-    CopyBody,
-    EscapeStack,
-}
+// `Action` lives in `tuxedo::action` (see `src/action.rs`). Keeping it in the
+// library lets the command palette enumerate every variant without pulling
+// main.rs into the dependency graph.
 
 /// Map a single keystroke to an `Action`. Returns `None` when the keystroke
 /// is the *first* press of a chord (e.g. `g` of `gg`) or unknown — in both
@@ -432,6 +442,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent) -> Option<Action> {
         return match key.code {
             KeyCode::Char('d') => Some(Action::HalfPageDown),
             KeyCode::Char('u') => Some(Action::HalfPageUp),
+            KeyCode::Char('p') => Some(Action::OpenCommandPalette),
             _ => None,
         };
     }
@@ -472,6 +483,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char('/') => Action::BeginSearch,
         KeyCode::Char('?') => Action::OpenHelp,
         KeyCode::Char(',') => Action::OpenSettings,
+        KeyCode::Char(':') => Action::OpenCommandPalette,
         KeyCode::Char('u') => Action::Undo,
         KeyCode::Char('v') => Action::ToggleVisual,
         KeyCode::Char(' ') => Action::ToggleSelected,
@@ -590,6 +602,15 @@ fn apply_action(app: &mut App, action: Action) {
         }
         Action::OpenHelp => app.mode = Mode::Help,
         Action::OpenSettings => app.mode = Mode::Settings,
+        Action::OpenCommandPalette => {
+            // Snapshot the current mode (Normal or Visual) so cancel/run
+            // can restore it — otherwise opening the palette from Visual
+            // and cancelling silently exits Visual.
+            let prior = app.mode;
+            app.command_palette.open(prior);
+            app.mode = Mode::CommandPalette;
+            app.draft_clear();
+        }
         Action::Undo => app.undo(),
         Action::ToggleVisual => {
             app.mode = if app.mode == Mode::Visual {

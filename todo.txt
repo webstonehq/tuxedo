@@ -1,7 +1,7 @@
 x 2026-05-09 2026-05-07 Recurring tasks (rec key) auto-spawn next occurrence on complete +tuxedo @dev
 x 2026-05-10 2026-05-07 Threshold dates hide tasks until threshold date +tuxedo @dev
 2026-05-07 Natural-language quick-add parse dates contexts and recurrence from input +tuxedo @dev
-(B) 2026-05-07 Fuzzy command palette overlay for all actions +tuxedo @dev
+x 2026-05-11 2026-05-07 Fuzzy command palette overlay for all actions +tuxedo @dev
 2026-05-07 Bulk project and context rename with preview across working and archive +tuxedo @dev
 2026-05-07 Calendar week strip view with reschedule keys +tuxedo @dev
 2026-05-07 Per-task Markdown notes sidecar in detail sidebar +tuxedo @dev
@@ -15,3 +15,4 @@ x 2026-05-08 2026-05-08 Configure lefthook
 x 2026-05-08 2026-05-08 Release 2025.5.2
 x 2026-05-10 2026-05-09 Make fuzzy search actually fuzzy
 2026-05-10 Consider a better UX for adding/editing key:value pairs
+x 2026-05-11 2026-05-11 Add a screenshot of the command palette to the readme

@@ -1,5 +1,6 @@
 #![warn(clippy::unwrap_used)]
 
+pub mod action;
 pub mod app;
 pub mod clipboard;
 pub mod config;

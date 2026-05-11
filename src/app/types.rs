@@ -19,6 +19,7 @@ pub enum Mode {
     PromptContext, // text input → add/remove context on current task
     PickProject,   // j/k cycles through projects to filter by
     PickContext,   // j/k cycles through contexts to filter by
+    CommandPalette,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

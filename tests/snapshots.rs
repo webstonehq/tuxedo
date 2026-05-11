@@ -279,6 +279,37 @@ fn settings_overlay() {
 }
 
 #[test]
+fn command_palette_unfiltered() {
+    let mut app = make_app();
+    app.command_palette.open(Mode::Normal);
+    app.mode = Mode::CommandPalette;
+    snapshot_app("command_palette_unfiltered", &app);
+}
+
+#[test]
+fn command_palette_filtered() {
+    let mut app = make_app();
+    app.command_palette.open(Mode::Normal);
+    app.mode = Mode::CommandPalette;
+    app.draft_set("arch".to_string());
+    app.command_palette.refresh("arch");
+    snapshot_app("command_palette_filtered", &app);
+}
+
+#[test]
+fn command_palette_preserves_visual_selection() {
+    // Open the palette mid-Visual with two rows ticked: the underlying list
+    // must keep its checkboxes visible while the overlay is shown.
+    let mut app = make_app();
+    app.mode = Mode::Visual;
+    app.selection.toggle(0);
+    app.selection.toggle(1);
+    app.command_palette.open(Mode::Visual);
+    app.mode = Mode::CommandPalette;
+    snapshot_app("command_palette_preserves_visual_selection", &app);
+}
+
+#[test]
 fn insert_dialog() {
     let mut app = make_app();
     app.mode = Mode::Insert;

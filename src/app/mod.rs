@@ -14,6 +14,7 @@ mod external;
 mod flash;
 mod history;
 mod mutations;
+pub mod palette;
 mod picker;
 mod prefs;
 mod selection;
@@ -29,6 +30,7 @@ pub use chord::Chord;
 pub use draft::{DraftCursor, DraftState};
 pub use flash::Flash;
 pub use history::History;
+pub use palette::CommandPaletteState;
 pub use prefs::{Layout, Prefs};
 pub use selection::Selection;
 pub use types::{
@@ -87,6 +89,7 @@ pub struct App {
     /// Receiver for the background update check. Drained each tick; cleared
     /// once a result has been received or the sender hung up.
     update_check: Option<Receiver<Option<String>>>,
+    pub command_palette: CommandPaletteState,
 }
 
 impl App {
@@ -116,6 +119,7 @@ impl App {
             archive,
             latest_version: None,
             update_check: None,
+            command_palette: CommandPaletteState::default(),
         };
         app.recompute_visible();
         app
@@ -163,6 +167,18 @@ impl App {
 
     pub fn theme(&self) -> &'static Theme {
         self.prefs.theme()
+    }
+
+    /// Mode the rest of the UI should react to. While the command palette is
+    /// open, the underlying list/sidebars should keep rendering as if the
+    /// user were still in the mode they came from — otherwise opening the
+    /// palette mid-Visual hides the multi-select checkboxes and similar
+    /// mode-driven affordances.
+    pub fn effective_mode(&self) -> Mode {
+        match self.mode {
+            Mode::CommandPalette => self.command_palette.prior().unwrap_or(self.mode),
+            m => m,
+        }
     }
 
     pub fn sort_label(&self) -> &'static str {

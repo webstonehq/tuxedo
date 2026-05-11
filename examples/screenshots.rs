@@ -64,7 +64,17 @@ fn main() -> std::io::Result<()> {
     app.set_project_filter(Some("work".to_string()));
     save(&app, &out.join("filter.svg"))?;
 
-    // 5. Empty state — fresh file, cell-bowtie logo and quick-start panel.
+    // 5. Command palette — opened mid-list with "arch" typed, showing how
+    // the ranker surfaces start-of-label hits first, then word-boundary,
+    // then mid-word.
+    let mut app = make();
+    app.command_palette.open(Mode::Normal);
+    app.mode = Mode::CommandPalette;
+    app.draft_set("arch".to_string());
+    app.command_palette.refresh("arch");
+    save(&app, &out.join("command-palette.svg"))?;
+
+    // 6. Empty state — fresh file, cell-bowtie logo and quick-start panel.
     // Sidebars hidden so the centered panel reads as the focal point.
     let mut app = App::new(
         PathBuf::from("/tmp/tuxedo-screenshots-empty.txt"),
@@ -77,7 +87,7 @@ fn main() -> std::io::Result<()> {
     app.prefs.layout.right = false;
     save(&app, &out.join("empty.svg"))?;
 
-    // 6. List view in every built-in theme — for the README's themes section.
+    // 7. List view in every built-in theme — for the README's themes section.
     for (i, t) in theme::ALL.iter().enumerate() {
         let mut app = make();
         app.prefs.set_theme_idx(i);

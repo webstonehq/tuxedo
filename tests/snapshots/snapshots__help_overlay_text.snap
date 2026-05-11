@@ -1,29 +1,28 @@
 ---
 source: tests/snapshots.rs
-assertion_line: 216
 expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL                           
-                                                                                                    
- PROJ┌ tuxedo · help ─────────────────────────────────────────────────────────────────────────┐     
-   +w│  NAVIGATION                                  VIEW                                      │     
-   +h│    j / ↓             next task                 /                 fuzzy search          │     
-   +f│    k / ↑             previous task             fp                filter by project     │     
-   +h│    gg                first task                fc                filter by context     │     
-   +l│    G                 last task                 S                 cycle sort            │     
-   +p│    Ctrl-d / Ctrl-u   page down / up            v                 visual / multi-select │     
-   +t│                                                l                 list view             │     
-     │  EDITING                                       a                 archive view          │rd   
- CONT│    n                 new task                  A                 archive completed     │     
-   @e│    e / i             edit current line         H                 show done in list     │     
-   @h│    x                 toggle complete           F                 show future in list   │     
-   @l│    dd                delete task               [ / ]             toggle filter / detail│     
-   @p│    p                 cycle priority A→B→C→·    T                 cycle theme           │     
-     │    c                 add/remove context        D                 cycle density         │     
+     ┌ tuxedo · help ─────────────────────────────────────────────────────────────────────────┐     
+ PROJ│  NAVIGATION                                  VIEW                                      │     
+   +w│    j / ↓             next task                 /                 fuzzy search          │     
+   +h│    k / ↑             previous task             fp                filter by project     │     
+   +f│    gg                first task                fc                filter by context     │     
+   +h│    G                 last task                 S                 cycle sort            │     
+   +l│    Ctrl-d / Ctrl-u   page down / up            v                 visual / multi-select │     
+   +p│                                                l                 list view             │     
+   +t│  EDITING                                       a                 archive view          │     
+     │    n                 new task                  A                 archive completed     │rd   
+ CONT│    e / i             edit current line         H                 show done in list     │     
+   @e│    x                 toggle complete           F                 show future in list   │     
+   @h│    dd                delete task               [ / ]             toggle filter / detail│     
+   @l│    p                 cycle priority A→B→C→·    T                 cycle theme           │     
+   @p│    c                 add/remove context        D                 cycle density         │     
      │    +                 add project               L                 toggle line numbers   │     
      │    yy                copy line to clipboard                                            │     
      │    yb                copy body only          SYSTEM                                    │     
-     │    u                 undo                      ?                 this help             │     
+     │    u                 undo                      : / Ctrl-P        command palette       │     
+     │                                                ?                 this help             │     
      │                                                ,                 settings              │     
      │                                                q                 quit                  │     
      │────────────────────────────────────────────────────────────────────────────────────────│     

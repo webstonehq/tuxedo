@@ -58,7 +58,12 @@ const VIEW: Section = (
 
 const SYSTEM: Section = (
     "SYSTEM",
-    &[("?", "this help"), (",", "settings"), ("q", "quit")],
+    &[
+        (": / Ctrl-P", "command palette"),
+        ("?", "this help"),
+        (",", "settings"),
+        ("q", "quit"),
+    ],
 );
 
 const FORMAT: Section = (

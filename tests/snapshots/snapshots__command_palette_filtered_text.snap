@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(&buf)
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL                           
+                                                                                                    
+ PROJECTS                  PRIORITY A  2  ──────────────────────── priority  (A)                    
+   +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   2026-05-01             
+   +health           3      2   (A) Call dentist to reschedule cle due       2026-05-06  today      
+   +finance          2     PRIORITY B  3  ──────────────────────── projects  +work                  
+   +home            ┌ tuxedo · command ────────────────────────────────────────┐ptop                
+   +learning        │ > arch█  3 matches                                       │                    
+   +personal        │──────────────────────────────────────────────────────────│                    
+   +travel          │ ▶ archive completed tasks                              A │                    
+                    │   toggle archive view                                  a │1 Finish Q2 board   
+ CONTEXTS           │   fuzzy search                                         / │aptop               
+   @errands         │                                                          │6                   
+   @home            │                                                          │                    
+   @laptop          │                                                          │                    
+   @phone           │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │                                                          │                    
+                    │  ↑↓ / Ctrl-N/P navigate · Enter run · Esc cancel         │                    
+                    └──────────────────────────────────────────────────────────┘                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ COMMAND   type to filter · Enter run · Esc cancel           15 open · 2026-05-06 · tuxedo 2026.5.3

@@ -15,6 +15,7 @@ hand-tuned themes — all in a single static binary.
 
 - **Pure todo.txt.** Reads and writes the [standard format](https://github.com/todotxt/todo.txt) — every line is plain text you can edit with anything else.
 - **Vim keys, no surprises.** `j` / `k` to move, `dd` to delete, `gg` / `G` to jump, `u` to undo (50 levels), chord prompts (`gg`, `dd`, `fp`, `fc`) with a 600 ms window.
+- **Command palette.** `:` or `Ctrl-P` opens a fuzzy palette over every action — type a few letters, hit Enter. Same matcher as `/` search, ranked so start-of-label hits beat word-boundary hits beat mid-word hits.
 - **Atomic, sync-friendly writes.** Every change goes through write-temp-then-rename. If another process — Dropbox, an editor, a script — modifies the file, tuxedo reloads on the next keypress (or within ~250 ms while idle) and flashes a notice.
 - **Sibling-file archive.** `A` moves completed tasks to `done.txt` next to your file, atomically.
 - **Filter, sort, multi-select.** Cycle by `+project` or `@context`, sort by priority / due / file order, and bulk-complete or bulk-delete in visual mode.
@@ -28,6 +29,7 @@ hand-tuned themes — all in a single static binary.
 | **Empty state** • cell-bowtie mark and quick-start when the file has no tasks | ![empty](docs/screenshots/empty.svg) |
 | **Archive** • completed tasks grouped by completion date | ![archive](docs/screenshots/archive.svg) |
 | **Filter sidebar active** • `fp` cycles projects with j/k, `fc` cycles contexts | ![filter](docs/screenshots/filter.svg) |
+| **Command palette** • `:` or `Ctrl-P` opens a fuzzy palette over every action | ![command palette](docs/screenshots/command-palette.svg) |
 | **Help** • `?` opens the full keybindings overlay | ![help](docs/screenshots/help.svg) |
 
 <details>
@@ -165,6 +167,7 @@ can browse, un-archive, or permanently delete past tasks.
 
 | Key | Action |
 | --- | --- |
+| `:` / `Ctrl-P` | command palette |
 | `?` | help overlay |
 | `,` | settings overlay |
 | `q` | quit |

@@ -6,6 +6,7 @@ use ratatui::widgets::{Block, Clear};
 use crate::app::{App, Mode, View};
 
 pub mod archive;
+pub mod command_palette;
 pub mod detail;
 pub mod dialog;
 pub mod empty;
@@ -29,12 +30,16 @@ const DIALOG_H: u16 = 8;
 const DIALOG_MIN_W: u16 = 40;
 const DIALOG_MAX_W: u16 = 100;
 
-const HELP_MAX_H: u16 = 28;
+const HELP_MAX_H: u16 = 29;
 const HELP_MIN_W: u16 = 76;
 const HELP_MAX_W: u16 = 120;
 
 const PROMPT_H: u16 = 5;
 const PROMPT_MAX_W: u16 = 50;
+
+const PALETTE_MAX_H: u16 = 20;
+const PALETTE_MIN_W: u16 = 50;
+const PALETTE_MAX_W: u16 = 80;
 
 pub fn draw(frame: &mut Frame, app: &App) {
     let theme = app.theme();
@@ -104,7 +109,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
             dialog::render_autocomplete(frame, dlg, area, app);
         }
         Mode::Help => {
-            let h: u16 = area.height.saturating_sub(4).min(HELP_MAX_H);
+            let h: u16 = area.height.saturating_sub(3).min(HELP_MAX_H);
             let w: u16 = (u32::from(area.width) * 9 / 10)
                 .clamp(u32::from(HELP_MIN_W), u32::from(HELP_MAX_W))
                 as u16;
@@ -121,6 +126,15 @@ pub fn draw(frame: &mut Frame, app: &App) {
             let r = centered_in(area, w, PROMPT_H);
             frame.render_widget(Clear, r);
             dialog::render_prompt(frame, r, app);
+        }
+        Mode::CommandPalette => {
+            let h: u16 = area.height.saturating_sub(4).min(PALETTE_MAX_H);
+            let w: u16 = (u32::from(area.width) * 3 / 5)
+                .clamp(u32::from(PALETTE_MIN_W), u32::from(PALETTE_MAX_W))
+                as u16;
+            let r = centered_in(area, w, h);
+            frame.render_widget(Clear, r);
+            command_palette::render(frame, r, app);
         }
         _ => {}
     }

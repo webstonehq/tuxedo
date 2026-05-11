@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(&buf)
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL                           
+                                                                                                    
+ PROJECTS                  PRIORITY A  2  ──────────────────────── priority  (A)                    
+   +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   2026-05-01             
+   +health           3      2   (A) Call dentist to reschedule cle due       2026-05-06  today      
+   +finance          2     PRIORITY B  3  ──────────────────────── projects  +work                  
+   +home            ┌ tuxedo · command ────────────────────────────────────────┐ptop                
+   +learning        │ > █                                                      │                    
+   +personal        │──────────────────────────────────────────────────────────│                    
+   +travel          │ ▶ new task                                             n │                    
+                    │   edit current task                                e / i │1 Finish Q2 board   
+ CONTEXTS           │   toggle complete                                      x │aptop               
+   @errands         │   delete task                                         dd │6                   
+   @home            │   cycle priority                                       p │                    
+   @laptop          │   add project to current task                          + │                    
+   @phone           │   add or remove context on current task                c │                    
+                    │   copy line to clipboard                              yy │                    
+                    │   copy body to clipboard                              yb │                    
+                    │   undo                                                 u │                    
+                    │   cursor down                                      j / ↓ │                    
+                    │   cursor up                                        k / ↑ │                    
+                    │   jump to first task                                  gg │                    
+                    │   jump to last task                                    G │                    
+                    │   page down                                       Ctrl-d │                    
+                    │  ↑↓ / Ctrl-N/P navigate · Enter run · Esc cancel         │                    
+                    └──────────────────────────────────────────────────────────┘                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ COMMAND   type to filter · Enter run · Esc cancel           15 open · 2026-05-06 · tuxedo 2026.5.3

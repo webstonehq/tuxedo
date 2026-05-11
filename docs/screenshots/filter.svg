@@ -416,7 +416,7 @@
 <text x="64.00" y="92.48" fill="#7fb3a8">n</text>
 <text x="72.00" y="92.48" fill="#7fb3a8">c</text>
 <text x="80.00" y="92.48" fill="#7fb3a8">e</text>
-<text x="168.00" y="92.48" fill="#6b7280">1</text>
+<text x="168.00" y="92.48" fill="#6b7280">2</text>
 <text x="224.00" y="92.48" fill="#6b7280">2</text>
 <text x="256.00" y="92.48" fill="#d4b06a" font-weight="bold">(</text>
 <text x="264.00" y="92.48" fill="#d4b06a" font-weight="bold">B</text>
@@ -775,19 +775,19 @@
 <text x="872.00" y="204.48" fill="#e07a7a" font-weight="bold">0</text>
 <text x="880.00" y="204.48" fill="#e07a7a" font-weight="bold">6</text>
 <text x="24.00" y="220.48" fill="#c89a6e">@</text>
-<text x="32.00" y="220.48" fill="#c89a6e">l</text>
-<text x="40.00" y="220.48" fill="#c89a6e">a</text>
-<text x="48.00" y="220.48" fill="#c89a6e">p</text>
-<text x="56.00" y="220.48" fill="#c89a6e">t</text>
-<text x="64.00" y="220.48" fill="#c89a6e">o</text>
-<text x="72.00" y="220.48" fill="#c89a6e">p</text>
+<text x="32.00" y="220.48" fill="#c89a6e">h</text>
+<text x="40.00" y="220.48" fill="#c89a6e">o</text>
+<text x="48.00" y="220.48" fill="#c89a6e">m</text>
+<text x="56.00" y="220.48" fill="#c89a6e">e</text>
 <text x="168.00" y="220.48" fill="#6b7280">4</text>
 <text x="24.00" y="236.48" fill="#c89a6e">@</text>
-<text x="32.00" y="236.48" fill="#c89a6e">h</text>
-<text x="40.00" y="236.48" fill="#c89a6e">o</text>
-<text x="48.00" y="236.48" fill="#c89a6e">m</text>
-<text x="56.00" y="236.48" fill="#c89a6e">e</text>
-<text x="168.00" y="236.48" fill="#6b7280">3</text>
+<text x="32.00" y="236.48" fill="#c89a6e">l</text>
+<text x="40.00" y="236.48" fill="#c89a6e">a</text>
+<text x="48.00" y="236.48" fill="#c89a6e">p</text>
+<text x="56.00" y="236.48" fill="#c89a6e">t</text>
+<text x="64.00" y="236.48" fill="#c89a6e">o</text>
+<text x="72.00" y="236.48" fill="#c89a6e">p</text>
+<text x="168.00" y="236.48" fill="#6b7280">4</text>
 <text x="24.00" y="252.48" fill="#c89a6e">@</text>
 <text x="32.00" y="252.48" fill="#c89a6e">p</text>
 <text x="40.00" y="252.48" fill="#c89a6e">h</text>
@@ -871,5 +871,5 @@
 <text x="1000.00" y="508.48" fill="#6b7280">.</text>
 <text x="1008.00" y="508.48" fill="#6b7280">5</text>
 <text x="1016.00" y="508.48" fill="#6b7280">.</text>
-<text x="1024.00" y="508.48" fill="#6b7280">1</text>
+<text x="1024.00" y="508.48" fill="#6b7280">4</text>
 </svg>

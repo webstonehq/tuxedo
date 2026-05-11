@@ -1,6 +1,5 @@
 ---
 source: tests/snapshots.rs
-assertion_line: 216
 expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ done.txt  •  0 tasks  •  sort:compl DETAIL                           
@@ -34,4 +33,4 @@ expression: buffer_to_text(&buf)
                                                                                                     
                                                                                                     
                                                                                                     
- ARCHIVE   j/k · a add · x done · / search · ? help · u un0 archived · 2026-05-06 · tuxedo 2026.5.3
+ ARCHIVE   j/k · a add · x done · / search · ? help · u un0 archived · 2026-05-06 · tuxedo 2026.5.4

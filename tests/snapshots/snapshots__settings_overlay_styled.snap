@@ -33,4 +33,4 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
-{fg=#1a1d23 bg=#8aa9c9 mod=bold} SETTINGS {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}Esc back{/}{bg=#252a33}                                         {/}{fg=#6b7280 bg=#252a33}15 open · 2026-05-06 · tuxedo 2026.5.4 {/}
+{fg=#1a1d23 bg=#8aa9c9 mod=bold} SETTINGS {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}Esc back{/}{bg=#252a33}                                         {/}{fg=#6b7280 bg=#252a33}15 open · 2026-05-06 · tuxedo 2026.5.5 {/}

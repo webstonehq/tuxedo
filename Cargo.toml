@@ -1,6 +1,6 @@
 [package]
 name = "tuxedo"
-version = "2026.5.4"
+version = "2026.5.5"
 edition = "2024"
 
 [dependencies]

@@ -44,6 +44,12 @@ const FIXTURE_PATH: &str = "/tmp/tuxedo-snapshot.txt";
 const FIXTURE_CONFIG_PATH: &str = "/tmp/tuxedo-snapshot.toml";
 
 fn make_app() -> App {
+    // Seed the fixture file on disk so any snapshot test that exercises a
+    // mutation (which calls `check_external_changes` and compares disk vs
+    // `last_disk`) sees a consistent state. The file contents match what
+    // we hand `App::new` as the in-memory body, so the comparison passes
+    // without forcing a reload.
+    std::fs::write(FIXTURE_PATH, sample::TODO_RAW).expect("seed fixture file");
     let mut app = App::new(
         PathBuf::from(FIXTURE_PATH),
         sample::TODO_RAW.to_string(),
@@ -319,6 +325,27 @@ fn insert_dialog() {
     app.mode = Mode::Insert;
     app.draft_set("(A) Buy milk +groceries @errands due:2026-05-10".to_string());
     snapshot_app("insert_dialog", &app);
+}
+
+#[test]
+fn insert_dialog_after_nl_parse() {
+    // Type a prose buffer, press Enter once: the NL pre-pass rewrites the
+    // draft to canonical todo.txt and surfaces a flash asking the user to
+    // confirm. Mode stays in Insert so the user can review/edit.
+    let mut app = make_app();
+    app.mode = Mode::Insert;
+    app.draft_set(
+        "Pay rent monthly on the first of the month, show the todo 3 days before the due date. \
+         It's part of project home and context bank"
+            .to_string(),
+    );
+    let outcome = app.add_from_draft();
+    // The snapshot captures the visible buffer + flash; checking it first
+    // surfaces *what* changed if the rewrite drifts. The outcome assertion
+    // runs after as a contract check on AddOutcome::Parsed — a regression
+    // either way will fail the test.
+    snapshot_app("insert_dialog_after_nl_parse", &app);
+    assert_eq!(outcome, tuxedo::app::AddOutcome::Parsed);
 }
 
 #[test]

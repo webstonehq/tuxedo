@@ -1,10 +1,7 @@
-(B) 2026-05-07 Natural-language quick-add parse dates contexts and recurrence from input +tuxedo @dev
 (C) 2026-05-07 Calendar week strip view with reschedule keys +tuxedo @dev
 (B) 2026-05-07 Hook scripts for pre and post add complete and delete events +tuxedo @dev
 (B) 2026-05-11 Natural-language relative dates in due and threshold fields tomorrow fri plus3d eom +tuxedo @dev
 (B) 2026-05-11 Snooze and postpone keys to bump due by day week month with bulk support +tuxedo @dev
-(A) 2026-05-11 CLI subcommands for shell pipelines. new, ls, done, today, etc +tuxedo @dev
 (C) 2026-05-11 Multi-file workspace config and quick file switcher +tuxedo @dev
 (C) 2026-05-11 Inbox capture mode and separate triage review mode +tuxedo @dev
 (C) 2026-05-11 Repeat-last-action dot key and saved filter marks +tuxedo @dev
-x 2026-05-11 2026-05-11 Scroll the main list of todos @bug

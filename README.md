@@ -18,6 +18,7 @@ brew install webstonehq/tap/tuxedo
 ## Highlights
 
 - **Pure todo.txt.** Reads and writes the [standard format](https://github.com/todotxt/todo.txt) — every line is plain text you can edit with anything else.
+- **Natural-language add.** Type prose into the add prompt — `Pay rent monthly on the first, show 3 days before due, project home` — and tuxedo rewrites it to canonical todo.txt for you to review and save. Local, offline, no AI service.
 - **Vim keys, no surprises.** `j` / `k` to move, `dd` to delete, `gg` / `G` to jump, `u` to undo (50 levels), chord prompts (`gg`, `dd`, `fp`, `fc`) with a 600 ms window.
 - **Command palette.** `:` or `Ctrl-P` opens a fuzzy palette over every action — type a few letters, hit Enter. Same matcher as `/` search, ranked so start-of-label hits beat word-boundary hits beat mid-word hits.
 - **Atomic, sync-friendly writes.** Every change goes through write-temp-then-rename. If another process — Dropbox, an editor, a script — modifies the file, tuxedo reloads on the next keypress (or within ~250 ms while idle) and flashes a notice.
@@ -221,6 +222,34 @@ Recurring example:
 
 Pressing `x` on the line above marks the original complete *and* inserts
 `2026-05-09 Pay rent due:2026-06-15 rec:+1m`. `u` undoes both at once.
+
+## Natural-language add
+
+Press `n` to open the add prompt. Type the task in plain English. When the
+buffer contains recognized phrases (dates, weekdays, recurrence, project /
+context names, priority), pressing Enter rewrites the draft into canonical
+todo.txt — review or tweak it, then Enter again to save.
+
+| What you type | What lands in the draft |
+| --- | --- |
+| `Pay rent monthly on the first of the month, show the todo 3 days before the due date. It's part of project home and context bank` | `Pay rent +home @bank due:2026-06-01 rec:+1m t:-3d` |
+| `Buy milk tomorrow` | `Buy milk due:2026-05-12` |
+| `Call mom every week starting Friday for project family` | `Call mom +family due:2026-05-15 rec:+1w` |
+| `Submit timesheet every other friday show 1 day before` | `Submit timesheet due:2026-05-15 rec:+2w t:-1d` |
+| `Daily standup high priority` | `(A) standup rec:+1d` |
+| `Annual review April 15 +work @office` | `Annual review +work @office due:2027-04-15` |
+
+Recognized vocabulary:
+
+- **Dates** — `today`, `tonight`, `tomorrow`, `yesterday`, weekdays (`monday` / `mon` …), months (`april 15`, `15th of april`), `in 3 days`, `the first of the month`, ISO `2026-05-15`.
+- **Recurrence** — `daily`, `weekly`, `biweekly`, `monthly`, `yearly`, `annually`, `every monday`, `every 2 weeks`, `every other friday`, `every business day`.
+- **Threshold** — `show 3 days before due`, `2 weeks before due`.
+- **Projects / contexts** — prose form `project home` and `context bank`, or the standard `+home` / `@bank` sigils.
+- **Priority** — `high priority` → A, `medium priority` → B, `low priority` → C, or `priority A`.
+
+Parsing is rule-based and runs locally — no network calls, no API key. If
+the buffer already contains a `due:`, `rec:`, or `t:` token, tuxedo assumes
+you've typed canonical form and saves it directly on the first Enter.
 
 ## Configuration
 

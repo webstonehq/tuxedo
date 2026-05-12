@@ -41,7 +41,8 @@ pub use palette::CommandPaletteState;
 pub use prefs::{Layout, Prefs};
 pub use selection::Selection;
 pub use types::{
-    AUTOCOMPLETE_CAP, Density, FLASH_TTL, Filter, LEADER_WINDOW, Mode, Sort, UNDO_LIMIT, View,
+    AUTOCOMPLETE_CAP, AddOutcome, Density, FLASH_TTL, Filter, LEADER_WINDOW, Mode, Sort,
+    UNDO_LIMIT, View,
 };
 pub use visibility::{GroupKey, ListDueBucket, ordered_unique};
 

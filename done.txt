@@ -23,3 +23,5 @@ x 2026-05-10 2026-05-09 Make fuzzy search actually fuzzy
 x 2026-05-11 2026-05-11 Add a screenshot of the command palette to the readme
 x 2026-05-11 2026-05-10 Consider a better UX for adding/editing key:value pairs
 x 2026-05-11 2026-05-11 Trigger relevant popups for due: and rec: and t:
+x 2026-05-11 2026-05-07 Natural-language quick-add parse dates contexts and recurrence from input +tuxedo @dev
+x 2026-05-11 2026-05-11 Scroll the main list of todos @bug

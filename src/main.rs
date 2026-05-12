@@ -10,7 +10,7 @@ use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use tuxedo::action::Action;
-use tuxedo::app::{App, Mode, OverlayKind, View};
+use tuxedo::app::{AddOutcome, App, Mode, OverlayKind, View};
 use tuxedo::config::Config;
 use tuxedo::{clipboard, sample, todo, ui, update};
 
@@ -325,14 +325,20 @@ fn handle_insert(app: &mut App, key: KeyEvent) {
             app.selection.exit_edit();
         }
         KeyCode::Enter => {
-            if app.selection.editing().is_some() {
+            let outcome = if app.selection.editing().is_some() {
                 app.save_edit();
+                AddOutcome::Saved
             } else {
-                app.add_from_draft();
+                app.add_from_draft()
+            };
+            // `Parsed` means the NL parser rewrote the draft into canonical
+            // todo.txt and is asking the user to confirm — stay in Insert so
+            // they can review/edit before a second Enter saves.
+            if !matches!(outcome, AddOutcome::Parsed) {
+                app.mode = Mode::Normal;
+                app.draft_clear();
+                app.selection.exit_edit();
             }
-            app.mode = Mode::Normal;
-            app.draft_clear();
-            app.selection.exit_edit();
         }
         _ => {
             let before = app.draft.text().len();

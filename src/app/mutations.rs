@@ -1,4 +1,4 @@
-use super::App;
+use super::{AddOutcome, App};
 use crate::recurrence::{self, RecSpec};
 use crate::todo::{self, TagError};
 
@@ -94,14 +94,37 @@ impl App {
         self.clamp_cursor();
     }
 
-    pub fn add_from_draft(&mut self) {
+    pub fn add_from_draft(&mut self) -> AddOutcome {
         let mut text = self.draft.text().trim().to_string();
         if text.is_empty() {
-            return;
+            return AddOutcome::Empty;
         }
         if !self.check_external_changes() {
-            return;
+            return AddOutcome::Invalid;
         }
+
+        // Natural-language pre-pass. If the buffer reads like prose and the
+        // parser extracted anything structured, rewrite the draft to canonical
+        // todo.txt and bail before push_history — the actual save happens on
+        // the user's *next* Enter through this same function, which by then
+        // sees the canonical form and falls through to the parse path below.
+        if crate::nl::looks_like_natural_language(&text)
+            && let Ok(today) = chrono::NaiveDate::parse_from_str(&self.today, "%Y-%m-%d")
+            && let Some(parsed) = crate::nl::try_parse(&text, today)
+        {
+            let canonical = crate::nl::format_as_todo_txt(&parsed);
+            if canonical != text {
+                let body_was_filled = !parsed.body.trim().is_empty();
+                self.draft_set(canonical);
+                if body_was_filled {
+                    self.flash("parsed natural language; press Enter to save");
+                } else {
+                    self.flash("parsed; please edit the body, then Enter to save");
+                }
+                return AddOutcome::Parsed;
+            }
+        }
+
         self.push_history();
         if !todo::starts_with_priority(&text)
             && !todo::starts_with_iso_date(&text)
@@ -115,9 +138,11 @@ impl App {
                 self.flash("added");
                 self.persist();
                 self.recompute_visible();
+                AddOutcome::Saved
             }
             Err(e) => {
                 self.flash(format!("invalid: {e}"));
+                AddOutcome::Invalid
             }
         }
     }
@@ -412,5 +437,72 @@ mod tests {
         assert_eq!(app.tasks[0].contexts, vec!["home"]);
         assert_eq!(app.tasks[0].raw, "a @home");
         assert_eq!(app.flash_active(), Some("invalid context name"));
+    }
+
+    #[test]
+    fn add_from_draft_rewrites_nl_prose_into_canonical_draft() {
+        // Prose buffer triggers the NL pre-pass: draft is rewritten to
+        // canonical todo.txt, *no* task is appended yet, and the caller
+        // receives `Parsed` so it can keep Insert mode open.
+        let mut app = build_app("");
+        app.draft_set(
+            "Pay rent monthly on the first of the month, show the todo 3 days before the due date. \
+             It's part of project home and context bank"
+                .into(),
+        );
+        let outcome = app.add_from_draft();
+        assert_eq!(outcome, crate::app::AddOutcome::Parsed);
+        assert_eq!(app.tasks.len(), 0);
+        // today in test_support is 2026-05-06; "first of the month" rolls
+        // forward to 2026-06-01 because 2026-05-01 < today.
+        assert_eq!(
+            app.draft.text(),
+            "Pay rent +home @bank due:2026-06-01 rec:+1m t:-3d"
+        );
+        assert_eq!(
+            app.flash_active(),
+            Some("parsed natural language; press Enter to save")
+        );
+    }
+
+    #[test]
+    fn add_from_draft_second_call_saves_canonical_form() {
+        // After the NL rewrite, the draft contains canonical todo.txt. The
+        // second Enter falls through detection (due:/rec:/t: are present) and
+        // saves through the normal path.
+        let mut app = build_app("");
+        app.draft_set("Buy milk tomorrow".into());
+        assert_eq!(app.add_from_draft(), crate::app::AddOutcome::Parsed);
+        assert_eq!(app.tasks.len(), 0);
+        // Second call on the now-canonical draft.
+        let outcome = app.add_from_draft();
+        assert_eq!(outcome, crate::app::AddOutcome::Saved);
+        assert_eq!(app.tasks.len(), 1);
+        assert!(app.tasks[0].raw.contains("Buy milk"));
+        assert_eq!(app.tasks[0].due.as_deref(), Some("2026-05-07"));
+    }
+
+    #[test]
+    fn add_from_draft_already_structured_saves_on_first_enter() {
+        // Input already contains a due: token, so detection refuses to
+        // re-interpret it as prose. Single Enter saves directly.
+        let mut app = build_app("");
+        app.draft_set("Pay rent due:2026-06-01 rec:+1m +home".into());
+        let outcome = app.add_from_draft();
+        assert_eq!(outcome, crate::app::AddOutcome::Saved);
+        assert_eq!(app.tasks.len(), 1);
+        assert_eq!(app.tasks[0].due.as_deref(), Some("2026-06-01"));
+        assert_eq!(app.tasks[0].rec.as_deref(), Some("+1m"));
+    }
+
+    #[test]
+    fn add_from_draft_plain_words_save_on_first_enter() {
+        // No NL trigger words → detection returns false → saves immediately.
+        let mut app = build_app("");
+        app.draft_set("Buy milk".into());
+        let outcome = app.add_from_draft();
+        assert_eq!(outcome, crate::app::AddOutcome::Saved);
+        assert_eq!(app.tasks.len(), 1);
+        assert!(app.tasks[0].raw.ends_with("Buy milk"));
     }
 }

@@ -7,6 +7,18 @@ pub const FLASH_TTL: Duration = Duration::from_millis(1400);
 pub const UNDO_LIMIT: usize = 50;
 pub const AUTOCOMPLETE_CAP: usize = 8;
 
+/// Outcome of `add_from_draft`. The Enter handler in `main.rs` uses this to
+/// decide whether to exit Insert mode: `Parsed` means the NL pre-pass
+/// rewrote the buffer but did not save, so the user should stay in Insert
+/// to review/edit before pressing Enter a second time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AddOutcome {
+    Saved,
+    Parsed,
+    Empty,
+    Invalid,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Normal,

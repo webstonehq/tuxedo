@@ -19,3 +19,10 @@ run = "INSTA_UPDATE=always cargo test --test snapshots --locked"
 
 [tasks.screenshots]
 run = "cargo run --example screenshots"
+
+[tasks.demo]
+description = "Record the README hero GIF via vhs (requires vhs on PATH)."
+run = [
+    "cargo build --release",
+    "vhs docs/demo.tape",
+]

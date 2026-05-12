@@ -26,3 +26,4 @@ x 2026-05-11 2026-05-11 Trigger relevant popups for due: and rec: and t:
 x 2026-05-11 2026-05-07 Natural-language quick-add parse dates contexts and recurrence from input +tuxedo @dev
 x 2026-05-11 2026-05-11 Scroll the main list of todos @bug
 x 2026-05-12 2026-05-12 Fix issue #1: Editing exisitng task with non-ASCII characters rasises error (shut down app)
+x 2026-05-12 2026-05-12 Replace the first screenshot in the readme with an animated gif

@@ -13,7 +13,7 @@ brew install webstonehq/tap/tuxedo
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
 [![Rust](https://img.shields.io/badge/rust-2024-orange.svg?logo=rust)](https://www.rust-lang.org)
 
-![list view](docs/screenshots/list.svg)
+![tuxedo demo](docs/demo.gif)
 
 ## Highlights
 
@@ -32,15 +32,18 @@ brew install webstonehq/tap/tuxedo
 | | |
 | --- | --- |
 | **Empty state** • cell-bowtie mark and quick-start when the file has no tasks | ![empty](docs/screenshots/empty.svg) |
+| **List** • list of todos, optionally grouped | ![empty](docs/screenshots/list.svg) |
 | **Archive** • completed tasks grouped by completion date | ![archive](docs/screenshots/archive.svg) |
 | **Filter sidebar active** • `fp` cycles projects with j/k, `fc` cycles contexts | ![filter](docs/screenshots/filter.svg) |
 | **Command palette** • `:` or `Ctrl-P` opens a fuzzy palette over every action | ![command palette](docs/screenshots/command-palette.svg) |
 | **Help** • `?` opens the full keybindings overlay | ![help](docs/screenshots/help.svg) |
 
 <details>
-    <summary>How to generate screenshots</summary>
-    <p>The screenshots above are checked-in SVGs. Regenerate them with:</p>
+    <summary>How to generate the screenshots and demo</summary>
+    <p>The screenshots in the table above are checked-in SVGs. Regenerate them with:</p>
     <pre>mise run screenshots</pre>
+    <p>The hero GIF at the top is recorded with <a href="https://github.com/charmbracelet/vhs">vhs</a> from <code>docs/demo.tape</code>. Regenerate it with:</p>
+    <pre>mise run demo</pre>
 </details>
 
 ## Themes

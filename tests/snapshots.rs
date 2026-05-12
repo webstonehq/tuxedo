@@ -20,8 +20,12 @@ use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use ratatui::style::{Color, Modifier};
 
-use tuxedo::app::{App, Density, Mode, View};
+use tuxedo::app::{
+    App, BuilderField, CalendarState, CalendarTarget, Density, DraftOverlay, Mode,
+    PriorityChooserState, RecurrenceBuilderState, SlashMenuState, View,
+};
 use tuxedo::config::Config;
+use tuxedo::recurrence::RecUnit;
 use tuxedo::sample;
 use tuxedo::ui;
 
@@ -315,6 +319,71 @@ fn insert_dialog() {
     app.mode = Mode::Insert;
     app.draft_set("(A) Buy milk +groceries @errands due:2026-05-10".to_string());
     snapshot_app("insert_dialog", &app);
+}
+
+#[test]
+fn insert_slash_menu() {
+    // Mirrors mockup 1: slash menu open after the user has typed text plus
+    // tags and is now picking metadata via `/`.
+    let mut app = make_app();
+    app.mode = Mode::Insert;
+    app.draft_set("Schedule team offsite +work @phone /".to_string());
+    // The `/` lives at the last byte; install the overlay state that
+    // `maybe_open_slash_menu` would normally produce.
+    let anchor = app.draft.text().len() - 1;
+    app.draft
+        .set_overlay(Some(DraftOverlay::SlashMenu(SlashMenuState {
+            anchor,
+            selected: 0,
+        })));
+    snapshot_app("insert_slash_menu", &app);
+}
+
+#[test]
+fn insert_calendar_for_due() {
+    // Mirrors mockup 2: calendar picker open after the user chose /due. The
+    // focused date is one ahead of today so the focus/today highlights are
+    // distinguishable in the snapshot.
+    let mut app = make_app();
+    app.mode = Mode::Insert;
+    app.draft_set("(A) Renew passport before summer trip +travel @errands".to_string());
+    app.draft
+        .set_overlay(Some(DraftOverlay::Calendar(CalendarState {
+            target: CalendarTarget::Due,
+            focused: chrono::NaiveDate::from_ymd_opt(2026, 5, 7).expect("static date"),
+            anchor: None,
+        })));
+    snapshot_app("insert_calendar_for_due", &app);
+}
+
+#[test]
+fn insert_recurrence_builder() {
+    // Mirrors mockup 3: recurrence builder open after /rec.
+    let mut app = make_app();
+    app.mode = Mode::Insert;
+    app.draft_set("Water the plants +home".to_string());
+    app.draft.set_overlay(Some(DraftOverlay::RecurrenceBuilder(
+        RecurrenceBuilderState {
+            interval: 1,
+            unit: RecUnit::Week,
+            strict: true,
+            field: BuilderField::Interval,
+            anchor: None,
+        },
+    )));
+    snapshot_app("insert_recurrence_builder", &app);
+}
+
+#[test]
+fn insert_priority_chooser() {
+    let mut app = make_app();
+    app.mode = Mode::Insert;
+    app.draft_set("Buy milk +groceries".to_string());
+    app.draft
+        .set_overlay(Some(DraftOverlay::PriorityChooser(PriorityChooserState {
+            selected: 0,
+        })));
+    snapshot_app("insert_priority_chooser", &app);
 }
 
 #[test]

@@ -106,7 +106,12 @@ pub fn draw(frame: &mut Frame, app: &App) {
             let dlg = centered_in(area, dlg_w, DIALOG_H);
             frame.render_widget(Clear, dlg);
             dialog::render(frame, dlg, app);
-            dialog::render_autocomplete(frame, dlg, area, app);
+            // At most one overlay shows at a time. The autocomplete popup is
+            // suppressed while a metadata picker is open so we don't stack
+            // two floating panels in the same spot.
+            if !dialog::render_overlay(frame, dlg, area, app) {
+                dialog::render_autocomplete(frame, dlg, area, app);
+            }
         }
         Mode::Help => {
             let h: u16 = area.height.saturating_sub(3).min(HELP_MAX_H);

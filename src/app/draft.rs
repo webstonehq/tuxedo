@@ -1,4 +1,5 @@
 use super::App;
+use super::draft_overlay::DraftOverlay;
 
 /// Byte offset within a draft `String`. Construction enforces UTF-8 char-boundary
 /// landing, so cursor positions can't be left mid-codepoint by direct assignment.
@@ -34,6 +35,10 @@ pub struct DraftState {
     cursor: DraftCursor,
     autocomplete_selected: usize,
     autocomplete_suppressed: bool,
+    /// Open metadata picker (slash menu, calendar, recurrence builder,
+    /// priority chooser). At most one at a time. `None` is the default — the
+    /// user is just editing text.
+    overlay: Option<DraftOverlay>,
 }
 
 impl DraftState {
@@ -53,10 +58,23 @@ impl DraftState {
         self.autocomplete_suppressed
     }
 
+    pub fn overlay(&self) -> Option<&DraftOverlay> {
+        self.overlay.as_ref()
+    }
+
+    pub fn overlay_mut(&mut self) -> Option<&mut DraftOverlay> {
+        self.overlay.as_mut()
+    }
+
+    pub fn set_overlay(&mut self, overlay: Option<DraftOverlay>) {
+        self.overlay = overlay;
+    }
+
     pub fn clear(&mut self) {
         self.text.clear();
         self.cursor = DraftCursor::zero();
         self.reset_autocomplete();
+        self.overlay = None;
     }
 
     /// Replace the text and park the cursor at the end. Used when entering
@@ -65,6 +83,7 @@ impl DraftState {
         self.cursor = DraftCursor::at_end(&s);
         self.text = s;
         self.reset_autocomplete();
+        self.overlay = None;
     }
 
     pub fn insert_char(&mut self, c: char) {

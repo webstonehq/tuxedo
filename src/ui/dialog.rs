@@ -4,7 +4,9 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
-use crate::app::{self, App, Mode, TokenKind};
+use crate::app::{
+    self, App, BuilderField, CalendarTarget, DraftOverlay, Mode, REC_UNIT_ORDER, TokenKind,
+};
 use crate::theme::Theme;
 
 /// Classifier output: byte range + what kind of token lives there. Segments
@@ -549,6 +551,642 @@ pub fn render_autocomplete(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App
         Paragraph::new(lines).style(Style::default().bg(theme.panel)),
         area,
     );
+}
+
+/// Anchor a popup `popup_w` × `popup_h` cells just below `dlg`, clamping into
+/// `screen` so it stays visible at the bottom/right edges. Mirrors the
+/// `render_autocomplete` placement code so every overlay floats in the same
+/// place.
+fn anchor_below_dialog(dlg: Rect, screen: Rect, popup_w: u16, popup_h: u16) -> Rect {
+    let mut popup_x = dlg.x + 4;
+    let mut popup_y = dlg.y + dlg.height;
+    let max_x = screen.x + screen.width.saturating_sub(popup_w);
+    let max_y = screen.y + screen.height.saturating_sub(popup_h);
+    if popup_x > max_x {
+        popup_x = max_x;
+    }
+    if popup_y > max_y {
+        popup_y = max_y;
+    }
+    Rect {
+        x: popup_x,
+        y: popup_y,
+        width: popup_w,
+        height: popup_h,
+    }
+}
+
+/// Dispatch to the right per-overlay render function. Returns true when an
+/// overlay rendered, so the caller can skip the regular autocomplete popup.
+pub fn render_overlay(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) -> bool {
+    match app.draft.overlay() {
+        Some(DraftOverlay::SlashMenu(_)) => {
+            render_slash_menu(frame, dlg, screen, app);
+            true
+        }
+        Some(DraftOverlay::Calendar(_)) => {
+            render_calendar(frame, dlg, screen, app);
+            true
+        }
+        Some(DraftOverlay::RecurrenceBuilder(_)) => {
+            render_recurrence_builder(frame, dlg, screen, app);
+            true
+        }
+        Some(DraftOverlay::PriorityChooser(_)) => {
+            render_priority_chooser(frame, dlg, screen, app);
+            true
+        }
+        None => false,
+    }
+}
+
+fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
+    let theme = app.theme();
+    let matches = app.slash_matches();
+    if matches.is_empty() {
+        return;
+    }
+    let selected = app.slash_selected();
+
+    // Width: longest label + spacer + longest description + spacer + cmd.
+    let label_w = matches
+        .iter()
+        .map(|e| e.label.chars().count())
+        .max()
+        .unwrap_or(0);
+    let desc_w = matches
+        .iter()
+        .map(|e| e.description.chars().count())
+        .max()
+        .unwrap_or(0);
+    let cmd_w = matches
+        .iter()
+        .map(|e| e.cmd.chars().count())
+        .max()
+        .unwrap_or(0);
+    let content_w = label_w + 4 + desc_w + 4 + cmd_w + 4; // padding/spacers
+    // Wider than the dialog on purpose so the footer hint fits — anchor
+    // placement clamps to the screen edge below.
+    let popup_w: u16 = (content_w as u16).max(60).min(screen.width.max(40));
+    // Title row + entries + spacer + footer + 2 borders.
+    let popup_h: u16 = matches.len() as u16 + 5;
+
+    let area = anchor_below_dialog(dlg, screen, popup_w, popup_h);
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border).bg(theme.panel))
+        .style(Style::default().bg(theme.panel));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(
+        Line::from(vec![
+            Span::raw(" "),
+            Span::styled(
+                "ATTACH METADATA",
+                Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .style(Style::default().bg(theme.panel)),
+    );
+    for (i, entry) in matches.iter().enumerate() {
+        let is_sel = i == selected;
+        let bg = if is_sel { theme.cursor } else { theme.panel };
+        let label_style = if is_sel {
+            Style::default()
+                .fg(theme.fg)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.fg).bg(bg)
+        };
+        let desc_style = Style::default().fg(theme.dim).bg(bg);
+        let cmd_style = Style::default().fg(theme.dim).bg(bg);
+
+        // Right-align the /cmd by padding between description and cmd.
+        let label_w_pad = label_w + 2;
+        let desc_w_pad = desc_w + 2;
+        let total = inner.width as usize;
+        let used = 2 + label_w_pad + desc_w_pad + entry.cmd.chars().count() + 1;
+        let pad = total.saturating_sub(used);
+
+        let label_padded = pad_to(entry.label, label_w_pad);
+        let desc_padded = pad_to(entry.description, desc_w_pad);
+        lines.push(
+            Line::from(vec![
+                Span::styled("  ", Style::default().bg(bg)),
+                Span::styled(label_padded, label_style),
+                Span::styled(desc_padded, desc_style),
+                Span::styled(" ".repeat(pad), Style::default().bg(bg)),
+                Span::styled(entry.cmd.to_string(), cmd_style),
+                Span::styled(" ", Style::default().bg(bg)),
+            ])
+            .style(Style::default().bg(bg)),
+        );
+    }
+    lines.push(Line::raw("").style(Style::default().bg(theme.panel)));
+    lines.push(slash_footer(theme));
+
+    frame.render_widget(
+        Paragraph::new(lines).style(Style::default().bg(theme.panel)),
+        inner,
+    );
+}
+
+fn pad_to(s: &str, width: usize) -> String {
+    let n = s.chars().count();
+    if n >= width {
+        s.to_string()
+    } else {
+        let mut out = String::with_capacity(s.len() + (width - n));
+        out.push_str(s);
+        for _ in n..width {
+            out.push(' ');
+        }
+        out
+    }
+}
+
+fn slash_footer<'a>(theme: &Theme) -> Line<'a> {
+    Line::from(vec![
+        Span::raw("  "),
+        Span::styled(
+            "↑↓",
+            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" pick · ", Style::default().fg(theme.dim)),
+        Span::styled(
+            "Enter",
+            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" insert · ", Style::default().fg(theme.dim)),
+        Span::styled(
+            "Esc",
+            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" dismiss · type to filter", Style::default().fg(theme.dim)),
+    ])
+    .style(Style::default().bg(theme.panel))
+}
+
+fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
+    let theme = app.theme();
+    let Some(state) = app.calendar_state() else {
+        return;
+    };
+    let popup_w: u16 = 50u16.min(screen.width.max(40));
+    let popup_h: u16 = 13;
+    let area = anchor_below_dialog(dlg, screen, popup_w, popup_h);
+    frame.render_widget(Clear, area);
+    let label = match state.target {
+        CalendarTarget::Due => "DUE",
+        CalendarTarget::Threshold => "THRESHOLD",
+    };
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border).bg(theme.panel))
+        .title(Line::from(Span::styled(
+            format!(" {label} "),
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )))
+        .style(Style::default().bg(theme.panel));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    use chrono::{Datelike, NaiveDate};
+    let focused = state.focused;
+    let today = NaiveDate::parse_from_str(&app.today, "%Y-%m-%d").ok();
+    let first_of_month =
+        NaiveDate::from_ymd_opt(focused.year(), focused.month(), 1).unwrap_or(focused);
+    // Sunday-leading week: weekday().num_days_from_sunday() ∈ 0..7.
+    let lead = first_of_month.weekday().num_days_from_sunday() as i64;
+    let days_in_month = days_in_month(focused.year(), focused.month());
+
+    let mut lines: Vec<Line> = Vec::new();
+    // Header: « Month YYYY »
+    let header = Line::from(vec![
+        Span::raw("  "),
+        Span::styled("‹  ", Style::default().fg(theme.dim)),
+        Span::styled(
+            format!("{} {}", month_name(focused.month()), focused.year()),
+            Style::default().fg(theme.fg).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("  ›", Style::default().fg(theme.dim)),
+    ])
+    .style(Style::default().bg(theme.panel));
+    lines.push(header);
+    // Weekday row.
+    let dow = Line::from(vec![
+        Span::raw("  "),
+        Span::styled(" S  M  T  W  T  F  S ", Style::default().fg(theme.dim)),
+    ])
+    .style(Style::default().bg(theme.panel));
+    lines.push(dow);
+    // Up to 6 week rows. Break before any all-blank row so February-style
+    // months don't leave a trailing empty week.
+    let mut day = 1i64;
+    for _week in 0..6 {
+        if day - lead >= days_in_month as i64 {
+            break;
+        }
+        let mut spans: Vec<Span> = vec![Span::raw("  ")];
+        for col in 0..7 {
+            let pos = day - lead + col;
+            if pos < 0 || pos >= days_in_month as i64 {
+                spans.push(Span::styled("    ", Style::default().bg(theme.panel)));
+            } else {
+                let n = (pos + 1) as u32;
+                let cell = NaiveDate::from_ymd_opt(focused.year(), focused.month(), n);
+                let is_today = today == cell;
+                let is_focus = focused.day() == n;
+                let mut style = Style::default().fg(theme.fg).bg(theme.panel);
+                if is_today {
+                    style = style.fg(theme.today);
+                }
+                if is_focus {
+                    style = style.bg(theme.cursor).add_modifier(Modifier::BOLD);
+                }
+                spans.push(Span::styled(format!(" {:>2} ", n), style));
+            }
+        }
+        lines.push(Line::from(spans).style(Style::default().bg(theme.panel)));
+        day += 7;
+    }
+    // Spacer + focused-date label.
+    lines.push(Line::raw("").style(Style::default().bg(theme.panel)));
+    lines.push(
+        Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                format_focused(focused),
+                Style::default().fg(theme.due).add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .style(Style::default().bg(theme.panel)),
+    );
+    lines.push(calendar_footer(theme));
+
+    frame.render_widget(
+        Paragraph::new(lines).style(Style::default().bg(theme.panel)),
+        inner,
+    );
+}
+
+fn calendar_footer<'a>(theme: &Theme) -> Line<'a> {
+    let chip = |k: &'static str, label: &'static str| -> Vec<Span<'a>> {
+        vec![
+            Span::styled(
+                k,
+                Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(format!(" {label} "), Style::default().fg(theme.dim)),
+        ]
+    };
+    let mut spans = vec![Span::raw("  ")];
+    spans.extend(chip("t", "today"));
+    spans.push(Span::styled("· ", Style::default().fg(theme.dim)));
+    spans.extend(chip("T", "tmw"));
+    spans.push(Span::styled("· ", Style::default().fg(theme.dim)));
+    spans.extend(chip("w", "+1w"));
+    spans.push(Span::styled("· ", Style::default().fg(theme.dim)));
+    spans.extend(chip("m", "+1mo"));
+    spans.push(Span::styled("· ", Style::default().fg(theme.dim)));
+    spans.extend(chip("x", "clear"));
+    Line::from(spans).style(Style::default().bg(theme.panel))
+}
+
+fn render_recurrence_builder(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
+    let theme = app.theme();
+    let Some(state) = app.recurrence_state() else {
+        return;
+    };
+    let popup_w: u16 = 60;
+    let popup_h: u16 = 9;
+    let area = anchor_below_dialog(dlg, screen, popup_w, popup_h);
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border).bg(theme.panel))
+        .title(Line::from(Span::styled(
+            " ↻ REPEAT ",
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )))
+        .style(Style::default().bg(theme.panel));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let pill = |label: &str, focused: bool, theme: &Theme| -> Span<'static> {
+        let bg = if focused { theme.cursor } else { theme.panel };
+        let fg = theme.fg;
+        let m = if focused {
+            Modifier::BOLD
+        } else {
+            Modifier::empty()
+        };
+        Span::styled(
+            format!(" {label} "),
+            Style::default().fg(fg).bg(bg).add_modifier(m),
+        )
+    };
+
+    let interval_focus = state.field == BuilderField::Interval;
+    let unit_focus = state.field == BuilderField::Unit;
+    let mode_focus = state.field == BuilderField::Mode;
+
+    // every {N} day/business/week/month/year — single source of truth in
+    // REC_UNIT_ORDER so the cycle and render can't drift apart.
+    let mut every_spans: Vec<Span> = vec![
+        Span::raw("  "),
+        Span::styled("every ", Style::default().fg(theme.dim)),
+        pill(&state.interval.to_string(), interval_focus, theme),
+        Span::raw("  "),
+    ];
+    for unit in REC_UNIT_ORDER.iter().copied() {
+        let sel = state.unit == unit;
+        let label = match unit {
+            crate::recurrence::RecUnit::Day => "day",
+            crate::recurrence::RecUnit::Week => "week",
+            crate::recurrence::RecUnit::Month => "month",
+            crate::recurrence::RecUnit::Year => "year",
+            crate::recurrence::RecUnit::BusinessDay => "business",
+        };
+        let focused = unit_focus && sel;
+        let style = if sel {
+            Style::default()
+                .fg(theme.fg)
+                .bg(if focused { theme.accent } else { theme.cursor })
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.dim).bg(theme.panel)
+        };
+        every_spans.push(Span::styled(format!(" {label} "), style));
+    }
+    let line1 = Line::from(every_spans).style(Style::default().bg(theme.panel));
+
+    // mode  strict / after-complete    next: ...
+    let strict_label = " strict ";
+    let after_label = " after-complete ";
+    let mode_bg_strict = if state.strict {
+        theme.cursor
+    } else {
+        theme.panel
+    };
+    let mode_bg_after = if !state.strict {
+        theme.cursor
+    } else {
+        theme.panel
+    };
+    let mode_emph_strict = if mode_focus && state.strict {
+        theme.accent
+    } else {
+        mode_bg_strict
+    };
+    let mode_emph_after = if mode_focus && !state.strict {
+        theme.accent
+    } else {
+        mode_bg_after
+    };
+    let mut line2_spans: Vec<Span> = vec![
+        Span::raw("  "),
+        Span::styled("mode  ", Style::default().fg(theme.dim)),
+        Span::styled(
+            strict_label,
+            Style::default()
+                .fg(theme.fg)
+                .bg(mode_emph_strict)
+                .add_modifier(if state.strict {
+                    Modifier::BOLD
+                } else {
+                    Modifier::empty()
+                }),
+        ),
+        Span::raw(" "),
+        Span::styled(
+            after_label,
+            Style::default()
+                .fg(theme.fg)
+                .bg(mode_emph_after)
+                .add_modifier(if !state.strict {
+                    Modifier::BOLD
+                } else {
+                    Modifier::empty()
+                }),
+        ),
+    ];
+    let next = crate::app::recurrence_next_preview(state, &app.today)
+        .map(format_focused)
+        .unwrap_or_else(|| "—".into());
+    let next_label = format!("next: {next}");
+    // Measure the already-built left side instead of hardcoding a width that
+    // silently drifts when the mode-line copy changes. The `+ 2` keeps a
+    // 2-cell margin from the right border when there's room.
+    let left_width: usize = line2_spans.iter().map(|s| s.content.chars().count()).sum();
+    let next_pad =
+        (inner.width as usize).saturating_sub(left_width + next_label.chars().count() + 2);
+    line2_spans.push(Span::styled(
+        " ".repeat(next_pad),
+        Style::default().bg(theme.panel),
+    ));
+    line2_spans.push(Span::styled(next_label, Style::default().fg(theme.dim)));
+    let line2 = Line::from(line2_spans).style(Style::default().bg(theme.panel));
+
+    let value = crate::app::format_rec_value(state);
+    let line_preview = Line::from(vec![
+        Span::raw("  "),
+        Span::styled("→ writes ", Style::default().fg(theme.dim)),
+        Span::styled(
+            format!("rec:{value}"),
+            Style::default().fg(theme.due).add_modifier(Modifier::BOLD),
+        ),
+    ])
+    .style(Style::default().bg(theme.panel));
+
+    let lines = vec![
+        Line::raw("").style(Style::default().bg(theme.panel)),
+        line1,
+        Line::raw("").style(Style::default().bg(theme.panel)),
+        line2,
+        Line::raw("").style(Style::default().bg(theme.panel)),
+        line_preview,
+        Line::raw("").style(Style::default().bg(theme.panel)),
+        rec_footer(theme),
+    ];
+
+    frame.render_widget(
+        Paragraph::new(lines).style(Style::default().bg(theme.panel)),
+        inner,
+    );
+}
+
+fn rec_footer<'a>(theme: &Theme) -> Line<'a> {
+    Line::from(vec![
+        Span::raw("  "),
+        Span::styled(
+            "hjkl",
+            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" move · ", Style::default().fg(theme.dim)),
+        Span::styled(
+            "+/-",
+            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" adjust · ", Style::default().fg(theme.dim)),
+        Span::styled(
+            "Enter",
+            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" save · ", Style::default().fg(theme.dim)),
+        Span::styled(
+            "Esc",
+            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" cancel", Style::default().fg(theme.dim)),
+    ])
+    .style(Style::default().bg(theme.panel))
+}
+
+fn render_priority_chooser(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
+    let theme = app.theme();
+    let Some(state) = app.priority_state() else {
+        return;
+    };
+    let popup_w: u16 = 24;
+    let popup_h: u16 = 8;
+    let area = anchor_below_dialog(dlg, screen, popup_w, popup_h);
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border).bg(theme.panel))
+        .title(Line::from(Span::styled(
+            " PRIORITY ",
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )))
+        .style(Style::default().bg(theme.panel));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let rows: [(u8, &str, ratatui::style::Color); 4] = [
+        (0, "(A)", theme.pri_a),
+        (1, "(B)", theme.pri_b),
+        (2, "(C)", theme.pri_c),
+        (3, "clear", theme.dim),
+    ];
+    let mut lines: Vec<Line> = Vec::new();
+    for (i, label, color) in rows {
+        let is_sel = state.selected == i;
+        let bg = if is_sel { theme.cursor } else { theme.panel };
+        let m = if is_sel {
+            Modifier::BOLD
+        } else {
+            Modifier::empty()
+        };
+        lines.push(
+            Line::from(vec![
+                Span::styled("  ", Style::default().bg(bg)),
+                Span::styled(
+                    label.to_string(),
+                    Style::default().fg(color).bg(bg).add_modifier(m),
+                ),
+                Span::styled(
+                    " ".repeat((inner.width as usize).saturating_sub(2 + label.chars().count())),
+                    Style::default().bg(bg),
+                ),
+            ])
+            .style(Style::default().bg(bg)),
+        );
+    }
+    lines.push(Line::raw("").style(Style::default().bg(theme.panel)));
+    lines.push(
+        Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                "jk",
+                Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" move · ", Style::default().fg(theme.dim)),
+            Span::styled(
+                "Enter",
+                Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" set", Style::default().fg(theme.dim)),
+        ])
+        .style(Style::default().bg(theme.panel)),
+    );
+
+    frame.render_widget(
+        Paragraph::new(lines).style(Style::default().bg(theme.panel)),
+        inner,
+    );
+}
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    use chrono::NaiveDate;
+    let (ny, nm) = if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    };
+    let first_next = NaiveDate::from_ymd_opt(ny, nm, 1);
+    let first_this = NaiveDate::from_ymd_opt(year, month, 1);
+    match (first_next, first_this) {
+        (Some(n), Some(t)) => (n - t).num_days() as u32,
+        _ => 30,
+    }
+}
+
+fn month_name(m: u32) -> &'static str {
+    match m {
+        1 => "January",
+        2 => "February",
+        3 => "March",
+        4 => "April",
+        5 => "May",
+        6 => "June",
+        7 => "July",
+        8 => "August",
+        9 => "September",
+        10 => "October",
+        11 => "November",
+        12 => "December",
+        _ => "?",
+    }
+}
+
+fn format_focused(d: chrono::NaiveDate) -> String {
+    use chrono::Datelike;
+    let dow = match d.weekday() {
+        chrono::Weekday::Mon => "Mon",
+        chrono::Weekday::Tue => "Tue",
+        chrono::Weekday::Wed => "Wed",
+        chrono::Weekday::Thu => "Thu",
+        chrono::Weekday::Fri => "Fri",
+        chrono::Weekday::Sat => "Sat",
+        chrono::Weekday::Sun => "Sun",
+    };
+    let mon = match d.month() {
+        1 => "Jan",
+        2 => "Feb",
+        3 => "Mar",
+        4 => "Apr",
+        5 => "May",
+        6 => "Jun",
+        7 => "Jul",
+        8 => "Aug",
+        9 => "Sep",
+        10 => "Oct",
+        11 => "Nov",
+        12 => "Dec",
+        _ => "?",
+    };
+    format!("{dow} {mon} {}", d.day())
 }
 
 fn hint_line<'a>(theme: &Theme) -> Line<'a> {

@@ -10,7 +10,7 @@ use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use tuxedo::action::Action;
-use tuxedo::app::{App, Mode, View};
+use tuxedo::app::{App, Mode, OverlayKind, View};
 use tuxedo::config::Config;
 use tuxedo::{clipboard, sample, todo, ui, update};
 
@@ -249,6 +249,39 @@ fn apply_to_draft(app: &mut App, key: KeyEvent) -> DraftEffect {
 }
 
 fn handle_insert(app: &mut App, key: KeyEvent) {
+    // Metadata-picker overlays take precedence. Non-slash overlays fully
+    // consume keys until accepted or cancelled; the slash menu intercepts
+    // only its navigation keys and lets text editing flow through so the
+    // filter text in the buffer keeps growing as the user types.
+    let overlay = app.draft.overlay().map(|o| o.kind());
+    match overlay {
+        Some(OverlayKind::Calendar) => {
+            handle_insert_calendar(app, key);
+            return;
+        }
+        Some(OverlayKind::RecurrenceBuilder) => {
+            handle_insert_rec_builder(app, key);
+            return;
+        }
+        Some(OverlayKind::PriorityChooser) => {
+            handle_insert_priority(app, key);
+            return;
+        }
+        Some(OverlayKind::SlashMenu) => {
+            if handle_insert_slash_menu(app, key) {
+                return;
+            }
+            // Fall through — let the key flow into the editor so filter chars
+            // can be typed/erased. We re-check the overlay invariants after.
+            apply_to_draft(app, key);
+            // Backspacing past the `/` closes the menu; typing more chars
+            // just narrows the filter.
+            app.slash_menu_revalidate();
+            return;
+        }
+        None => {}
+    }
+
     // Autocomplete bindings take precedence — only when the popup is visible.
     // Tab accepts; Enter falls through to save so the popup never swallows the
     // submit keystroke (e.g. when the typed token already matches an existing
@@ -302,8 +335,98 @@ fn handle_insert(app: &mut App, key: KeyEvent) {
             app.selection.exit_edit();
         }
         _ => {
-            apply_to_draft(app, key);
+            let before = app.draft.text().len();
+            let effect = apply_to_draft(app, key);
+            // `/` opens the slash menu; `:` after a recognised key
+            // (`due` / `t` / `rec`) opens the matching picker directly. Both
+            // detections run post-insert so they inspect what actually
+            // landed in the buffer.
+            if effect == DraftEffect::TextChanged && app.draft.text().len() > before {
+                match key.code {
+                    KeyCode::Char('/') => app.maybe_open_slash_menu(),
+                    KeyCode::Char(':') => app.maybe_open_kv_overlay(),
+                    _ => {}
+                }
+            }
         }
+    }
+}
+
+/// Slash-menu key handler. Returns `true` when the key was consumed by the
+/// menu (navigation, accept, dismiss); `false` when the key should fall
+/// through to text editing so filter chars are typed into the buffer.
+fn handle_insert_slash_menu(app: &mut App, key: KeyEvent) -> bool {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    match key.code {
+        KeyCode::Up => {
+            app.slash_step(false);
+            true
+        }
+        KeyCode::Down => {
+            app.slash_step(true);
+            true
+        }
+        KeyCode::Char('n') if ctrl => {
+            app.slash_step(true);
+            true
+        }
+        KeyCode::Char('p') if ctrl => {
+            app.slash_step(false);
+            true
+        }
+        KeyCode::Tab | KeyCode::Enter => {
+            app.slash_accept();
+            true
+        }
+        KeyCode::Esc => {
+            app.slash_cancel();
+            true
+        }
+        _ => false,
+    }
+}
+
+fn handle_insert_calendar(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('h') | KeyCode::Left => app.calendar_move(-1, 0),
+        KeyCode::Char('l') | KeyCode::Right => app.calendar_move(1, 0),
+        KeyCode::Char('k') | KeyCode::Up => app.calendar_move(0, -1),
+        KeyCode::Char('j') | KeyCode::Down => app.calendar_move(0, 1),
+        KeyCode::Char('t') => app.calendar_set_relative(0),
+        KeyCode::Char('T') => app.calendar_set_relative(1),
+        KeyCode::Char('w') => app.calendar_set_relative(7),
+        KeyCode::Char('m') => app.calendar_add_months(1),
+        KeyCode::Char('M') => app.calendar_add_months(-1),
+        KeyCode::Char('x') => app.calendar_clear(),
+        KeyCode::Enter => app.calendar_accept(),
+        KeyCode::Esc => app.calendar_cancel(),
+        _ => {}
+    }
+}
+
+fn handle_insert_rec_builder(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('h') | KeyCode::Left => app.recurrence_focus(-1),
+        KeyCode::Char('l') | KeyCode::Right => app.recurrence_focus(1),
+        KeyCode::Char('j') | KeyCode::Down => app.recurrence_focus(1),
+        KeyCode::Char('k') | KeyCode::Up => app.recurrence_focus(-1),
+        // `=` is the unshifted `+` on US keyboards — accept both so users
+        // don't have to chord Shift to bump the interval.
+        KeyCode::Char('+') | KeyCode::Char('=') => app.recurrence_adjust(1),
+        KeyCode::Char('-') | KeyCode::Char('_') => app.recurrence_adjust(-1),
+        KeyCode::Enter => app.recurrence_accept(),
+        KeyCode::Esc => app.recurrence_cancel(),
+        _ => {}
+    }
+}
+
+fn handle_insert_priority(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => app.priority_step(true),
+        KeyCode::Char('k') | KeyCode::Up => app.priority_step(false),
+        KeyCode::Enter => app.priority_accept(),
+        KeyCode::Esc => app.priority_cancel(),
+        _ => {}
     }
 }
 

@@ -10,6 +10,7 @@ mod autocomplete;
 mod bulk;
 mod chord;
 mod draft;
+mod draft_overlay;
 mod external;
 mod flash;
 mod history;
@@ -28,6 +29,11 @@ pub use archive::Archive;
 pub use autocomplete::{ActiveToken, TokenKind, active_token};
 pub use chord::Chord;
 pub use draft::{DraftCursor, DraftState};
+pub use draft_overlay::{
+    BuilderField, CalendarState, CalendarTarget, DraftOverlay, OverlayKind, PriorityChooserState,
+    REC_UNIT_ORDER, RecurrenceBuilderState, SLASH_ENTRIES, SlashEntry, SlashKind, SlashMenuState,
+    format_rec_value, recurrence_next_preview,
+};
 pub use flash::Flash;
 pub use history::History;
 pub use palette::CommandPaletteState;

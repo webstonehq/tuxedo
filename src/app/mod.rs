@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
@@ -96,6 +97,10 @@ pub struct App {
     /// once a result has been received or the sender hung up.
     update_check: Option<Receiver<Option<String>>>,
     pub command_palette: CommandPaletteState,
+    /// Vertical scroll offset (rows from the top of the line list) for each
+    /// view, keyed by `View::idx()`. Updated at render time via `Cell` so the
+    /// renderer can keep the cursor row visible without taking `&mut self`.
+    pub(crate) view_scroll: [Cell<u16>; 2],
 }
 
 impl App {
@@ -126,6 +131,7 @@ impl App {
             latest_version: None,
             update_check: None,
             command_palette: CommandPaletteState::default(),
+            view_scroll: [Cell::new(0), Cell::new(0)],
         };
         app.recompute_visible();
         app

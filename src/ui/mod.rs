@@ -169,3 +169,69 @@ pub(crate) fn density_blank_lines(d: crate::app::Density) -> usize {
         crate::app::Density::Cozy => 2,
     }
 }
+
+/// Compute the new vertical scroll offset for a paragraph-backed list so the
+/// cursor row stays inside the viewport. `prev` is the previous frame's offset,
+/// `cursor_line` is the line index of the cursor (or `None` if there's no
+/// cursor row in the current build, e.g. when the list is empty). `height` is
+/// the viewport height in rows; `total` is the total line count.
+pub(crate) fn keep_cursor_visible(
+    prev: u16,
+    cursor_line: Option<usize>,
+    height: u16,
+    total: usize,
+) -> u16 {
+    let h = usize::from(height);
+    if h == 0 || total == 0 {
+        return 0;
+    }
+    let max_offset = total.saturating_sub(h);
+    let prev = usize::from(prev).min(max_offset);
+    let new = match cursor_line {
+        Some(cl) if cl < prev => cl,
+        Some(cl) if cl >= prev + h => cl + 1 - h,
+        _ => prev,
+    };
+    new.min(max_offset).min(usize::from(u16::MAX)) as u16
+}
+
+#[cfg(test)]
+mod tests {
+    use super::keep_cursor_visible;
+
+    #[test]
+    fn no_scroll_when_content_fits() {
+        assert_eq!(keep_cursor_visible(0, Some(5), 10, 8), 0);
+        assert_eq!(keep_cursor_visible(0, Some(7), 10, 8), 0);
+    }
+
+    #[test]
+    fn scrolls_down_when_cursor_below_viewport() {
+        // viewport rows 0..5, cursor at line 7 -> offset = 7 - 5 + 1 = 3
+        assert_eq!(keep_cursor_visible(0, Some(7), 5, 20), 3);
+    }
+
+    #[test]
+    fn scrolls_up_when_cursor_above_viewport() {
+        // prev offset 10, cursor at line 3 -> offset = 3
+        assert_eq!(keep_cursor_visible(10, Some(3), 5, 20), 3);
+    }
+
+    #[test]
+    fn keeps_previous_offset_when_cursor_in_viewport() {
+        // prev 5, cursor at line 7, height 5 -> 7 in [5, 10), stays 5
+        assert_eq!(keep_cursor_visible(5, Some(7), 5, 20), 5);
+    }
+
+    #[test]
+    fn clamps_to_max_offset_when_previous_exceeds_it() {
+        // total shrank since last frame; previous offset 50 is now too large.
+        assert_eq!(keep_cursor_visible(50, None, 5, 8), 3);
+    }
+
+    #[test]
+    fn handles_degenerate_inputs() {
+        assert_eq!(keep_cursor_visible(0, None, 0, 100), 0);
+        assert_eq!(keep_cursor_visible(0, Some(0), 5, 0), 0);
+    }
+}

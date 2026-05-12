@@ -4,9 +4,9 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, GroupKey, ListDueBucket, Mode};
+use crate::app::{App, GroupKey, ListDueBucket, Mode, View};
 use crate::theme::Theme;
-use crate::ui::{header, task_row};
+use crate::ui::{header, keep_cursor_visible, task_row};
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
@@ -42,6 +42,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let visible = app.visible_indices();
     let groups = app.visible_groups();
     let mut lines: Vec<Line> = Vec::new();
+    let mut cursor_line: Option<usize> = None;
 
     if visible.is_empty() {
         lines.push(Line::from(Span::styled(
@@ -81,6 +82,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 },
                 today: &app.today,
             };
+            if i == app.cursor {
+                cursor_line = Some(lines.len());
+            }
             lines.push(task_row::build_line(task, opts, theme));
             if matches!(gk, GroupKey::None) && i != last {
                 for _ in 0..blank {
@@ -90,7 +94,18 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
-    let para = Paragraph::new(lines).style(Style::default().bg(theme.bg).fg(theme.fg));
+    let scroll_cell = &app.view_scroll[View::List.idx()];
+    let scroll = keep_cursor_visible(
+        scroll_cell.get(),
+        cursor_line,
+        body_area.height,
+        lines.len(),
+    );
+    scroll_cell.set(scroll);
+
+    let para = Paragraph::new(lines)
+        .style(Style::default().bg(theme.bg).fg(theme.fg))
+        .scroll((scroll, 0));
     frame.render_widget(para, body_area);
 }
 

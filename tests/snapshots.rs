@@ -399,3 +399,58 @@ fn empty_state() {
     app.prefs.layout.right = false;
     snapshot_app("empty_state", &app);
 }
+
+/// Build a synthetic todo body with N rows so the list overflows any
+/// reasonable viewport. Each row gets a unique label we can search for in the
+/// rendered buffer.
+fn many_tasks_body(n: usize) -> String {
+    let mut s = String::new();
+    for i in 0..n {
+        s.push_str(&format!(
+            "2026-05-04 row-{:03} task body for scrolling +work @laptop\n",
+            i
+        ));
+    }
+    s
+}
+
+/// Render `app` into a fixed-size buffer and return its plain-text grid.
+fn render_text(app: &App, cols: u16, rows: u16) -> String {
+    let backend = TestBackend::new(cols, rows);
+    let mut terminal = Terminal::new(backend).expect("terminal init");
+    terminal.draw(|f| ui::draw(f, app)).expect("draw frame");
+    buffer_to_text(terminal.backend().buffer())
+}
+
+#[test]
+fn list_scrolls_to_keep_cursor_visible_when_below_fold() {
+    // 50 rows of tasks rendered into a viewport that only fits a handful.
+    // Without scrolling, advancing the cursor past the fold would leave the
+    // active row off-screen even as the right-pane detail updated. With the
+    // fix, the cursor's row text must appear in the rendered buffer.
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        many_tasks_body(50),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.prefs.density = Density::Compact;
+    app.prefs.layout.left = false;
+    app.prefs.layout.right = false;
+    // Switch to file-order sort so rows render flat (no priority/due groups
+    // injecting extra header lines into the line-index math).
+    while app.prefs.sort != tuxedo::app::Sort::File {
+        app.cycle_sort();
+    }
+
+    let cursor_target = 40usize;
+    app.cursor = cursor_target;
+    let label = format!("row-{:03}", cursor_target);
+
+    // Tiny viewport: with 12 rows total the body is well under 40 lines.
+    let text = render_text(&app, 80, 12);
+    assert!(
+        text.contains(&label),
+        "cursor row {label:?} should be visible in the scrolled viewport:\n{text}"
+    );
+}

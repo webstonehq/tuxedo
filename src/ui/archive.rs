@@ -4,8 +4,8 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, GroupKey, Mode};
-use crate::ui::{header, task_row};
+use crate::app::{App, GroupKey, Mode, View};
+use crate::ui::{header, keep_cursor_visible, task_row};
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
@@ -56,6 +56,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let mut lines: Vec<Line> = Vec::new();
     let mut last_date: Option<&str> = None;
+    let mut cursor_line: Option<usize> = None;
 
     for (i, (&abs, gk)) in visible.iter().zip(groups.iter()).enumerate() {
         let date = match gk {
@@ -97,9 +98,23 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             match_term: None,
             today: &app.today,
         };
+        if i == app.cursor {
+            cursor_line = Some(lines.len());
+        }
         lines.push(task_row::build_line(task, opts, theme));
     }
 
-    let para = Paragraph::new(lines).style(Style::default().bg(theme.bg).fg(theme.fg));
+    let scroll_cell = &app.view_scroll[View::Archive.idx()];
+    let scroll = keep_cursor_visible(
+        scroll_cell.get(),
+        cursor_line,
+        body_area.height,
+        lines.len(),
+    );
+    scroll_cell.set(scroll);
+
+    let para = Paragraph::new(lines)
+        .style(Style::default().bg(theme.bg).fg(theme.fg))
+        .scroll((scroll, 0));
     frame.render_widget(para, body_area);
 }

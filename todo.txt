@@ -3,4 +3,4 @@
 2026-05-07 Calendar week strip view with reschedule keys +tuxedo @dev
 2026-05-07 Per-task Markdown notes sidecar in detail sidebar +tuxedo @dev
 2026-05-07 Hook scripts for pre and post add complete and delete events +tuxedo @dev
-(A) Scroll the main list of todos @bug
+x 2026-05-11 2026-05-11 Scroll the main list of todos @bug

@@ -1508,7 +1508,7 @@ checksum = "7694e1cfe791f8d31026952abf09c69ca6f6fa4e1a1229e18988f06a04a12dca"
 
 [[package]]
 name = "tuxedo"
-version = "2026.5.5"
+version = "2026.5.6"
 dependencies = [
  "anyhow",
  "chrono",

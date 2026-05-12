@@ -122,10 +122,7 @@ fn strip_prefix_x(s: &str) -> Option<&str> {
 /// month/day combos are rejected so they don't poison sort/grouping code that
 /// later trusts the value.
 fn take_iso_date_prefix(s: &str) -> Option<(String, &str)> {
-    if s.len() < 10 {
-        return None;
-    }
-    let candidate = &s[..10];
+    let candidate = s.get(..10)?;
     if chrono::NaiveDate::parse_from_str(candidate, "%Y-%m-%d").is_err() {
         return None;
     }
@@ -447,6 +444,19 @@ mod tests {
     #[test]
     fn parse_error_displays_human_message() {
         assert_eq!(format!("{}", ParseError::Empty), "empty");
+    }
+
+    #[test]
+    fn parses_line_starting_with_non_ascii_after_single_byte() {
+        // Regression: `take_iso_date_prefix` used byte indexing (`&s[..10]`)
+        // after a byte-length check, which panicked when byte 10 fell inside
+        // a multi-byte UTF-8 character. Triggered by tasks like the one
+        // below, where '2' is 1 byte and the following Cyrillic chars are
+        // 2 bytes each, putting byte 10 inside 'с'.
+        let t = parse_line("2Написать задачи на день due:2026-05-11 rec:+1d").unwrap();
+        assert_eq!(t.created_date, None);
+        assert_eq!(t.due.as_deref(), Some("2026-05-11"));
+        assert_eq!(t.rec.as_deref(), Some("+1d"));
     }
 
     #[test]

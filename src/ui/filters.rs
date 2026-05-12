@@ -32,9 +32,13 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 .add_modifier(Modifier::BOLD),
         )],
     ));
-    for (name, count) in &projects {
-        let active = app.filter.project.as_deref() == Some(name.as_str());
-        lines.push(filter_row(theme, "+", name, *count, active, theme.project));
+    if projects.is_empty() {
+        lines.push(hint_row(theme, "+project", theme.project));
+    } else {
+        for (name, count) in &projects {
+            let active = app.filter.project.as_deref() == Some(name.as_str());
+            lines.push(filter_row(theme, "+", name, *count, active, theme.project));
+        }
     }
     lines.push(line_pad(theme, vec![Span::raw(" ")]));
     lines.push(line_pad(
@@ -46,9 +50,13 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 .add_modifier(Modifier::BOLD),
         )],
     ));
-    for (name, count) in &contexts {
-        let active = app.filter.context.as_deref() == Some(name.as_str());
-        lines.push(filter_row(theme, "@", name, *count, active, theme.context));
+    if contexts.is_empty() {
+        lines.push(hint_row(theme, "@context", theme.context));
+    } else {
+        for (name, count) in &contexts {
+            let active = app.filter.context.as_deref() == Some(name.as_str());
+            lines.push(filter_row(theme, "@", name, *count, active, theme.context));
+        }
     }
 
     let para = Paragraph::new(lines).style(Style::default().bg(theme.panel).fg(theme.fg));
@@ -77,6 +85,15 @@ fn filter_row<'a>(
         Span::styled(format!("{:>3}", count), Style::default().fg(theme.dim)),
     ])
     .style(Style::default().bg(bg))
+}
+
+fn hint_row<'a>(theme: &Theme, token: &'a str, token_color: ratatui::style::Color) -> Line<'a> {
+    Line::from(vec![
+        Span::raw("   "),
+        Span::styled("tag with ", Style::default().fg(theme.dim)),
+        Span::styled(token, Style::default().fg(token_color)),
+    ])
+    .style(Style::default().bg(theme.panel))
 }
 
 fn line_pad<'a>(theme: &Theme, spans: Vec<Span<'a>>) -> Line<'a> {

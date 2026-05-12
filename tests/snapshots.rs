@@ -268,6 +268,24 @@ fn list_no_sidebars() {
 }
 
 #[test]
+fn list_sidebar_empty_hints() {
+    // Tasks present but none carry +project / @context tags — the sidebar
+    // should fall back to the "tag with +project" / "tag with @context" hints
+    // instead of leaving the PROJECTS / CONTEXTS sections blank.
+    let body = "(A) Buy milk\n(B) Call mom\nWrite up notes\n";
+    std::fs::write(FIXTURE_PATH, body).expect("seed fixture file");
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        body.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    snapshot_app("list_sidebar_empty_hints", &app);
+}
+
+#[test]
 fn archive_view() {
     let mut app = make_app();
     app.set_view(View::Archive);

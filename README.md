@@ -296,10 +296,12 @@ The server:
   WiFi anyone passive-sniffing can recover the token. To rotate, delete
   `share_token` from `config.toml` and press `s` again.
 
-Drains are crash-safe: tuxedo holds an advisory lock around the
-rename-and-merge, writers append under the same lock, and any staging
-file left over from an interrupted drain is replayed on the next
-session. Producers and the TUI can't tear each other's writes.
+Drains from tuxedo-managed producers are crash-safe: the capture server
+holds the same advisory lock as the TUI's rename-and-merge, and any
+staging file left over from an interrupted drain is replayed on the
+next session. Plain shell appends are useful for lightweight capture,
+but they do not take that lock; use the capture server or the same lock
+if a producer must be serialized with the TUI drain.
 
 ## Configuration
 

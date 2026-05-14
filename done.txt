@@ -28,3 +28,5 @@ x 2026-05-11 2026-05-11 Scroll the main list of todos @bug
 x 2026-05-12 2026-05-12 Fix issue #1: Editing exisitng task with non-ASCII characters rasises error (shut down app)
 x 2026-05-12 2026-05-12 Replace the first screenshot in the readme with an animated gif
 x 2026-05-12 2026-05-12 When no projects and contexts are listed in the sidebar, show a hint on how to tag todos
+x 2026-05-13 2026-05-13 Add an inbox
+x 2026-05-13 2026-05-13 Add a PWA (capture + read-only list)

@@ -5,3 +5,5 @@
 (C) 2026-05-11 Multi-file workspace config and quick file switcher +tuxedo @dev
 (C) 2026-05-11 Inbox capture mode and separate triage review mode +tuxedo @dev
 (C) 2026-05-11 Repeat-last-action dot key and saved filter marks +tuxedo @dev
+2026-05-13 Implement `tuxedo doctor` to lint malformed date, formats, etc
+2026-05-13 OSC 8 hyperlinks: URLs in task body become clickable in supported terminals

@@ -25,6 +25,16 @@ pub struct Config {
     pub show_status_bar: Option<bool>,
     pub show_done: Option<bool>,
     pub show_future: Option<bool>,
+    /// 64-character lowercase-hex token gating the in-TUI capture server.
+    /// Persisted across sessions so phone bookmarks survive a relaunch.
+    /// Stored on disk; only meaningful for LAN access, but flagged here
+    /// so readers can decide whether to scrub it from shared dotfiles.
+    pub share_token: Option<String>,
+    /// Port the capture server binds to on first `s` press. Persisted
+    /// so the same QR survives across sessions. If the port is taken on
+    /// a future launch, the server falls back to an OS-assigned port
+    /// and rewrites this field.
+    pub share_port: Option<u16>,
 }
 
 impl Config {
@@ -52,12 +62,30 @@ impl Config {
     }
 
     /// Write a config file to an explicit path. Atomic via tmp-then-rename.
+    ///
+    /// The temp filename is unique per call (pid + monotonic counter) so
+    /// concurrent saves — multiple TUI instances, or parallel tests
+    /// sharing the user's XDG path — don't clobber each other's in-flight
+    /// tmp file. Each writer's rename either succeeds or fails on its own
+    /// tmp, instead of the second one hitting NotFound because the first
+    /// already renamed away the shared tmp.
     pub fn save_to(&self, path: &Path) -> io::Result<()> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
         let body = serialize(self);
-        let tmp = path.with_extension("tmp");
+        let stem = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "config".to_string());
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let tmp_name = format!(".{stem}.tmp.{}.{}", std::process::id(), n);
+        let tmp = path
+            .parent()
+            .map(|p| p.join(&tmp_name))
+            .unwrap_or_else(|| PathBuf::from(&tmp_name));
         fs::write(&tmp, body)?;
         fs::rename(&tmp, path)?;
         Ok(())
@@ -122,6 +150,13 @@ fn parse(s: &str) -> Config {
             "show_status_bar" => c.show_status_bar = parse_bool(v),
             "show_done" => c.show_done = parse_bool(v),
             "show_future" => c.show_future = parse_bool(v),
+            // Reject anything that isn't a valid hex token so we don't
+            // carry forward a corrupt value that the server would later
+            // refuse to compare against.
+            "share_token" if v.len() == 64 && v.chars().all(|c| c.is_ascii_hexdigit()) => {
+                c.share_token = Some(v.to_ascii_lowercase());
+            }
+            "share_port" => c.share_port = v.parse().ok(),
             _ => {} // forward-compatible: ignore unknowns
         }
     }
@@ -157,6 +192,12 @@ fn serialize(c: &Config) -> String {
     }
     if let Some(v) = c.show_future {
         let _ = writeln!(out, "show_future = {v}");
+    }
+    if let Some(v) = &c.share_token {
+        let _ = writeln!(out, "share_token = {v}");
+    }
+    if let Some(v) = c.share_port {
+        let _ = writeln!(out, "share_port = {v}");
     }
     out
 }
@@ -194,10 +235,30 @@ mod tests {
             show_status_bar: Some(true),
             show_done: Some(true),
             show_future: Some(true),
+            share_token: Some("a".repeat(64)),
+            share_port: Some(18080),
         };
         let s = serialize(&c);
         let parsed = parse(&s);
         assert_eq!(parsed, c);
+    }
+
+    #[test]
+    fn rejects_malformed_share_token() {
+        // Too short, non-hex, uppercase OK only after normalization to
+        // lower; whitespace inside. Each of these must be dropped so a
+        // hand-edited config doesn't carry forward an invalid token.
+        let s = "share_token = abcd\nshare_port = notanumber\n";
+        let c = parse(s);
+        assert_eq!(c.share_token, None);
+        assert_eq!(c.share_port, None);
+    }
+
+    #[test]
+    fn share_token_normalized_to_lowercase() {
+        let s = format!("share_token = {}\n", "F".repeat(64));
+        let c = parse(&s);
+        assert_eq!(c.share_token.as_deref(), Some("f".repeat(64).as_str()));
     }
 
     #[test]
@@ -256,6 +317,8 @@ mod tests {
             show_status_bar: Some(false),
             show_done: Some(true),
             show_future: Some(false),
+            share_token: None,
+            share_port: None,
         };
         written.save_to(&path).expect("save should succeed");
         assert!(path.exists());

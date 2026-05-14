@@ -22,8 +22,8 @@ expression: buffer_to_text(&buf)
      │    yy                copy line to clipboard                                            │     
      │    yb                copy body only          SYSTEM                                    │     
      │    u                 undo                      : / Ctrl-P        command palette       │     
-     │                                                ?                 this help             │     
-     │                                                ,                 settings              │     
+     │                                                s                 share capture QR      │     
+     │                                                ? / ,             help / settings       │     
      │                                                q                 quit                  │     
      │────────────────────────────────────────────────────────────────────────────────────────│     
      │  FORMAT                                                                                │     

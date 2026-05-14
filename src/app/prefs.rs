@@ -124,18 +124,21 @@ impl Prefs {
     /// can flash it (writing to stderr from inside the alt-screen would
     /// corrupt the TUI). Saving is best-effort — callers that don't care
     /// about reporting can `let _ = prefs.save();`.
+    ///
+    /// Loads the on-disk config first so non-pref fields (like
+    /// `share_token` / `share_port`, owned by the capture server) are
+    /// preserved across pref toggles.
     pub fn save(&self) -> io::Result<()> {
-        let cfg = Config {
-            theme: Some(self.theme().name.to_string()),
-            density: Some(self.density),
-            sort: Some(self.sort),
-            show_left: Some(self.layout.left),
-            show_right: Some(self.layout.right),
-            show_line_num: Some(self.layout.line_num),
-            show_status_bar: Some(self.layout.status_bar),
-            show_done: Some(self.show_done),
-            show_future: Some(self.show_future),
-        };
+        let mut cfg = Config::load();
+        cfg.theme = Some(self.theme().name.to_string());
+        cfg.density = Some(self.density);
+        cfg.sort = Some(self.sort);
+        cfg.show_left = Some(self.layout.left);
+        cfg.show_right = Some(self.layout.right);
+        cfg.show_line_num = Some(self.layout.line_num);
+        cfg.show_status_bar = Some(self.layout.status_bar);
+        cfg.show_done = Some(self.show_done);
+        cfg.show_future = Some(self.show_future);
         cfg.save()
     }
 }

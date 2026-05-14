@@ -16,6 +16,7 @@ pub mod help;
 pub mod list;
 pub mod logo;
 pub mod settings;
+pub mod share;
 pub mod status;
 pub mod task_row;
 
@@ -140,6 +141,12 @@ pub fn draw(frame: &mut Frame, app: &App) {
             let r = centered_in(area, w, h);
             frame.render_widget(Clear, r);
             command_palette::render(frame, r, app);
+        }
+        Mode::Share => {
+            let (w, h) = share::size_for(app);
+            let r = centered_in(area, w, h);
+            frame.render_widget(Clear, r);
+            share::render(frame, r, app);
         }
         _ => {}
     }

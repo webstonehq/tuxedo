@@ -193,6 +193,11 @@ pub const ENTRIES: &[PaletteEntry] = &[
         action: Action::OpenCommandPalette,
     },
     PaletteEntry {
+        label: "show capture QR",
+        keys: "s",
+        action: Action::OpenShare,
+    },
+    PaletteEntry {
         label: "escape / clear",
         keys: "Esc",
         action: Action::EscapeStack,
@@ -498,6 +503,7 @@ mod tests {
             Action::CopyLine,
             Action::CopyBody,
             Action::EscapeStack,
+            Action::OpenShare,
         ];
         for a in required {
             assert!(actions.contains(&a), "missing palette entry for {a:?}");

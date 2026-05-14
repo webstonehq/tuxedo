@@ -42,4 +42,8 @@ pub enum Action {
     CopyLine,
     CopyBody,
     EscapeStack,
+    /// Open the phone-capture overlay (QR + URL). First invocation lazily
+    /// binds the HTTP server; subsequent invocations just re-show the
+    /// overlay.
+    OpenShare,
 }

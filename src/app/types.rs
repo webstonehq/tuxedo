@@ -32,6 +32,10 @@ pub enum Mode {
     PickProject,   // j/k cycles through projects to filter by
     PickContext,   // j/k cycles through contexts to filter by
     CommandPalette,
+    /// QR + URL overlay for the in-TUI capture server. Any key
+    /// dismisses; press `s` again to re-open without rebinding (the
+    /// server stays running once started).
+    Share,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

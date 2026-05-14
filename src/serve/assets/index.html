@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#1a1c1f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <title>tuxedo capture</title>
+  <style>
+    :root {
+      --bg: #1a1c1f;
+      --panel: #22252a;
+      --fg: #dfe1e6;
+      --muted: #8b919c;
+      --accent: #c4b56a;
+      --border: #2e3138;
+      --danger: #d97a7a;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 15px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      min-height: 100vh;
+      -webkit-text-size-adjust: 100%;
+    }
+    body {
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 16px 16px 64px;
+    }
+    h1 {
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 12px;
+      font-weight: 500;
+    }
+    form {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 24px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 84px;
+      resize: vertical;
+      background: var(--bg);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font: inherit;
+      outline: none;
+    }
+    textarea:focus { border-color: var(--accent); }
+    .row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      align-items: center;
+    }
+    button {
+      flex: 1;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: 6px;
+      padding: 12px 16px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+    }
+    button:active { transform: translateY(1px); }
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+      margin: 8px 2px 0;
+    }
+    .flash {
+      background: var(--panel);
+      border-left: 3px solid var(--accent);
+      padding: 8px 12px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    .flash.err { border-left-color: var(--danger); }
+    h2 {
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 24px 0 8px;
+      font-weight: 500;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    h2 .count { color: var(--accent); font-variant-numeric: tabular-nums; }
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    li {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    li:last-child { border-bottom: none; }
+    li.empty { color: var(--muted); font-style: italic; }
+    li.pending { background: rgba(196, 181, 106, 0.06); }
+    .prio { color: var(--accent); font-weight: 600; }
+    .meta { color: var(--muted); }
+    footer {
+      margin-top: 32px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>tuxedo capture</h1>
+  <div id="flash"></div>
+  <form id="capture" autocomplete="off">
+    <textarea id="text" name="text" placeholder="Pay rent monthly on the first, show 3 days before, project home" autofocus></textarea>
+    <div class="row">
+      <button type="submit">Add</button>
+    </div>
+    <div class="hint">Natural language is parsed locally. Submit blanks the box.</div>
+  </form>
+
+  <h2>Open <span class="count" id="count-open">·</span></h2>
+  <ul id="open"><li class="empty">loading…</li></ul>
+
+  <h2>Pending in inbox <span class="count" id="count-inbox">·</span></h2>
+  <ul id="inbox"><li class="empty">—</li></ul>
+
+  <footer>local capture · /t/&lt;token&gt;/</footer>
+</main>
+<script>
+(() => {
+  const base = window.location.pathname.replace(/\/$/, "");
+  const $ = id => document.getElementById(id);
+
+  function flash(msg, err) {
+    const el = $("flash");
+    if (!msg) { el.innerHTML = ""; return; }
+    el.innerHTML = '<div class="flash' + (err ? " err" : "") + '"></div>';
+    el.firstChild.textContent = msg;
+    if (!err) setTimeout(() => { el.innerHTML = ""; }, 2500);
+  }
+
+  function render(list, items, emptyText) {
+    list.innerHTML = "";
+    if (items.length === 0) {
+      const li = document.createElement("li");
+      li.className = "empty";
+      li.textContent = emptyText;
+      list.appendChild(li);
+      return;
+    }
+    for (const raw of items) {
+      const li = document.createElement("li");
+      const m = /^(?:\(([A-Z])\)\s+)?(?:(\d{4}-\d{2}-\d{2})\s+)?(.*)$/.exec(raw);
+      if (m) {
+        if (m[1]) {
+          const s = document.createElement("span");
+          s.className = "prio"; s.textContent = "(" + m[1] + ") ";
+          li.appendChild(s);
+        }
+        if (m[2]) {
+          const s = document.createElement("span");
+          s.className = "meta"; s.textContent = m[2] + " ";
+          li.appendChild(s);
+        }
+        li.appendChild(document.createTextNode(m[3]));
+      } else {
+        li.textContent = raw;
+      }
+      list.appendChild(li);
+    }
+  }
+
+  async function refresh() {
+    try {
+      const r = await fetch(base + "/tasks", { cache: "no-store" });
+      if (!r.ok) throw new Error("status " + r.status);
+      const body = await r.text();
+      const [openBlock, inboxBlock] = body.split("\n--- inbox (pending) ---\n", 2);
+      const openLines = openBlock.split("\n").filter(l => l.length > 0 && !l.startsWith("x "));
+      const inboxLines = (inboxBlock || "").split("\n").filter(l => l.trim().length > 0);
+      $("count-open").textContent = openLines.length;
+      $("count-inbox").textContent = inboxLines.length;
+      render($("open"), openLines, "no open tasks");
+      render($("inbox"), inboxLines, "—");
+      for (const li of $("inbox").children) li.classList.add("pending");
+    } catch (e) {
+      flash("refresh failed: " + e.message, true);
+    }
+  }
+
+  $("capture").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const ta = $("text");
+    const text = ta.value.trim();
+    if (!text) return;
+    try {
+      const body = new URLSearchParams({ text });
+      const r = await fetch(base + "/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
+      if (!r.ok) throw new Error("status " + r.status);
+      ta.value = "";
+      flash("captured");
+      refresh();
+    } catch (err) {
+      flash("add failed: " + err.message, true);
+    }
+  });
+
+  refresh();
+  setInterval(refresh, 3000);
+})();
+</script>
+</body>
+</html>

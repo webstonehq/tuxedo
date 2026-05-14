@@ -7,7 +7,10 @@ edition = "2024"
 anyhow = "1.0"
 chrono = "0.4.44"
 crossterm = "0.29.0"
+getrandom = "0.2"
+qrcode = { version = "0.14", default-features = false }
 ratatui = "0.30.0"
+tiny_http = "0.12"
 
 [dev-dependencies]
 insta = "1.47"

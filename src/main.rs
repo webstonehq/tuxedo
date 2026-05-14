@@ -1,8 +1,6 @@
 #![warn(clippy::unwrap_used)]
 
-use std::fs::OpenOptions;
 use std::io;
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -11,8 +9,9 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 
 use tuxedo::action::Action;
 use tuxedo::app::{AddOutcome, App, Mode, OverlayKind, View};
+use tuxedo::cli;
 use tuxedo::config::Config;
-use tuxedo::{clipboard, sample, todo, ui, update};
+use tuxedo::{clipboard, todo, ui, update};
 
 const EVENT_POLL: Duration = Duration::from_millis(250);
 
@@ -31,13 +30,13 @@ fn main() -> Result<()> {
             update::run()?;
             return Ok(());
         }
-        Some("--sample") => sample_path()?,
+        Some("--sample") => cli::sample_path()?,
         Some(s) if s.starts_with('-') => {
             eprintln!("tuxedo: unknown option: {s}");
             eprintln!("try `tuxedo --help`");
             std::process::exit(2);
         }
-        _ => resolve_path(arg)?,
+        _ => cli::resolve_path(arg)?,
     };
     // A freshly-created file is empty; otherwise read it. We accept NotFound
     // (race with deletion between resolve_path and now) as "empty file" but
@@ -76,6 +75,10 @@ fn print_usage() {
     println!("Without FILE, opens ./todo.txt if present, otherwise a sample");
     println!("todo.txt in the system temp dir.");
     println!();
+    println!("Inside the TUI, press `s` to expose a phone-friendly capture");
+    println!("endpoint on your LAN and show a QR code for it. Captures land");
+    println!("in a sibling inbox.txt that the TUI merges on the next poll.");
+    println!();
     println!("Commands:");
     println!("  update         print instructions for upgrading tuxedo");
     println!();
@@ -83,42 +86,6 @@ fn print_usage() {
     println!("  -h, --help     show this message and exit");
     println!("  -V, --version  print version and exit");
     println!("      --sample   open the sample todo.txt in the system temp dir");
-}
-
-fn resolve_path(arg: Option<String>) -> io::Result<PathBuf> {
-    if let Some(p) = arg {
-        let pb = PathBuf::from(p);
-        // Atomically create-if-missing. `create_new` fails with AlreadyExists
-        // when the file is there — that's the success path: just keep the
-        // existing contents. Avoids the TOCTOU window between exists() and
-        // write() that would otherwise truncate a concurrently-created file.
-        match OpenOptions::new().write(true).create_new(true).open(&pb) {
-            Ok(_) => {}
-            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
-            Err(e) => return Err(e),
-        }
-        return Ok(pb);
-    }
-    let cwd_todo = PathBuf::from("todo.txt");
-    if cwd_todo.is_file() {
-        return Ok(cwd_todo);
-    }
-    sample_path()
-}
-
-fn sample_path() -> io::Result<PathBuf> {
-    let dir = std::env::temp_dir();
-    let pb = dir.join("tuxedo-sample.txt");
-    std::fs::write(&pb, sample::TODO_RAW)?;
-    // Also reset the sibling done.txt — otherwise archived rows from a
-    // previous session leak back as duplicates the next time the sample is
-    // opened.
-    match std::fs::remove_file(dir.join("done.txt")) {
-        Ok(_) => {}
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-        Err(e) => return Err(e),
-    }
-    Ok(pb)
 }
 
 fn run(mut terminal: DefaultTerminal, app: &mut App) -> Result<()> {
@@ -196,8 +163,16 @@ fn handle_key(app: &mut App, key: KeyEvent) {
         Mode::PromptProject | Mode::PromptContext => handle_prompt(app, key),
         Mode::PickProject | Mode::PickContext => handle_pick(app, key),
         Mode::CommandPalette => handle_command_palette(app, key),
+        Mode::Share => handle_share(app, key),
         Mode::Normal | Mode::Visual => handle_normal(app, key),
     }
+}
+
+/// Share overlay: any key dismisses, returning to Normal. The server
+/// keeps running in the background; pressing `s` again re-shows the
+/// same QR without rebinding.
+fn handle_share(app: &mut App, _key: KeyEvent) {
+    app.mode = Mode::Normal;
 }
 
 /// What the draft buffer changed (or didn't) in response to a key. Lets
@@ -618,6 +593,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char(' ') => Action::ToggleSelected,
         KeyCode::Char('A') => Action::ArchiveCompleted,
         KeyCode::Char('f') => Action::ArmF,
+        KeyCode::Char('s') => Action::OpenShare,
         KeyCode::Char('S') => Action::CycleSort,
         KeyCode::Char('+') => Action::BeginPromptProject,
         KeyCode::Char('[') => Action::ToggleLeftPane,
@@ -813,6 +789,12 @@ fn apply_action(app: &mut App, action: Action) {
         }
         Action::CopyLine => copy_current_task(app, false),
         Action::CopyBody => copy_current_task(app, true),
+        Action::OpenShare => match app.ensure_share_started() {
+            Ok(_) => {
+                app.mode = Mode::Share;
+            }
+            Err(e) => app.flash(format!("share unavailable: {e}")),
+        },
         Action::EscapeStack => {
             let has_pc = app.filter().project.is_some() || app.filter().context.is_some();
             let has_search = !app.filter().search.is_empty();

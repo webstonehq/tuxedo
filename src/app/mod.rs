@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use crate::config::Config;
+use crate::serve::{self, ShareInfo};
 use crate::theme::Theme;
 use crate::todo::{self, Task};
 
@@ -102,6 +103,11 @@ pub struct App {
     /// view, keyed by `View::idx()`. Updated at render time via `Cell` so the
     /// renderer can keep the cursor row visible without taking `&mut self`.
     pub(crate) view_scroll: [Cell<u16>; 2],
+    /// Handle to the in-TUI capture server. `None` until the first time
+    /// the user presses `s` (or invokes "show capture QR" from the
+    /// palette). Once bound, the entry stays for the rest of the
+    /// session and the overlay just re-displays the saved QR.
+    share: Option<ShareInfo>,
 }
 
 impl App {
@@ -133,9 +139,66 @@ impl App {
             update_check: None,
             command_palette: CommandPaletteState::default(),
             view_scroll: [Cell::new(0), Cell::new(0)],
+            share: None,
         };
         app.recompute_visible();
         app
+    }
+
+    /// Idempotent: bind the capture server on first call, then store
+    /// the [`ShareInfo`] so subsequent calls just re-show the overlay.
+    ///
+    /// First-call behavior: if the user has a persisted token + port in
+    /// config, reuse them so phone bookmarks survive across sessions.
+    /// Otherwise, generate a fresh token, let the OS pick a port, and
+    /// write both back to the config. If the persisted port is taken
+    /// (another tuxedo instance on the same machine, say), fall back to
+    /// an OS-assigned port and rewrite the config so the next session
+    /// starts fresh.
+    pub fn ensure_share_started(&mut self) -> Result<&ShareInfo, String> {
+        // Two-step to dodge stable's lack of Polonius: do the bind work
+        // first (which needs `&mut self`), then the unconditional final
+        // borrow returns the now-present `ShareInfo`.
+        if self.share.is_none() {
+            let info = self.bind_share()?;
+            self.share = Some(info);
+        }
+        Ok(self
+            .share
+            .as_ref()
+            .expect("share is Some after the bind branch"))
+    }
+
+    fn bind_share(&mut self) -> Result<ShareInfo, String> {
+        let cfg = Config::load();
+        let token = match cfg.share_token {
+            Some(t) => t,
+            None => serve::net::generate_token().map_err(|e| format!("token: {e}"))?,
+        };
+        let requested_port = cfg.share_port.unwrap_or(0);
+        let info = match serve::start(self.file_path.clone(), token.clone(), requested_port) {
+            Ok(info) => info,
+            Err(_) if requested_port != 0 => {
+                // Configured port is taken — fall back to OS-assigned.
+                serve::start(self.file_path.clone(), token.clone(), 0)
+                    .map_err(|e| format!("bind: {e}"))?
+            }
+            Err(e) => return Err(format!("bind: {e}")),
+        };
+        // Persist token + port back to config so phone bookmarks survive.
+        // Load fresh first so we don't clobber any prefs the user has
+        // toggled since this App was constructed.
+        let mut to_save = Config::load();
+        to_save.share_token = Some(info.token.clone());
+        to_save.share_port = Some(info.port);
+        if let Err(e) = to_save.save() {
+            self.flash(format!("share config save failed: {e}"));
+        }
+        Ok(info)
+    }
+
+    pub fn share_info(&self) -> Option<&ShareInfo> {
+        self.share.as_ref()
     }
 
     /// Install the receiver from [`update::spawn_check`](crate::update::spawn_check).

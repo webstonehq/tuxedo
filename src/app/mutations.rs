@@ -1,6 +1,7 @@
 use super::{AddOutcome, App};
 use crate::recurrence::{self, RecSpec};
 use crate::todo::{self, TagError};
+use crate::{inbox, nl};
 
 impl App {
     pub fn toggle_complete(&mut self, abs: usize) {
@@ -95,7 +96,7 @@ impl App {
     }
 
     pub fn add_from_draft(&mut self) -> AddOutcome {
-        let mut text = self.draft.text().trim().to_string();
+        let text = self.draft.text().trim().to_string();
         if text.is_empty() {
             return AddOutcome::Empty;
         }
@@ -107,12 +108,12 @@ impl App {
         // parser extracted anything structured, rewrite the draft to canonical
         // todo.txt and bail before push_history — the actual save happens on
         // the user's *next* Enter through this same function, which by then
-        // sees the canonical form and falls through to the parse path below.
-        if crate::nl::looks_like_natural_language(&text)
+        // sees the canonical form and falls through to the save path below.
+        if nl::looks_like_natural_language(&text)
             && let Ok(today) = chrono::NaiveDate::parse_from_str(&self.today, "%Y-%m-%d")
-            && let Some(parsed) = crate::nl::try_parse(&text, today)
+            && let Some(parsed) = nl::try_parse(&text, today)
         {
-            let canonical = crate::nl::format_as_todo_txt(&parsed);
+            let canonical = nl::format_as_todo_txt(&parsed);
             if canonical != text {
                 let body_was_filled = !parsed.body.trim().is_empty();
                 self.draft_set(canonical);
@@ -126,13 +127,7 @@ impl App {
         }
 
         self.push_history();
-        if !todo::starts_with_priority(&text)
-            && !todo::starts_with_iso_date(&text)
-            && !text.starts_with("x ")
-        {
-            text = format!("{} {}", self.today, text);
-        }
-        match todo::parse_line(&text) {
+        match inbox::finalize_line(&text, &self.today) {
             Ok(parsed) => {
                 self.tasks.push(parsed);
                 self.flash("added");

@@ -33,4 +33,4 @@ expression: buffer_to_text(&buf)
                                   │  Thu May 7                                     │                
                                   │  t today · T tmw · w +1w · m +1mo · x clear    │                
                                   │                                                │                
- INSERT   Enter save · Esc cancel └────────────────────────────────────────────────┘tuxedo 2026.5.7
+ INSERT   Enter save · Esc cancel └────────────────────────────────────────────────┘tuxedo 2026.5.8

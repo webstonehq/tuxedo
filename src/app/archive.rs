@@ -1,3 +1,4 @@
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
@@ -70,6 +71,36 @@ impl Archive {
 }
 
 impl App {
+    fn read_archive_body(&mut self, action: &str) -> Option<String> {
+        match std::fs::read_to_string(&self.archive.path) {
+            Ok(body) => Some(body),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Some(String::new()),
+            Err(e) => {
+                self.flash(format!("{action} failed: done.txt read failed: {e}"));
+                None
+            }
+        }
+    }
+
+    fn refresh_archive_for_mutation(&mut self, action: &str) -> bool {
+        let Some(body) = self.read_archive_body(action) else {
+            return false;
+        };
+        if body != self.archive.last_disk {
+            self.archive.tasks = todo::parse_file(&body);
+            self.archive.last_disk = body;
+            if matches!(self.view, super::View::Archive) {
+                self.recompute_visible();
+                self.clamp_cursor();
+            }
+            self.flash("done.txt changed on disk — reloaded");
+            self.archive.loader = None;
+            return false;
+        }
+        self.archive.loader = None;
+        true
+    }
+
     /// Pump archive state. Returns true when the visible archive changed:
     /// the startup loader landed, or an external edit to `done.txt` was
     /// picked up. Non-blocking; the run loop calls this each iteration so
@@ -139,26 +170,41 @@ impl App {
         }
         // Build new done.txt content (existing + appended). Read fresh
         // from disk so an external edit since startup isn't clobbered.
-        let mut combined = std::fs::read_to_string(&self.archive.path).unwrap_or_default();
+        let Some(previous_archive_body) = self.read_archive_body("archive") else {
+            return;
+        };
+        let mut combined = previous_archive_body.clone();
         if !combined.is_empty() && !combined.ends_with('\n') {
             combined.push('\n');
         }
         combined.push_str(&todo::serialize(&to_move));
         // Write done.txt *before* removing tasks from todo.txt so a failed
-        // archive can't lose data. Surface errors via flash; abort on failure.
+        // archive can't lose data. If the todo write then fails, best-effort
+        // roll done.txt back so the two files do not keep duplicate tasks.
         if let Err(e) = todo::write_atomic(&self.archive.path, &combined) {
             self.flash(format!("archive failed: {}", e));
             return;
         }
-        // Mirror the new disk state in memory and discard any pending
-        // startup loader so its (now-stale) result can't overwrite us.
+        let remaining: Vec<Task> = self.tasks.iter().filter(|t| !t.done).cloned().collect();
+        let remaining_body = todo::serialize(&remaining);
+        if let Err(e) = todo::write_atomic(&self.file_path, &remaining_body) {
+            let rollback = todo::write_atomic(&self.archive.path, &previous_archive_body);
+            if let Err(rollback_err) = rollback {
+                self.flash(format!(
+                    "archive failed: todo write failed: {e}; rollback failed: {rollback_err}"
+                ));
+            } else {
+                self.flash(format!("archive failed: todo write failed: {e}"));
+            }
+            return;
+        }
+        self.push_history();
+        self.tasks = remaining;
+        self.last_disk = remaining_body;
         self.archive.tasks = todo::parse_file(&combined);
         self.archive.last_disk = combined;
         self.archive.loader = None;
-        self.push_history();
-        self.tasks.retain(|t| !t.done);
         self.flash(format!("archived {}", to_move.len()));
-        self.persist();
         self.recompute_visible();
         self.clamp_cursor();
     }
@@ -167,6 +213,9 @@ impl App {
     /// index into `self.archive.tasks()` (the cursor source in Archive view).
     pub fn unarchive(&mut self, archive_idx: usize) {
         if !self.check_external_changes() {
+            return;
+        }
+        if !self.refresh_archive_for_mutation("unarchive") {
             return;
         }
         if archive_idx >= self.archive.tasks.len() {
@@ -201,14 +250,18 @@ impl App {
         self.archive.last_disk = archive_body;
         self.push_history();
         self.tasks.push(task);
-        self.persist();
-        self.flash("unarchived");
+        if self.persist() {
+            self.flash("unarchived");
+        }
         self.recompute_visible();
         self.clamp_cursor();
     }
 
     /// Permanently remove an archived task from `done.txt`.
     pub fn archive_delete(&mut self, archive_idx: usize) {
+        if !self.refresh_archive_for_mutation("delete") {
+            return;
+        }
         if archive_idx >= self.archive.tasks.len() {
             return;
         }
@@ -237,10 +290,17 @@ impl App {
         self.clamp_cursor();
     }
 
-    pub fn persist(&mut self) {
+    pub fn persist(&mut self) -> bool {
         let body = todo::serialize(&self.tasks);
-        if todo::write_atomic(&self.file_path, &body).is_ok() {
-            self.last_disk = body;
+        match todo::write_atomic(&self.file_path, &body) {
+            Ok(()) => {
+                self.last_disk = body;
+                true
+            }
+            Err(e) => {
+                self.flash(format!("write failed: {e}"));
+                false
+            }
         }
     }
 }
@@ -435,6 +495,54 @@ mod tests {
         let changed = app.apply_archive_read(Err(err));
         assert!(!changed);
         assert_eq!(app.archive.len(), 1);
+        assert!(app.flash_active().is_some());
+    }
+
+    #[test]
+    fn archive_delete_refreshes_done_txt_before_writing() {
+        let dir = std::env::temp_dir().join(format!(
+            "tuxedo-archive-test-{}-{}",
+            std::process::id(),
+            "delete-refresh"
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let todo_path = dir.join("todo.txt");
+        let done_path = dir.join("done.txt");
+        std::fs::write(&todo_path, "open\n").unwrap();
+        std::fs::write(&done_path, "x 2026-05-01 2026-04-01 stale\n").unwrap();
+        let mut app = App::new(
+            todo_path,
+            "open\n".to_string(),
+            "2026-05-06".into(),
+            Config::default(),
+        );
+        wait_archive_loaded(&mut app);
+
+        std::fs::write(
+            &done_path,
+            "x 2026-05-01 2026-04-01 stale\nx 2026-05-02 2026-04-02 external\n",
+        )
+        .unwrap();
+        app.archive_delete(0);
+
+        let done = std::fs::read_to_string(&done_path).unwrap();
+        assert!(done.contains("stale"));
+        assert!(done.contains("external"));
+        assert!(app.flash_active().is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn persist_reports_write_failure() {
+        let mut app = build_app("a\n");
+        let missing_parent = std::env::temp_dir()
+            .join(format!("tuxedo-missing-parent-{}", std::process::id()))
+            .join("todo.txt");
+        let _ = std::fs::remove_dir_all(missing_parent.parent().unwrap());
+        app.file_path = missing_parent;
+
+        assert!(!app.persist());
         assert!(app.flash_active().is_some());
     }
 }

@@ -19,6 +19,7 @@ brew install webstonehq/tap/tuxedo
 
 - **Pure todo.txt.** Reads and writes the [standard format](https://github.com/todotxt/todo.txt) — every line is plain text you can edit with anything else.
 - **Natural-language add.** Type prose into the add prompt — `Pay rent monthly on the first, show 3 days before due, project home` — and tuxedo rewrites it to canonical todo.txt for you to review and save. Local, offline, no AI service.
+- **Phone capture.** Press `s` for a QR pointing at a tiny PWA on your machine's LAN — type tasks from your phone and they appear in the list. Captures land in a sibling `inbox.txt` first, so any tool that can append a line (shell, iOS Shortcuts, cron) is also a capture source.
 - **Vim keys, no surprises.** `j` / `k` to move, `dd` to delete, `gg` / `G` to jump, `u` to undo (50 levels), chord prompts (`gg`, `dd`, `fp`, `fc`) with a 600 ms window.
 - **Command palette.** `:` or `Ctrl-P` opens a fuzzy palette over every action — type a few letters, hit Enter. Same matcher as `/` search, ranked so start-of-label hits beat word-boundary hits beat mid-word hits.
 - **Atomic, sync-friendly writes.** Every change goes through write-temp-then-rename. If another process — Dropbox, an editor, a script — modifies the file, tuxedo reloads on the next keypress (or within ~250 ms while idle) and flashes a notice.
@@ -176,6 +177,7 @@ can browse, un-archive, or permanently delete past tasks.
 | Key | Action |
 | --- | --- |
 | `:` / `Ctrl-P` | command palette |
+| `s` | share capture QR (phone PWA) |
 | `?` | help overlay |
 | `,` | settings overlay |
 | `q` | quit |
@@ -254,12 +256,63 @@ Parsing is rule-based and runs locally — no network calls, no API key. If
 the buffer already contains a `due:`, `rec:`, or `t:` token, tuxedo assumes
 you've typed canonical form and saves it directly on the first Enter.
 
+## Phone capture
+
+Press `s` to start a tiny capture server on your machine's LAN address and
+display a QR code for it. Scan it from your phone — any modern browser — to
+get a minimal PWA you can install to your home screen. Type a task, tap
+Add, and within a tick it shows up in your task list.
+
+Captures never touch `todo.txt` directly. They land in a sibling
+`inbox.txt`, which tuxedo drains on every external-change poll: each line
+is run through the same natural-language pipeline as the `n` add prompt,
+given a creation date if missing, and merged into `todo.txt` as a single
+undoable batch (`u` rolls back the whole drain at once).
+
+That makes `inbox.txt` a general capture endpoint, not just a PWA backend.
+Anything that can append a line works as a producer:
+
+```sh
+echo "Refill prescription tomorrow" >> ~/notes/inbox.txt
+echo "Call dentist due:2026-06-01" >> ~/notes/inbox.txt
+```
+
+Shell aliases, iOS Shortcuts writing to a synced folder, cron jobs,
+email-to-file gateways — pick your producer. As long as it appends a line
+to the sibling `inbox.txt`, tuxedo picks it up.
+
+The server:
+
+- Binds on first `s` press and stays up for the rest of the session.
+  Subsequent `s` presses just re-show the QR; any key dismisses the
+  overlay.
+- Listens on `0.0.0.0:<port>` so phones on the same WiFi can reach it.
+  The port is OS-assigned on first use and persisted to `config.toml` so
+  phone bookmarks survive across sessions.
+- Gates every protected route on a 64-character hex token baked into the
+  URL path. The token is generated once, persisted to `config.toml`, and
+  compared in constant time.
+- Speaks plain HTTP — **trusted networks only.** On a shared or public
+  WiFi anyone passive-sniffing can recover the token. To rotate, delete
+  `share_token` from `config.toml` and press `s` again.
+
+Drains are crash-safe: tuxedo holds an advisory lock around the
+rename-and-merge, writers append under the same lock, and any staging
+file left over from an interrupted drain is replayed on the next
+session. Producers and the TUI can't tear each other's writes.
+
 ## Configuration
 
 Persisted to `${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/config.toml`. Cycling
 theme, density, or sort, and toggling sidebars / line-numbers / done-visibility
 all update the file. Unknown keys are ignored, so older binaries don't break
 on newer files.
+
+Two additional keys, `share_token` and `share_port`, are written by the
+[phone capture](#phone-capture) server on first use. Treat `share_token`
+as a secret — anyone who has the value and LAN reach can append to your
+inbox. Delete the key from `config.toml` to rotate it on the next `s`
+press.
 
 ## Development
 

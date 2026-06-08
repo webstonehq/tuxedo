@@ -192,11 +192,17 @@ fn run(mut terminal: DefaultTerminal, app: &mut App) -> Result<()> {
         }
         let timeout = next_timeout(app);
         if event::poll(timeout)? {
-            if let Event::Key(key) = event::read()?
-                && key.kind == KeyEventKind::Press
-            {
-                handle_key(app, key);
-                dirty = true;
+            match event::read()? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    handle_key(app, key);
+                    dirty = true;
+                }
+                // A terminal resize must trigger an immediate redraw;
+                // otherwise the screen stays stale until the next keystroke.
+                Event::Resize(_, _) => {
+                    dirty = true;
+                }
+                _ => {}
             }
         } else if !app.check_external_changes() {
             // Idle tick — file changed under us; reload was performed.

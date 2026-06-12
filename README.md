@@ -76,9 +76,18 @@ curl -o ~/.config/tuxedo/themes/gruvbox-dark-soft.toml \
 <summary>Theme file format and field reference</summary>
 
 A theme file is one `key = value` per line. `name` is the label shown in the
-picker; every other field is a `#rrggbb` color. All fields are required: a file
+picker; every other field is a color value. All fields are required: a file
 missing one, carrying an unparseable color, or whose `name` collides with
 another theme is skipped with a warning at startup.
+
+**Color values** accept two forms:
+
+- `#rrggbb` — a solid hex color (case-insensitive).
+- `reset` or `transparent` — inherits the terminal emulator's own background
+  color. Useful for `bg`, `panel`, and `statusbar` when you want your
+  terminal's opacity, blur, or wallpaper to show through while keeping a
+  custom text palette. Both keywords are case-insensitive and behave
+  identically (same effect as the built-in **Terminal** theme).
 
 | Field | Colors |
 | --- | --- |

@@ -322,7 +322,7 @@ fn parse_theme(s: &str) -> Result<Theme, String> {
         if let Some(field) = match_color_field(k) {
             let color = parse_color(v).ok_or_else(|| {
                 format!(
-                    "line {}: field '{field}' has invalid color '{v}' (expected #rrggbb)",
+                    "line {}: field '{field}' has invalid color '{v}' (expected #rrggbb or reset/transparent)",
                     lineno + 1
                 )
             })?;
@@ -404,9 +404,12 @@ fn match_color_field(k: &str) -> Option<&'static str> {
     COLOR_FIELDS.iter().copied().find(|f| *f == k)
 }
 
-/// Parse `#rrggbb` (case-insensitive). Returns None for any other shape;
-/// callers turn that into a user-facing error referencing the field.
+/// Parse a color value. Accepts `#rrggbb` hex or the keywords `reset` /
+/// `transparent` (both map to `Color::Reset`, inheriting the terminal bg).
 fn parse_color(s: &str) -> Option<Color> {
+    if s.eq_ignore_ascii_case("reset") || s.eq_ignore_ascii_case("transparent") {
+        return Some(Color::Reset);
+    }
     let hex = s.strip_prefix('#')?;
     if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;

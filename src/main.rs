@@ -10,7 +10,7 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 use std::io::Write;
 
 use tuxedo::action::Action;
-use tuxedo::app::{AddOutcome, App, Mode, OverlayKind, View};
+use tuxedo::app::{AddOutcome, App, CalendarTarget, Mode, OverlayKind, View};
 use tuxedo::cli;
 use tuxedo::config::Config;
 use tuxedo::theme;
@@ -657,6 +657,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent) -> Option<Action> {
         // First 'g' arms the chord; second 'g' fires CursorTop.
         KeyCode::Char('g') if app.chord.toggle('g') => Action::CursorTop,
         KeyCode::Char('n') => Action::BeginAdd,
+        KeyCode::Char('r') => Action::Reschedule,
         KeyCode::Char('a') => Action::ToggleArchiveView,
         KeyCode::Char('l') => Action::GoList,
         KeyCode::Char('e' | 'i') => Action::BeginEdit,
@@ -944,6 +945,20 @@ fn apply_action(app: &mut App, action: Action) {
                 app.set_view(View::List);
             }
         }
+        // Opens to insert mode just like i/e but with the calendar open and the cursor on the calendar
+        // If there is a due date, the cursor begins on the current due date
+        // If there is no due date, the cursor begins on today
+        // Enter/escape takes the user back to insert mode on the task
+        Action::Reschedule => {
+            if let Some(abs) = app.cur_abs()
+                && let Some(raw) = app.task_raw(abs)
+            {
+                app.selection.enter_edit(abs);
+                app.draft_set(raw);
+                app.mode = Mode::Insert;
+                app.open_calendar(CalendarTarget::Due);
+            }
+        }
     }
 }
 
@@ -972,6 +987,7 @@ fn copy_current_task(app: &mut App, body_only: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::NaiveDate;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use tuxedo::config::Config;
 
@@ -998,6 +1014,21 @@ mod tests {
         )
     }
 
+    fn build_app_with_due() -> App {
+        let path = std::env::temp_dir().join(format!(
+            "tuxedo-bindings-{}-{:?}.txt",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::write(&path, "Buy milk due:2026-06-30\n");
+        App::new(
+            path,
+            "Buy milk due:2026-06-30\n".into(),
+            "2026-05-07".into(),
+            Config::default(),
+        )
+    }
+
     #[test]
     fn plain_keys_resolve_to_their_actions() {
         let mut app = build_app();
@@ -1017,6 +1048,10 @@ mod tests {
         assert_eq!(
             resolve_normal_key(&mut app, key('n')),
             Some(Action::BeginAdd),
+        );
+        assert_eq!(
+            resolve_normal_key(&mut app, key('r')),
+            Some(Action::Reschedule),
         );
         assert_eq!(
             resolve_normal_key(&mut app, key('a')),
@@ -1232,5 +1267,61 @@ mod tests {
         apply_action(&mut app, Action::CyclePriority);
         assert_eq!(app.flash_active(), Some("read-only in archive"));
         assert!(app.archive().tasks()[0].done);
+    }
+
+    #[test]
+    fn lowercase_r_reschedules_task_with_due_date() {
+        let mut app = build_app_with_due();
+        assert_eq!(app.tasks().len(), 1);
+        assert_eq!(app.tasks()[0].due.as_deref(), Some("2026-06-30"));
+        assert_eq!(app.mode, tuxedo::app::Mode::Normal);
+
+        assert_eq!(
+            resolve_normal_key(&mut app, key('r')),
+            Some(Action::Reschedule),
+        );
+        apply_action(&mut app, Action::Reschedule);
+        assert_eq!(app.mode, Mode::Insert);
+
+        let s = app.calendar_state().expect("calendar should be open");
+        assert_eq!(
+            s.focused,
+            NaiveDate::from_ymd_opt(2026, 6, 30).expect("there should be a date set")
+        );
+
+        app.calendar_add_months(1);
+        app.calendar_accept();
+        assert!(app.draft.overlay().is_none());
+        app.add_from_draft();
+        let task = app.tasks().last().expect("task added");
+        assert_eq!(task.due.as_deref(), Some("2026-07-30"));
+    }
+
+    #[test]
+    fn lowercase_r_reschedules_task_without_due_date() {
+        let mut app = build_app();
+        assert_eq!(app.tasks().len(), 3);
+        assert_eq!(app.tasks()[0].due.as_deref(), None);
+        assert_eq!(app.mode, tuxedo::app::Mode::Normal);
+
+        assert_eq!(
+            resolve_normal_key(&mut app, key('r')),
+            Some(Action::Reschedule),
+        );
+        apply_action(&mut app, Action::Reschedule);
+        assert_eq!(app.mode, Mode::Insert);
+
+        let s = app.calendar_state().expect("calendar should be open");
+        assert_eq!(
+            s.focused,
+            NaiveDate::from_ymd_opt(2026, 5, 7).expect("there should be a date set")
+        );
+
+        app.calendar_add_months(1);
+        app.calendar_accept();
+        app.add_from_draft();
+        assert!(app.draft.overlay().is_none());
+        let task = app.tasks().last().expect("task added");
+        assert_eq!(task.due.as_deref(), Some("2026-06-07"));
     }
 }

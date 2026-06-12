@@ -222,6 +222,11 @@ pub const ENTRIES: &[PaletteEntry] = &[
         keys: "q",
         action: Action::Quit,
     },
+    PaletteEntry {
+        label: "reschedule",
+        keys: "r",
+        action: Action::Reschedule,
+    },
 ];
 
 #[derive(Debug, Default, Clone)]
@@ -520,6 +525,7 @@ mod tests {
             Action::EscapeStack,
             Action::OpenShare,
             Action::OpenThemePicker,
+            Action::Reschedule,
         ];
         for a in required {
             assert!(actions.contains(&a), "missing palette entry for {a:?}");

@@ -25,6 +25,7 @@ const EDITING: Section = (
     &[
         ("n", "new task"),
         ("e / i", "edit current line"),
+        ("r", "reschedule task"),
         ("x", "toggle complete"),
         ("dd", "delete task"),
         ("p", "cycle priority A→B→C→·"),

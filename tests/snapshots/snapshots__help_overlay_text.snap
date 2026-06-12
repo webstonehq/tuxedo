@@ -14,15 +14,15 @@ expression: buffer_to_text(&buf)
    +t│  EDITING                                       a                 archive view          │     
      │    n                 new task                  A                 archive completed     │rd   
  CONT│    e / i             edit current line         H                 show done in list     │     
-   @e│    x                 toggle complete           F                 show future in list   │     
-   @h│    dd                delete task               [ / ]             toggle filter / detail│     
-   @l│    p                 cycle priority A→B→C→·    T                 cycle theme           │     
-   @p│    c                 add/remove context        D                 cycle density         │     
-     │    +                 add project               L                 toggle line numbers   │     
-     │    yy                copy line to clipboard                                            │     
-     │    yb                copy body only          SYSTEM                                    │     
-     │    u                 undo                      : / Ctrl-P        command palette       │     
-     │                                                s                 share capture QR      │     
+   @e│    r                 reschedule task           F                 show future in list   │     
+   @h│    x                 toggle complete           [ / ]             toggle filter / detail│     
+   @l│    dd                delete task               T                 cycle theme           │     
+   @p│    p                 cycle priority A→B→C→·    D                 cycle density         │     
+     │    c                 add/remove context        L                 toggle line numbers   │     
+     │    +                 add project                                                       │     
+     │    yy                copy line to clipboard  SYSTEM                                    │     
+     │    yb                copy body only            : / Ctrl-P        command palette       │     
+     │    u                 undo                      s                 share capture QR      │     
      │                                                ? / ,             help / settings       │     
      │                                                q                 quit                  │     
      │────────────────────────────────────────────────────────────────────────────────────────│     

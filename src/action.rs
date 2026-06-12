@@ -15,6 +15,7 @@ pub enum Action {
     BeginEdit,
     ToggleComplete,
     Delete,
+    Reschedule,
     CyclePriority,
     BeginSearch,
     OpenHelp,

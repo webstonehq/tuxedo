@@ -46,7 +46,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Mode::PromptSaveFilter => "type a filter name · Enter save · Esc cancel",
         Mode::CommandPalette => "type to filter · Enter run · Esc cancel",
         Mode::Share => "scan the QR · any key dismisses",
-        _ => "j/k · n new · x done · / search · ? help · u undo · q quit",
+        _ => "j/k · n new · r reschedule · x done · / search · ? help · u undo · q quit",
     };
 
     let mut right_parts = Vec::new();

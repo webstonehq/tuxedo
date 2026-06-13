@@ -1,6 +1,14 @@
 use super::App;
 use super::draft_overlay::DraftOverlay;
 
+/// Sub-mode for the edit/add dialog, mirroring vim's modal editing model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DialogInputMode {
+    #[default]
+    Insert,
+    Normal,
+}
+
 /// Byte offset within a draft `String`. Construction enforces UTF-8 char-boundary
 /// landing, so cursor positions can't be left mid-codepoint by direct assignment.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -39,6 +47,7 @@ pub struct DraftState {
     /// priority chooser). At most one at a time. `None` is the default — the
     /// user is just editing text.
     overlay: Option<DraftOverlay>,
+    input_mode: DialogInputMode,
 }
 
 impl DraftState {
@@ -70,11 +79,20 @@ impl DraftState {
         self.overlay = overlay;
     }
 
+    pub fn input_mode(&self) -> DialogInputMode {
+        self.input_mode
+    }
+
+    pub fn set_input_mode(&mut self, mode: DialogInputMode) {
+        self.input_mode = mode;
+    }
+
     pub fn clear(&mut self) {
         self.text.clear();
         self.cursor = DraftCursor::zero();
         self.reset_autocomplete();
         self.overlay = None;
+        self.input_mode = DialogInputMode::Insert;
     }
 
     /// Replace the text and park the cursor at the end. Used when entering
@@ -84,6 +102,7 @@ impl DraftState {
         self.text = s;
         self.reset_autocomplete();
         self.overlay = None;
+        self.input_mode = DialogInputMode::Normal;
     }
 
     pub fn insert_char(&mut self, c: char) {

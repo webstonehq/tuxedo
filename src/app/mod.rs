@@ -32,7 +32,7 @@ pub use crate::core::History;
 pub use crate::core::filter::{ListDueBucket, ordered_unique};
 pub use autocomplete::{ActiveToken, TokenKind, active_token};
 pub use chord::Chord;
-pub use draft::{DraftCursor, DraftState};
+pub use draft::{DialogInputMode, DraftCursor, DraftState};
 pub use draft_overlay::{
     BuilderField, CalendarState, CalendarTarget, DraftOverlay, OverlayKind, PriorityChooserState,
     REC_UNIT_ORDER, RecurrenceBuilderState, SLASH_ENTRIES, SlashEntry, SlashKind, SlashMenuState,

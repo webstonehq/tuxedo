@@ -10,7 +10,7 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 use std::io::Write;
 
 use tuxedo::action::Action;
-use tuxedo::app::{AddOutcome, App, Mode, OverlayKind, View};
+use tuxedo::app::{AddOutcome, App, DialogInputMode, Mode, OverlayKind, View};
 use tuxedo::cli;
 use tuxedo::config::Config;
 use tuxedo::theme;
@@ -311,7 +311,35 @@ fn apply_to_draft(app: &mut App, key: KeyEvent) -> DraftEffect {
     }
 }
 
+fn handle_insert_normal(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Esc => {
+            app.mode = Mode::Normal;
+            app.draft_clear();
+            app.selection.exit_edit();
+        }
+        KeyCode::Char('h') | KeyCode::Left => app.draft_left(),
+        KeyCode::Char('l') | KeyCode::Right => app.draft_right(),
+        KeyCode::Char('x') => app.draft_delete_forward(),
+        KeyCode::Char('i') => app.draft.set_input_mode(DialogInputMode::Insert),
+        KeyCode::Char('a') => {
+            app.draft_right();
+            app.draft.set_input_mode(DialogInputMode::Insert);
+        }
+        KeyCode::Char('A') => {
+            app.draft_end();
+            app.draft.set_input_mode(DialogInputMode::Insert);
+        }
+        _ => {}
+    }
+}
+
 fn handle_insert(app: &mut App, key: KeyEvent) {
+    if app.draft.input_mode() == DialogInputMode::Normal {
+        handle_insert_normal(app, key);
+        return;
+    }
+
     // Metadata-picker overlays take precedence. Non-slash overlays fully
     // consume keys until accepted or cancelled; the slash menu intercepts
     // only its navigation keys and lets text editing flow through so the
@@ -349,7 +377,7 @@ fn handle_insert(app: &mut App, key: KeyEvent) {
     // Tab accepts; Enter falls through to save so the popup never swallows the
     // submit keystroke (e.g. when the typed token already matches an existing
     // project/context). Esc with the popup open dismisses the popup but leaves
-    // Insert mode intact; a second Esc cancels the add (handled below).
+    // Insert mode intact; a second Esc enters Normal mode (handled below).
     if app.autocomplete_visible() {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
@@ -383,9 +411,7 @@ fn handle_insert(app: &mut App, key: KeyEvent) {
 
     match key.code {
         KeyCode::Esc => {
-            app.mode = Mode::Normal;
-            app.draft_clear();
-            app.selection.exit_edit();
+            app.draft.set_input_mode(DialogInputMode::Normal);
         }
         KeyCode::Enter => {
             let outcome = if app.selection.editing().is_some() {

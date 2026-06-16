@@ -257,6 +257,82 @@ config-file flag; configure paths with the environment variables above.
 
 ## Keybindings
 
+Custom normal-mode keybindings can be added in
+`${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/keybinds.toml`:
+
+The block below lists every rebindable action with the key it ships with —
+copy it, then change the keys you care about and delete the rest (anything you
+leave out keeps its default). A value is a single key or an array of
+alternatives, e.g. `begin_add = ["N", "Ctrl-n"]`.
+
+```toml
+[normal]
+
+# Navigation
+cursor_down    = ["j", "Down"]
+cursor_up      = ["k", "Up"]
+cursor_top     = "gg"
+cursor_bottom  = "G"
+half_page_down = "Ctrl-d"
+half_page_up   = "Ctrl-u"
+
+# Editing
+begin_add            = "n"
+begin_edit           = ["e", "i"]
+toggle_complete      = "x"
+delete               = "dd"
+reschedule           = "r"
+cycle_priority       = "p"
+begin_prompt_context = "c"
+copy_line            = "yy"
+copy_body            = "yb"
+undo                 = "u"
+# begin_prompt_project defaults to "+", which can't be written here (the
+# parser reads "+" as a modifier separator). Pick another key to move it, e.g.
+# begin_prompt_project = "P"
+
+# Filtering, sort, view
+begin_search        = "/"
+arm_f               = "f"        # leader for the fp / fc / ff / fs chords
+pick_project        = "fp"
+pick_context        = "fc"
+pick_saved_filter   = "ff"
+save_current_filter = "fs"
+cycle_sort          = "S"
+toggle_visual       = "v"
+toggle_selected     = "space"
+go_list             = "l"
+toggle_archive_view = "a"
+archive_completed   = "A"
+toggle_show_done    = "H"
+toggle_show_future  = "F"
+
+# Layout & theme
+toggle_left_pane  = "["
+toggle_right_pane = "]"
+open_theme_picker = "T"
+cycle_density     = "D"
+toggle_line_num   = "L"
+# cycle_theme has no default — bind a key to cycle themes without the picker:
+# cycle_theme = "Ctrl-t"
+
+# System
+open_command_palette = [":", "Ctrl-P"]
+open_share           = "s"
+open_help            = "?"
+open_settings        = ","
+escape_stack         = "Esc"
+quit                 = "q"
+```
+
+Custom bindings are checked before the defaults. The default bindings remain
+available unless the same key or two-key chord is bound to another action in
+the file. Action names are snake_case, matching the names in the command
+palette where possible: `toggle_complete`, `pick_project`,
+`open_theme_picker`, and so on. Key names can be single characters, two-key
+chords like `ZZ`, modifier forms like `Ctrl-n` / `Alt-x`, named keys like
+`Esc`, `Enter`, `Tab`, arrows, `Page-Up`, `Page-Down`, or `F1` through `F24`.
+
 ### Navigation
 
 | Key | Action |

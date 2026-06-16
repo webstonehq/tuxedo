@@ -8,6 +8,7 @@ pub mod cmd;
 pub mod config;
 pub mod core;
 pub mod inbox;
+pub mod keybinds;
 pub mod nl;
 pub mod recurrence;
 pub mod sample;

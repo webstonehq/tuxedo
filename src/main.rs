@@ -13,6 +13,7 @@ use tuxedo::action::Action;
 use tuxedo::app::{AddOutcome, App, CalendarTarget, DialogInputMode, Mode, OverlayKind, View};
 use tuxedo::cli;
 use tuxedo::config::Config;
+use tuxedo::keybinds::{KeyBindings, ResolvedKey};
 use tuxedo::theme;
 use tuxedo::ui::hyperlinks;
 use tuxedo::{clipboard, todo, ui, update};
@@ -62,6 +63,7 @@ fn main() -> Result<()> {
     };
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let cfg = Config::load();
+    let keybinds = KeyBindings::load();
     // Load user-supplied themes before constructing App, so the theme named
     // in cfg can resolve to a custom theme on the first `Prefs::from_config`.
     let theme_warnings = match theme::themes_dir() {
@@ -99,7 +101,7 @@ fn main() -> Result<()> {
     let title = ui::title::terminal_title(&path, home.as_deref(), ui::title::DEFAULT_BUDGET);
     let _ =
         ratatui::crossterm::execute!(io::stdout(), ratatui::crossterm::terminal::SetTitle(title));
-    let result = run(terminal, &mut app_state);
+    let result = run(terminal, &mut app_state, &keybinds);
     ratatui::restore();
     // Clear the title on exit so the shell retitles on its next prompt rather
     // than leaving `tuxedo …` behind.
@@ -153,7 +155,7 @@ fn print_usage() {
     println!("  DONE_FILE    path to the archive file (default sibling done.txt)");
 }
 
-fn run(mut terminal: DefaultTerminal, app: &mut App) -> Result<()> {
+fn run(mut terminal: DefaultTerminal, app: &mut App, keybinds: &KeyBindings) -> Result<()> {
     let mut dirty = true;
     while !app.should_quit {
         // Pick up midnight rollover so threshold-hidden tasks reveal
@@ -194,7 +196,7 @@ fn run(mut terminal: DefaultTerminal, app: &mut App) -> Result<()> {
         if event::poll(timeout)? {
             match event::read()? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    handle_key(app, key);
+                    handle_key(app, key, keybinds);
                     dirty = true;
                 }
                 // A terminal resize must trigger an immediate redraw;
@@ -233,7 +235,7 @@ fn next_timeout(app: &App) -> Duration {
     }
 }
 
-fn handle_key(app: &mut App, key: KeyEvent) {
+fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
     // Detect external edits before processing the key. On detection the
     // file is reloaded, the keystroke is consumed (re-press to act on the
     // new state), and the per-mutator checks become no-ops downstream.
@@ -252,7 +254,7 @@ fn handle_key(app: &mut App, key: KeyEvent) {
         Mode::PickTheme => handle_pick_theme(app, key),
         Mode::CommandPalette => handle_command_palette(app, key),
         Mode::Share => handle_share(app, key),
-        Mode::Normal | Mode::Visual => handle_normal(app, key),
+        Mode::Normal | Mode::Visual => handle_normal(app, key, keybinds),
     }
 }
 
@@ -699,7 +701,13 @@ fn handle_prompt(app: &mut App, key: KeyEvent) {
 ///
 /// Mutates the chord state because chord progress is part of interpreting
 /// the key, not a separate concern.
-fn resolve_normal_key(app: &mut App, key: KeyEvent) -> Option<Action> {
+fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> Option<Action> {
+    match keybinds.resolve_normal(key, &mut app.chord) {
+        Some(ResolvedKey::Action(action)) => return Some(action),
+        Some(ResolvedKey::Pending) => return None,
+        None => {}
+    }
+
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     if ctrl {
         return match key.code {
@@ -1022,8 +1030,8 @@ fn apply_action(app: &mut App, action: Action) {
     }
 }
 
-fn handle_normal(app: &mut App, key: KeyEvent) {
-    if let Some(action) = resolve_normal_key(app, key) {
+fn handle_normal(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    if let Some(action) = resolve_normal_key(app, key, keybinds) {
         apply_action(app, action);
     }
     app.clamp_cursor();
@@ -1059,6 +1067,10 @@ mod tests {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
     }
 
+    fn resolve(app: &mut App, key: KeyEvent) -> Option<Action> {
+        resolve_normal_key(app, key, &KeyBindings::default())
+    }
+
     fn build_app() -> App {
         let path = std::env::temp_dir().join(format!(
             "tuxedo-bindings-{}-{:?}.txt",
@@ -1092,37 +1104,46 @@ mod tests {
     #[test]
     fn plain_keys_resolve_to_their_actions() {
         let mut app = build_app();
-        assert_eq!(resolve_normal_key(&mut app, key('q')), Some(Action::Quit));
+        assert_eq!(resolve(&mut app, key('q')), Some(Action::Quit));
+        assert_eq!(resolve(&mut app, key('j')), Some(Action::CursorDown),);
+        assert_eq!(resolve(&mut app, key('?')), Some(Action::OpenHelp));
+        assert_eq!(resolve(&mut app, ctrl('d')), Some(Action::HalfPageDown),);
+        assert_eq!(resolve(&mut app, key('n')), Some(Action::BeginAdd),);
+        assert_eq!(resolve(&mut app, key('a')), Some(Action::ToggleArchiveView),);
+        assert_eq!(resolve(&mut app, key('A')), Some(Action::ArchiveCompleted),);
+        assert_eq!(resolve(&mut app, key('S')), Some(Action::CycleSort),);
+    }
+
+    #[test]
+    fn custom_keybinds_override_builtins() {
+        let mut app = build_app();
+        let keybinds = KeyBindings::parse("[normal]\nopen_help = \"q\"\n");
         assert_eq!(
-            resolve_normal_key(&mut app, key('j')),
-            Some(Action::CursorDown),
-        );
-        assert_eq!(
-            resolve_normal_key(&mut app, key('?')),
+            resolve_normal_key(&mut app, key('q'), &keybinds),
             Some(Action::OpenHelp)
         );
         assert_eq!(
-            resolve_normal_key(&mut app, ctrl('d')),
+            resolve_normal_key(&mut app, ctrl('d'), &keybinds),
             Some(Action::HalfPageDown),
         );
         assert_eq!(
-            resolve_normal_key(&mut app, key('n')),
+            resolve_normal_key(&mut app, key('n'), &keybinds),
             Some(Action::BeginAdd),
         );
         assert_eq!(
-            resolve_normal_key(&mut app, key('r')),
+            resolve_normal_key(&mut app, key('r'), &keybinds),
             Some(Action::Reschedule),
         );
         assert_eq!(
-            resolve_normal_key(&mut app, key('a')),
+            resolve_normal_key(&mut app, key('a'), &keybinds),
             Some(Action::ToggleArchiveView),
         );
         assert_eq!(
-            resolve_normal_key(&mut app, key('A')),
+            resolve_normal_key(&mut app, key('A'), &keybinds),
             Some(Action::ArchiveCompleted),
         );
         assert_eq!(
-            resolve_normal_key(&mut app, key('S')),
+            resolve_normal_key(&mut app, key('S'), &keybinds),
             Some(Action::CycleSort),
         );
     }
@@ -1163,72 +1184,57 @@ mod tests {
     fn gg_chord_only_fires_on_second_press() {
         let mut app = build_app();
         // First 'g' arms the chord but produces no action.
-        assert_eq!(resolve_normal_key(&mut app, key('g')), None);
+        assert_eq!(resolve(&mut app, key('g')), None);
         // Second 'g' fires.
-        assert_eq!(
-            resolve_normal_key(&mut app, key('g')),
-            Some(Action::CursorTop)
-        );
+        assert_eq!(resolve(&mut app, key('g')), Some(Action::CursorTop));
     }
 
     #[test]
     fn fp_chord_routes_to_pick_project() {
         let mut app = build_app();
         // 'f' arms the leader.
-        assert_eq!(resolve_normal_key(&mut app, key('f')), Some(Action::ArmF));
+        assert_eq!(resolve(&mut app, key('f')), Some(Action::ArmF));
         apply_action(&mut app, Action::ArmF);
         // 'p' after armed 'f' picks project, not cycles priority.
-        assert_eq!(
-            resolve_normal_key(&mut app, key('p')),
-            Some(Action::PickProject)
-        );
+        assert_eq!(resolve(&mut app, key('p')), Some(Action::PickProject));
     }
 
     #[test]
     fn p_without_chord_cycles_priority() {
         let mut app = build_app();
-        assert_eq!(
-            resolve_normal_key(&mut app, key('p')),
-            Some(Action::CyclePriority),
-        );
+        assert_eq!(resolve(&mut app, key('p')), Some(Action::CyclePriority),);
     }
 
     #[test]
     fn unknown_key_returns_none() {
         let mut app = build_app();
         let k = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
-        assert_eq!(resolve_normal_key(&mut app, k), None);
+        assert_eq!(resolve(&mut app, k), None);
     }
 
     #[test]
     fn yy_chord_only_fires_on_second_press() {
         let mut app = build_app();
         // First 'y' arms the chord but produces no action.
-        assert_eq!(resolve_normal_key(&mut app, key('y')), None);
+        assert_eq!(resolve(&mut app, key('y')), None);
         // Second 'y' fires the line copy.
-        assert_eq!(
-            resolve_normal_key(&mut app, key('y')),
-            Some(Action::CopyLine)
-        );
+        assert_eq!(resolve(&mut app, key('y')), Some(Action::CopyLine));
     }
 
     #[test]
     fn yb_chord_routes_to_copy_body() {
         let mut app = build_app();
         // 'y' arms the leader without firing.
-        assert_eq!(resolve_normal_key(&mut app, key('y')), None);
+        assert_eq!(resolve(&mut app, key('y')), None);
         // 'b' after armed 'y' copies the body.
-        assert_eq!(
-            resolve_normal_key(&mut app, key('b')),
-            Some(Action::CopyBody)
-        );
+        assert_eq!(resolve(&mut app, key('b')), Some(Action::CopyBody));
     }
 
     #[test]
     fn plain_b_without_y_armed_is_unhandled() {
         let mut app = build_app();
         // No leader → 'b' is not bound to anything else, so nothing fires.
-        assert_eq!(resolve_normal_key(&mut app, key('b')), None);
+        assert_eq!(resolve(&mut app, key('b')), None);
     }
 
     #[test]
@@ -1336,10 +1342,7 @@ mod tests {
         assert_eq!(app.tasks()[0].due.as_deref(), Some("2026-06-30"));
         assert_eq!(app.mode, tuxedo::app::Mode::Normal);
 
-        assert_eq!(
-            resolve_normal_key(&mut app, key('r')),
-            Some(Action::Reschedule),
-        );
+        assert_eq!(resolve(&mut app, key('r')), Some(Action::Reschedule),);
         apply_action(&mut app, Action::Reschedule);
         assert_eq!(app.mode, Mode::Insert);
 
@@ -1364,10 +1367,7 @@ mod tests {
         assert_eq!(app.tasks()[0].due.as_deref(), None);
         assert_eq!(app.mode, tuxedo::app::Mode::Normal);
 
-        assert_eq!(
-            resolve_normal_key(&mut app, key('r')),
-            Some(Action::Reschedule),
-        );
+        assert_eq!(resolve(&mut app, key('r')), Some(Action::Reschedule),);
         apply_action(&mut app, Action::Reschedule);
         assert_eq!(app.mode, Mode::Insert);
 

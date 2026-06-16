@@ -187,6 +187,23 @@ impl DraftState {
         self.cursor = DraftCursor(p);
     }
 
+    /// Delete from the cursor to the start of the next word (`dw`/`cw`).
+    pub fn delete_word_forward(&mut self) {
+        let start = self.cursor.byte();
+        let s = &self.text;
+        let mut end = start;
+        while end < s.len() && !s.as_bytes()[end].is_ascii_whitespace() {
+            end = next_char_boundary(s, end);
+        }
+        while end < s.len() && s.as_bytes()[end].is_ascii_whitespace() {
+            end = next_char_boundary(s, end);
+        }
+        if end > start {
+            self.text.drain(start..end);
+            self.reset_autocomplete();
+        }
+    }
+
     /// Move to the end of the current or next word (`e`).
     pub fn move_word_end(&mut self) {
         let s = &self.text;
@@ -296,6 +313,10 @@ impl App {
 
     pub fn draft_word_end(&mut self) {
         self.draft.move_word_end();
+    }
+
+    pub fn draft_delete_word_forward(&mut self) {
+        self.draft.delete_word_forward();
     }
 }
 

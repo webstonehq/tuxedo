@@ -296,6 +296,8 @@ directly in **Insert mode** — start typing immediately.
 | `b` | jump to start of previous word |
 | `e` | jump to end of current word |
 | `x` | delete character under cursor |
+| `dw` | delete to start of next word |
+| `cw` | delete to start of next word and enter Insert mode |
 | `i` | enter Insert mode before cursor |
 | `a` | enter Insert mode after cursor |
 | `A` | enter Insert mode at end of line |

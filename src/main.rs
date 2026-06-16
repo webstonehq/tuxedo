@@ -320,9 +320,16 @@ fn handle_insert_normal(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('h') | KeyCode::Left => app.draft_left(),
         KeyCode::Char('l') | KeyCode::Right => app.draft_right(),
+        KeyCode::Char('w') if app.chord.consume('d') => app.draft_delete_word_forward(),
+        KeyCode::Char('w') if app.chord.consume('c') => {
+            app.draft_delete_word_forward();
+            app.draft.set_input_mode(DialogInputMode::Insert);
+        }
         KeyCode::Char('w') => app.draft_word_forward(),
         KeyCode::Char('b') => app.draft_word_backward(),
         KeyCode::Char('e') => app.draft_word_end(),
+        KeyCode::Char('d') => app.chord.arm('d'),
+        KeyCode::Char('c') => app.chord.arm('c'),
         KeyCode::Char('x') => app.draft_delete_forward(),
         KeyCode::Char('i') => app.draft.set_input_mode(DialogInputMode::Insert),
         KeyCode::Char('a') => {

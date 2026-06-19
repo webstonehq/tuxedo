@@ -1,37 +1,28 @@
-# Catppuccin Frappé theme for Tuxedo
-# Original Catppuccin palette: https://catppuccin.com
-# Tuxedo theme adaptation by github.com/jman223
-
+# Catppuccin Frappé for tuxedo.
+# Copy into ${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/themes/ and press T to select it.
 name = Catppuccin Frappé
-
-bg = #303446
-panel = #292c3c
-border = #51576d
-
+bg = #292c3c
+panel = #303446
+border = #737994
 fg = #c6d0f5
 dim = #838ba7
 accent = #8caaee
-
-cursor = #414559
-selection = #414559
-selected = #414559
-
-statusbar = #292c3c
-status_fg = #b5bfe2
+cursor = #626880
+selection = #51576d
+statusbar = #414559
+status_fg = #a5adce
 mode_fg = #303446
 mode_bg = #8caaee
-
 pri_a = #e78284
-pri_b = #ef9f76
+pri_b = #e5c890
 pri_c = #a6d189
 pri_d = #8caaee
 pri_other = #ca9ee6
-
-project = #8caaee
-context = #81c8be
-
-done = #737994
-matched = #e5c890
+project = #81c8be
+context = #ef9f76
 due = #e5c890
 overdue = #e78284
-today = #e78284
+today = #ea999c
+done = #737994
+selected = #414559
+matched = #949cbb

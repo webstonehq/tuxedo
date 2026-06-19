@@ -1,37 +1,28 @@
-# Catppuccin Latte theme for Tuxedo
-# Original Catppuccin palette: https://catppuccin.com
-# Tuxedo theme adaptation by github.com/jman223
-
+# Catppuccin Latte for tuxedo.
+# Copy into ${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/themes/ and press T to select it.
 name = Catppuccin Latte
-
-bg = #eff1f5
-panel = #e6e9ef
-border = #bcc0cc
-
+bg = #e6e9ef
+panel = #eff1f5
+border = #9ca0b0
 fg = #4c4f69
 dim = #8c8fa1
 accent = #1e66f5
-
-cursor = #ccd0da
-selection = #ccd0da
-selected = #ccd0da
-
-statusbar = #e6e9ef
-status_fg = #5c5f77
+cursor = #acb0be
+selection = #bcc0cc
+statusbar = #ccd0da
+status_fg = #6c6f85
 mode_fg = #eff1f5
 mode_bg = #1e66f5
-
 pri_a = #d20f39
-pri_b = #fe640b
+pri_b = #df8e1d
 pri_c = #40a02b
 pri_d = #1e66f5
 pri_other = #8839ef
-
-project = #1e66f5
-context = #179299
-
-done = #9ca0b0
-matched = #df8e1d
+project = #179299
+context = #fe640b
 due = #df8e1d
 overdue = #d20f39
-today = #d20f39
+today = #e64553
+done = #9ca0b0
+selected = #ccd0da
+matched = #7c7f93

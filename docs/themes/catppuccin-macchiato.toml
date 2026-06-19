@@ -1,37 +1,28 @@
-# Catppuccin Macchiato theme for Tuxedo
-# Original Catppuccin palette: https://catppuccin.com
-# Tuxedo theme adaptation by github.com/jman223
-
+# Catppuccin Macchiato for tuxedo.
+# Copy into ${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/themes/ and press T to select it.
 name = Catppuccin Macchiato
-
-bg = #24273a
-panel = #1e2030
-border = #494d64
-
+bg = #1e2030
+panel = #24273a
+border = #6e738d
 fg = #cad3f5
 dim = #8087a2
 accent = #8aadf4
-
-cursor = #363a4f
-selection = #363a4f
-selected = #363a4f
-
-statusbar = #1e2030
-status_fg = #b8c0e0
+cursor = #5b6078
+selection = #494d64
+statusbar = #363a4f
+status_fg = #a5adcb
 mode_fg = #24273a
 mode_bg = #8aadf4
-
 pri_a = #ed8796
-pri_b = #f5a97f
+pri_b = #eed49f
 pri_c = #a6da95
 pri_d = #8aadf4
 pri_other = #c6a0f6
-
-project = #8aadf4
-context = #8bd5ca
-
-done = #6e738d
-matched = #eed49f
+project = #8bd5ca
+context = #f5a97f
 due = #eed49f
 overdue = #ed8796
-today = #ed8796
+today = #ee99a0
+done = #6e738d
+selected = #363a4f
+matched = #939ab7

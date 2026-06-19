@@ -352,6 +352,19 @@ fn apply_to_draft(app: &mut App, key: KeyEvent) -> DraftEffect {
 
 fn handle_insert_normal(app: &mut App, key: KeyEvent) {
     match key.code {
+        KeyCode::Enter => {
+            let outcome = if app.selection.editing().is_some() {
+                app.save_edit();
+                AddOutcome::Saved
+            } else {
+                app.add_from_draft()
+            };
+            if !matches!(outcome, AddOutcome::Parsed) {
+                app.mode = Mode::Normal;
+                app.draft_clear();
+                app.selection.exit_edit();
+            }
+        }
         KeyCode::Esc => {
             app.mode = Mode::Normal;
             app.draft_clear();

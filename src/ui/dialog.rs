@@ -1245,7 +1245,7 @@ mod tests {
             Config::default(),
         );
         app.mode = Mode::Insert;
-        app.draft_set(draft.to_string());
+        app.draft_set_insert(draft.to_string());
         app
     }
 

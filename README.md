@@ -386,7 +386,7 @@ The modal keys below apply in Normal mode:
 | `A` | enter Insert mode at end of line |
 | `Esc` (in Insert) | return to Normal mode |
 | `Esc` (in Normal) | cancel and close |
-| `Enter` (in Insert) | save |
+| `Enter` (in Insert and Normal) | save |
 
 ### Filtering, sort, view
 

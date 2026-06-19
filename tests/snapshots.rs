@@ -341,7 +341,7 @@ fn command_palette_preserves_visual_selection() {
 fn insert_dialog() {
     let mut app = make_app();
     app.mode = Mode::Insert;
-    app.draft_set("(A) Buy milk +groceries @errands due:2026-05-10".to_string());
+    app.draft_set_insert("(A) Buy milk +groceries @errands due:2026-05-10".to_string());
     snapshot_app("insert_dialog", &app);
 }
 
@@ -352,7 +352,7 @@ fn insert_dialog_after_nl_parse() {
     // confirm. Mode stays in Insert so the user can review/edit.
     let mut app = make_app();
     app.mode = Mode::Insert;
-    app.draft_set(
+    app.draft_set_insert(
         "Pay rent monthly on the first of the month, show the todo 3 days before the due date. \
          It's part of project home and context bank"
             .to_string(),
@@ -372,7 +372,7 @@ fn insert_slash_menu() {
     // tags and is now picking metadata via `/`.
     let mut app = make_app();
     app.mode = Mode::Insert;
-    app.draft_set("Schedule team offsite +work @phone /".to_string());
+    app.draft_set_insert("Schedule team offsite +work @phone /".to_string());
     // The `/` lives at the last byte; install the overlay state that
     // `maybe_open_slash_menu` would normally produce.
     let anchor = app.draft.text().len() - 1;
@@ -391,7 +391,7 @@ fn insert_calendar_for_due() {
     // distinguishable in the snapshot.
     let mut app = make_app();
     app.mode = Mode::Insert;
-    app.draft_set("(A) Renew passport before summer trip +travel @errands".to_string());
+    app.draft_set_insert("(A) Renew passport before summer trip +travel @errands".to_string());
     app.draft
         .set_overlay(Some(DraftOverlay::Calendar(CalendarState {
             target: CalendarTarget::Due,
@@ -406,7 +406,7 @@ fn insert_recurrence_builder() {
     // Mirrors mockup 3: recurrence builder open after /rec.
     let mut app = make_app();
     app.mode = Mode::Insert;
-    app.draft_set("Water the plants +home".to_string());
+    app.draft_set_insert("Water the plants +home".to_string());
     app.draft.set_overlay(Some(DraftOverlay::RecurrenceBuilder(
         RecurrenceBuilderState {
             interval: 1,
@@ -423,7 +423,7 @@ fn insert_recurrence_builder() {
 fn insert_priority_chooser() {
     let mut app = make_app();
     app.mode = Mode::Insert;
-    app.draft_set("Buy milk +groceries".to_string());
+    app.draft_set_insert("Buy milk +groceries".to_string());
     app.draft
         .set_overlay(Some(DraftOverlay::PriorityChooser(PriorityChooserState {
             selected: 0,

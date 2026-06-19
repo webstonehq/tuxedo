@@ -4,14 +4,18 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, Mode, View};
+use crate::app::{App, DialogInputMode, Mode, View};
 use crate::ui::dialog::draft_cursor_spans;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     let mut mode_label: std::borrow::Cow<'static, str> = match app.mode {
         Mode::Normal => "NORMAL".into(),
-        Mode::Insert => "INSERT".into(),
+        Mode::Insert => match app.draft.input_mode() {
+            DialogInputMode::Normal => "NORMAL",
+            DialogInputMode::Insert => "INSERT",
+        }
+        .into(),
         Mode::Search => "SEARCH".into(),
         Mode::Visual => "VISUAL".into(),
         Mode::Help => "HELP".into(),
@@ -35,7 +39,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let hint = match app.mode {
-        Mode::Insert => "Enter save · Esc cancel",
+        Mode::Insert => match app.draft.input_mode() {
+            DialogInputMode::Normal => "h/l navigate · w/b/e word · i/a insert · Enter save · Esc cancel",
+            DialogInputMode::Insert => "Enter save · Esc normal",
+        },
         Mode::Visual => "space toggle · x complete · dd delete · Esc cancel",
         Mode::Help => "? close help",
         Mode::Settings => "Esc back",

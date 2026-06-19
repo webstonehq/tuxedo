@@ -444,6 +444,7 @@ fn handle_insert(app: &mut App, key: KeyEvent) {
         match key.code {
             KeyCode::Tab | KeyCode::Enter => {
                 app.autocomplete_accept();
+                app.draft.suppress_autocomplete();
                 return;
             }
             _ => {

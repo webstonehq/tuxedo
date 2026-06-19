@@ -59,8 +59,8 @@ pub enum WeekStart {
 impl WeekStart {
     pub fn as_str(self) -> &'static str {
         match self {
-            WeekStart::Sunday => "Sunday",
-            WeekStart::Monday => "Monday",
+            WeekStart::Sunday => "sunday",
+            WeekStart::Monday => "monday",
         }
     }
 }
@@ -74,7 +74,7 @@ impl fmt::Display for WeekStart {
 impl FromStr for WeekStart {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
+        match s {
             "sunday" => Ok(WeekStart::Sunday),
             "monday" => Ok(WeekStart::Monday),
             _ => Err(()),

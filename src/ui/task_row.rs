@@ -71,7 +71,7 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     // body — walk &str slices instead of collecting Vec<char>. Spans borrow
     // straight from `task.raw`, so most rows allocate only for the format!()
     // calls above.
-    let body = body_after_priority(&task.raw);
+    let body = body_after_priority(&task.clean_raw);
     let body_match_positions: Option<Vec<usize>> =
         opts.match_term.and_then(|n| subseq_match_ci(body, n));
     let body_start = body.as_ptr() as usize;

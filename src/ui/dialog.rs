@@ -80,6 +80,21 @@ pub(crate) fn classify_draft(s: &str) -> Vec<(std::ops::Range<usize>, SegmentKin
         }
         let start = i;
         while i < bytes.len() && !bytes[i].is_ascii_whitespace() {
+            // Detect a key-value pair with a quoted value, e.g. `note:"this is a note"`. 
+            if i + 1 < bytes.len()
+                && bytes[i] == b':'
+                && bytes[i + 1] == b'"' {
+
+                let init_i = i + 2;
+                let mut j = init_i;
+                while j < bytes.len() && !(bytes[j] == b'"') {
+                    j += 1;
+                }
+                if j < bytes.len() {
+                    i = j + 1;
+                    break;
+                }
+            }
             i += 1;
         }
         let word = &s[start..i];

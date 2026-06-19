@@ -39,6 +39,7 @@ impl std::fmt::Display for TagError {
 #[derive(Debug, Clone)]
 pub struct Task {
     pub raw: String,
+    pub clean_raw: String,
     pub done: bool,
     pub done_date: Option<String>,
     pub priority: Option<char>,
@@ -54,6 +55,7 @@ pub struct Task {
     /// or `"-3d"`. Stored unparsed for round-trip integrity; the visibility
     /// filter parses it on demand via `crate::threshold`.
     pub threshold: Option<String>,
+    pub notes: Vec<String>,
 }
 
 pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
@@ -91,9 +93,12 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
     let due = find_kv(rest, "due");
     let rec = find_kv(rest, "rec");
     let threshold = find_kv(rest, "t");
+    let notes = find_quoted_kv(rest, "note");
+    let clean_raw = body_after_quoted_kv(line);
 
     Ok(Task {
         raw: line.to_string(),
+        clean_raw,
         done,
         done_date,
         priority,
@@ -103,6 +108,7 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
         due,
         rec,
         threshold,
+        notes
     })
 }
 
@@ -168,12 +174,41 @@ fn find_kv(s: &str, key: &str) -> Option<String> {
         if let Some((k, v)) = tok.split_once(':')
             && is_valid_key(k)
             && !v.is_empty()
+            && !v.starts_with('"')
             && k == key
         {
             return Some(v.to_string());
         }
     }
     None
+}
+
+/// Find the value of `key:"value" where value can contain spaces and is enclosed in double quotes.
+/// Returns the first hit; later duplicates are ignored.
+fn find_quoted_kv(s: &str, key: &str) -> Vec<String> {
+    let culprit = format!(r#"{key}:""#);
+    let Some(st) = s.find(&culprit) else {
+        return vec![];
+    };
+    if st > 0 {
+        let prev_char = s.as_bytes()[st - 1];
+        if prev_char != b' ' && prev_char != b'\t' {
+            return vec![];
+        }
+    }
+    if !is_valid_key(key)
+    {
+        return vec![];
+    }
+    let v_st = st + culprit.len();
+    let rest = &s[v_st..];
+    let Some(end) = rest.find('"') else {
+        return vec![];
+    };
+    let v = rest[..end].to_string();
+    return v.split(". ")
+        .map(str::to_owned)
+        .collect()
 }
 
 fn is_valid_key(k: &str) -> bool {
@@ -391,13 +426,33 @@ pub fn body_after_priority(raw: &str) -> &str {
     s
 }
 
+pub fn body_after_quoted_kv(raw: &str) -> String {
+    let mut body = raw.to_string();
+    while let Some(st) = body.find(r#":""#) {
+        let before = &body[..st];
+        let after = &body[st + 2..];
+        let st_key = before.rfind(char::is_whitespace)
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        if let Some(second_aps) = after.find('"') {
+            let after = after[second_aps+ 1..].trim_start();
+            body = format!("{}{}", &before[..st_key], after);
+        }
+        else {
+                break;
+        }
+    }
+    body.trim().to_string()
+}
+
 /// Description text only: strip the leading `x `, done/created dates, and
 /// priority via `body_after_priority`, then drop every `+project`,
 /// `@context`, and `key:value` token from what remains. Whitespace between
 /// surviving words collapses to single spaces. Returns an owned `String`
 /// because we're filtering tokens, not slicing a prefix.
 pub fn body_only(raw: &str) -> String {
-    body_after_priority(raw)
+    let new_body = body_after_quoted_kv(raw);
+    body_after_priority(&new_body)
         .split_whitespace()
         .filter(|tok| !is_meta_token(tok))
         .collect::<Vec<_>>()

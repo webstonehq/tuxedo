@@ -1,0 +1,37 @@
+# TokyoNight Moon theme for Tuxedo
+# Original TokyoNight palette: https://github.com/folke/tokyonight.nvim
+# Tuxedo theme adaptation by github.com/ronload
+
+name = TokyoNight Moon
+
+bg = #222436
+panel = #1e2030
+border = #444a73
+
+fg = #c8d3f5
+dim = #636da6
+accent = #82aaff
+
+cursor = #2f334d
+selection = #2f334d
+selected = #2f334d
+
+statusbar = #1e2030
+status_fg = #828bb8
+mode_fg = #222436
+mode_bg = #82aaff
+
+pri_a = #ff757f
+pri_b = #ff966c
+pri_c = #c3e88d
+pri_d = #82aaff
+pri_other = #c099ff
+
+project = #82aaff
+context = #4fd6be
+
+done = #545c7e
+matched = #ffc777
+due = #ffc777
+overdue = #ff757f
+today = #ff757f

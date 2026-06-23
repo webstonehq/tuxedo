@@ -313,40 +313,149 @@ enum DraftEffect {
     TextChanged,
 }
 
-/// Apply a standard text-editing key (Backspace/Delete/arrows/Home/End/Char)
-/// to the draft. Centralizes the canonical key list so insert/search/prompt
-/// modes stay in sync as bindings evolve.
-fn apply_to_draft(app: &mut App, key: KeyEvent) -> DraftEffect {
+/// A single text-editing operation on the draft buffer. Covers the standard
+/// keys (insert/backspace/delete/arrows/Home/End) plus the readline/emacs set
+/// (Ctrl+A/E/B/F/H/D/W/U/K, Alt+B/F/D). Modeling the keystroke as an action
+/// keeps the insert/search/prompt/command-palette contexts in sync — they all
+/// route through the same resolver.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EditAction {
+    Insert(char),
+    DeleteBackward,
+    DeleteForward,
+    DeleteWordBackward,
+    DeleteWordForward,
+    KillToStart,
+    KillToEnd,
+    MoveLeft,
+    MoveRight,
+    MoveHome,
+    MoveEnd,
+    MoveWordForward,
+    MoveWordBackward,
+}
+
+impl EditAction {
+    fn apply(self, app: &mut App) -> DraftEffect {
+        match self {
+            EditAction::Insert(c) => {
+                app.draft_insert_char(c);
+                DraftEffect::TextChanged
+            }
+            EditAction::DeleteBackward => {
+                app.draft_backspace();
+                DraftEffect::TextChanged
+            }
+            EditAction::DeleteForward => {
+                app.draft_delete_forward();
+                DraftEffect::TextChanged
+            }
+            EditAction::DeleteWordBackward => {
+                app.draft_delete_word_backward();
+                DraftEffect::TextChanged
+            }
+            EditAction::DeleteWordForward => {
+                app.draft_delete_word_forward();
+                DraftEffect::TextChanged
+            }
+            EditAction::KillToStart => {
+                app.draft_kill_to_start();
+                DraftEffect::TextChanged
+            }
+            EditAction::KillToEnd => {
+                app.draft_kill_to_end();
+                DraftEffect::TextChanged
+            }
+            EditAction::MoveLeft => {
+                app.draft_left();
+                DraftEffect::CursorMoved
+            }
+            EditAction::MoveRight => {
+                app.draft_right();
+                DraftEffect::CursorMoved
+            }
+            EditAction::MoveHome => {
+                app.draft_home();
+                DraftEffect::CursorMoved
+            }
+            EditAction::MoveEnd => {
+                app.draft_end();
+                DraftEffect::CursorMoved
+            }
+            EditAction::MoveWordForward => {
+                app.draft_word_forward();
+                DraftEffect::CursorMoved
+            }
+            EditAction::MoveWordBackward => {
+                app.draft_word_backward();
+                DraftEffect::CursorMoved
+            }
+        }
+    }
+}
+
+/// Map a single keystroke to an `EditAction`, or `None` when the key isn't a
+/// text-editing key. A *single* Control or Alt chord is matched first and
+/// never falls through to the plain `Char(c)` insert arm, so an unmapped chord
+/// (e.g. Ctrl+G) is swallowed rather than typed as a literal control letter —
+/// this is what fixes Ctrl+H inserting an 'h' instead of deleting. Ctrl+N/Ctrl+P
+/// are deliberately left unmapped: upstream handlers reserve them for popup
+/// and list navigation.
+///
+/// CONTROL **and** ALT together is AltGr, which crossterm reports for printable
+/// characters on international layouts (e.g. AltGr+E → `€`). That is text, not a
+/// chord, so the chord arms are gated on exactly one modifier being held and
+/// AltGr falls through to the `Char(c)` insert arm.
+fn resolve_edit_key(key: KeyEvent) -> Option<EditAction> {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let alt = key.modifiers.contains(KeyModifiers::ALT);
+
+    if ctrl && !alt {
+        return match key.code {
+            KeyCode::Char('a') => Some(EditAction::MoveHome),
+            KeyCode::Char('e') => Some(EditAction::MoveEnd),
+            KeyCode::Char('b') => Some(EditAction::MoveLeft),
+            KeyCode::Char('f') => Some(EditAction::MoveRight),
+            KeyCode::Char('h') => Some(EditAction::DeleteBackward),
+            KeyCode::Char('d') => Some(EditAction::DeleteForward),
+            KeyCode::Char('w') => Some(EditAction::DeleteWordBackward),
+            KeyCode::Char('u') => Some(EditAction::KillToStart),
+            KeyCode::Char('k') => Some(EditAction::KillToEnd),
+            // Ctrl+Backspace as delete-word is a common modern expectation;
+            // terminals that report it this way get it for free.
+            KeyCode::Backspace => Some(EditAction::DeleteWordBackward),
+            _ => None,
+        };
+    }
+    if alt && !ctrl {
+        return match key.code {
+            KeyCode::Char('b') => Some(EditAction::MoveWordBackward),
+            KeyCode::Char('f') => Some(EditAction::MoveWordForward),
+            KeyCode::Char('d') => Some(EditAction::DeleteWordForward),
+            // M-DEL is readline's backward-kill-word.
+            KeyCode::Backspace => Some(EditAction::DeleteWordBackward),
+            _ => None,
+        };
+    }
     match key.code {
-        KeyCode::Backspace => {
-            app.draft_backspace();
-            DraftEffect::TextChanged
-        }
-        KeyCode::Delete => {
-            app.draft_delete_forward();
-            DraftEffect::TextChanged
-        }
-        KeyCode::Char(c) => {
-            app.draft_insert_char(c);
-            DraftEffect::TextChanged
-        }
-        KeyCode::Left => {
-            app.draft_left();
-            DraftEffect::CursorMoved
-        }
-        KeyCode::Right => {
-            app.draft_right();
-            DraftEffect::CursorMoved
-        }
-        KeyCode::Home => {
-            app.draft_home();
-            DraftEffect::CursorMoved
-        }
-        KeyCode::End => {
-            app.draft_end();
-            DraftEffect::CursorMoved
-        }
-        _ => DraftEffect::Unhandled,
+        KeyCode::Backspace => Some(EditAction::DeleteBackward),
+        KeyCode::Delete => Some(EditAction::DeleteForward),
+        KeyCode::Left => Some(EditAction::MoveLeft),
+        KeyCode::Right => Some(EditAction::MoveRight),
+        KeyCode::Home => Some(EditAction::MoveHome),
+        KeyCode::End => Some(EditAction::MoveEnd),
+        KeyCode::Char(c) => Some(EditAction::Insert(c)),
+        _ => None,
+    }
+}
+
+/// Apply a standard text-editing key to the draft. Thin wrapper over
+/// `resolve_edit_key` + `EditAction::apply`, returning `Unhandled` for keys
+/// that aren't text editing so callers can layer their own handling.
+fn apply_to_draft(app: &mut App, key: KeyEvent) -> DraftEffect {
+    match resolve_edit_key(key) {
+        Some(action) => action.apply(app),
+        None => DraftEffect::Unhandled,
     }
 }
 
@@ -1145,6 +1254,10 @@ mod tests {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
     }
 
+    fn alt(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::ALT)
+    }
+
     fn resolve(app: &mut App, key: KeyEvent) -> Option<Action> {
         resolve_normal_key(app, key, &KeyBindings::default())
     }
@@ -1524,5 +1637,94 @@ mod tests {
     fn capital_w_toggles_week_start() {
         let mut app = build_app();
         assert_eq!(resolve(&mut app, key('W')), Some(Action::ChangeWeekStart));
+    }
+
+    #[test]
+    fn ctrl_emacs_keys_resolve_to_edit_actions() {
+        assert_eq!(resolve_edit_key(ctrl('a')), Some(EditAction::MoveHome));
+        assert_eq!(resolve_edit_key(ctrl('e')), Some(EditAction::MoveEnd));
+        assert_eq!(resolve_edit_key(ctrl('b')), Some(EditAction::MoveLeft));
+        assert_eq!(resolve_edit_key(ctrl('f')), Some(EditAction::MoveRight));
+        assert_eq!(
+            resolve_edit_key(ctrl('h')),
+            Some(EditAction::DeleteBackward)
+        );
+        assert_eq!(resolve_edit_key(ctrl('d')), Some(EditAction::DeleteForward));
+        assert_eq!(
+            resolve_edit_key(ctrl('w')),
+            Some(EditAction::DeleteWordBackward)
+        );
+        assert_eq!(resolve_edit_key(ctrl('u')), Some(EditAction::KillToStart));
+        assert_eq!(resolve_edit_key(ctrl('k')), Some(EditAction::KillToEnd));
+    }
+
+    #[test]
+    fn alt_word_keys_resolve_to_word_actions() {
+        assert_eq!(
+            resolve_edit_key(alt('b')),
+            Some(EditAction::MoveWordBackward)
+        );
+        assert_eq!(
+            resolve_edit_key(alt('f')),
+            Some(EditAction::MoveWordForward)
+        );
+        assert_eq!(
+            resolve_edit_key(alt('d')),
+            Some(EditAction::DeleteWordForward)
+        );
+    }
+
+    #[test]
+    fn unmapped_ctrl_chord_is_swallowed_not_typed() {
+        // The historical bug: Ctrl+H (and friends) inserted a literal letter.
+        // Unmapped control chords must resolve to nothing, never an Insert.
+        assert_eq!(resolve_edit_key(ctrl('g')), None);
+        assert_eq!(resolve_edit_key(ctrl('z')), None);
+    }
+
+    #[test]
+    fn plain_and_shifted_chars_insert() {
+        assert_eq!(resolve_edit_key(key('x')), Some(EditAction::Insert('x')));
+        let shifted = KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT);
+        assert_eq!(resolve_edit_key(shifted), Some(EditAction::Insert('A')));
+    }
+
+    #[test]
+    fn altgr_char_inserts_not_swallowed() {
+        // AltGr is reported as CONTROL|ALT by crossterm for printable chars on
+        // international layouts. It must insert text, not fire a Ctrl chord —
+        // both a letter that collides with the ctrl table ('e') and one that
+        // doesn't ('€') must reach Insert.
+        let altgr = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL | KeyModifiers::ALT);
+        assert_eq!(resolve_edit_key(altgr('e')), Some(EditAction::Insert('e')));
+        assert_eq!(resolve_edit_key(altgr('€')), Some(EditAction::Insert('€')));
+    }
+
+    #[test]
+    fn ctrl_h_deletes_instead_of_inserting_in_insert_mode() {
+        // End-to-end through handle_insert: Ctrl+H must delete the char before
+        // the cursor rather than typing 'h'.
+        let mut app = build_app();
+        app.mode = Mode::Insert;
+        app.draft_clear();
+        app.draft_insert_char('a');
+        app.draft_insert_char('b');
+        handle_insert(&mut app, ctrl('h'));
+        assert_eq!(app.draft.text(), "a");
+    }
+
+    #[test]
+    fn ctrl_u_clears_to_start_in_search_mode() {
+        // Ctrl+U in the search box wipes back to the start and re-runs the
+        // filter via the TextChanged effect.
+        let mut app = build_app();
+        app.mode = Mode::Search;
+        app.draft_clear();
+        for c in "abc".chars() {
+            app.draft_insert_char(c);
+        }
+        app.set_search("abc".into());
+        handle_search(&mut app, ctrl('u'));
+        assert_eq!(app.draft.text(), "");
     }
 }

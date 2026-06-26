@@ -111,6 +111,28 @@ fn build_lines<'a>(
             ),
         ],
     ));
+
+    // Rendering notes line by line
+    if !t.notes.is_empty() {
+        rows.push(line_panel(
+            theme,
+            vec![Span::styled(" notes", Style::default().fg(theme.dim))],
+        ));
+        for note in &t.notes {
+            let chunks = wrap_words(note, wrap_w.saturating_sub(4));
+            for (i, chunk) in chunks.into_iter().enumerate() {
+                let prefix = if i == 0 { "   - " } else { "     " };
+                rows.push(line_panel(
+                    theme,
+                    vec![Span::styled(
+                        format!("{prefix}{}", chunk.join(" ")),
+                        Style::default().fg(theme.fg),
+                    )],
+                ))
+            }
+        }
+    }
+
     if t.done {
         rows.push(line_panel(
             theme,

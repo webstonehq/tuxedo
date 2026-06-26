@@ -1,6 +1,5 @@
 ---
 source: tests/snapshots.rs
-assertion_line: 227
 expression: buffer_to_styled(&buf)
 ---
 {fg=#6b7280 bg=#1f232b mod=bold} FILTERS{/}{fg=#c8ccd4 bg=#1f232b}                  {/}{bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}▶{/}{fg=#e07a7a bg=#1f232b}▮{/}{fg=#8aa9c9 bg=#1f232b}◀{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b mod=bold}/tmp/tuxedo-snapshot.txt{/}{fg=#6b7280 bg=#1f232b}  •  15 tas{/}{fg=#6b7280 bg=#1f232b mod=bold} DETAIL{/}{fg=#c8ccd4 bg=#1f232b}                           {/}

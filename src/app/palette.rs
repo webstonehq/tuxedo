@@ -68,6 +68,16 @@ pub const ENTRIES: &[PaletteEntry] = &[
         action: Action::CopyBody,
     },
     PaletteEntry {
+        label: "open task note",
+        keys: "o",
+        action: Action::OpenNote,
+    },
+    PaletteEntry {
+        label: "create or open task note",
+        keys: "O",
+        action: Action::CreateOrOpenNote,
+    },
+    PaletteEntry {
         label: "undo",
         keys: "u",
         action: Action::Undo,

@@ -209,6 +209,9 @@ fn run(mut terminal: DefaultTerminal, app: &mut App, keybinds: &KeyBindings) -> 
             match event::read()? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
                     handle_key(app, key, keybinds);
+                    if let Some(path) = app.take_pending_editor_path() {
+                        open_path_in_editor(&path)?;
+                    }
                     dirty = true;
                 }
                 // A terminal resize must trigger an immediate redraw;
@@ -232,6 +235,26 @@ fn run(mut terminal: DefaultTerminal, app: &mut App, keybinds: &KeyBindings) -> 
         }
     }
     Ok(())
+}
+
+fn open_path_in_editor(path: &std::path::Path) -> Result<()> {
+    let editor = std::env::var("VISUAL")
+        .or_else(|_| std::env::var("EDITOR"))
+        .unwrap_or_else(|_| "nvim".to_string());
+    ratatui::restore();
+    let status = std::process::Command::new(&editor)
+        .arg(path)
+        .status()
+        .with_context(|| format!("failed to launch editor `{editor}`"));
+    ratatui::crossterm::terminal::enable_raw_mode()?;
+    ratatui::crossterm::execute!(
+        io::stdout(),
+        ratatui::crossterm::terminal::EnterAlternateScreen
+    )?;
+    match status {
+        Ok(_) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 fn next_timeout(app: &App) -> Duration {
@@ -781,6 +804,8 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('l') => Action::GoList,
         KeyCode::Char('e') => Action::BeginEdit,
         KeyCode::Char('i') => Action::BeginEditInsert,
+        KeyCode::Char('o') => Action::OpenNote,
+        KeyCode::Char('O') => Action::CreateOrOpenNote,
         KeyCode::Char('x') => Action::ToggleComplete,
         // 'dd' chord. First press arms; second fires.
         KeyCode::Char('d') if app.chord.toggle('d') => Action::Delete,
@@ -1045,6 +1070,8 @@ fn apply_action(app: &mut App, action: Action) {
         }
         Action::CopyLine => copy_current_task(app, false),
         Action::CopyBody => copy_current_task(app, true),
+        Action::OpenNote => app.open_note_for_current(),
+        Action::CreateOrOpenNote => app.create_or_open_note_for_current(),
         Action::OpenShare => match app.ensure_share_started() {
             Ok(_) => {
                 app.mode = Mode::Share;

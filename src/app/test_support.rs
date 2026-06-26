@@ -14,12 +14,11 @@ pub(crate) fn test_path() -> std::path::PathBuf {
 }
 
 pub(crate) fn build_app(raw: &str) -> App {
+    build_app_with_config(raw, Config::default())
+}
+
+pub(crate) fn build_app_with_config(raw: &str, cfg: Config) -> App {
     let path = test_path();
     std::fs::write(&path, raw).unwrap();
-    App::new(
-        path,
-        raw.to_string(),
-        "2026-05-06".into(),
-        Config::default(),
-    )
+    App::new(path, raw.to_string(), "2026-05-06".into(), cfg)
 }

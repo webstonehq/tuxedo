@@ -40,6 +40,9 @@ pub struct Config {
     /// The query is a `/`-search needle (subsequence match on the task
     /// body); see `App::save_current_filter_as`.
     pub filters: Vec<(String, String)>,
+    /// Directory used by note actions for relative `note:<path>` tokens and
+    /// generated task notes. Serialized as `notes_dir = ~/notes`.
+    pub notes_dir: Option<String>,
     /// Metadata keys whose `key:value` tokens are omitted from rendered
     /// task rows (list + archive). The line is stored on disk untouched;
     /// this only affects display. Serialized as `hide_keys = a, b, c`.
@@ -143,6 +146,7 @@ fn parse(s: &str) -> Config {
                 c.share_token = Some(v.to_ascii_lowercase());
             }
             "share_port" => c.share_port = v.parse().ok(),
+            "notes_dir" if !v.trim().is_empty() => c.notes_dir = Some(v.to_string()),
             // Comma-separated key list; surrounding whitespace trimmed and
             // empty entries (trailing/double comma) dropped so a hand-
             // edited line is forgiving.
@@ -214,6 +218,9 @@ fn serialize(c: &Config) -> String {
     for (name, query) in &c.filters {
         let _ = writeln!(out, "filter.{name} = {query}");
     }
+    if let Some(v) = &c.notes_dir {
+        let _ = writeln!(out, "notes_dir = {v}");
+    }
     if !c.hidden_keys.is_empty() {
         let _ = writeln!(out, "hide_keys = {}", c.hidden_keys.join(", "));
     }
@@ -259,8 +266,10 @@ mod tests {
                 ("weekly".into(), "report".into()),
                 ("waiting".into(), "@waiting due=2026".into()),
             ],
-            hidden_keys: vec!["uid".into(), "sync".into()],
+            notes_dir: Some("~/notes".into()),
+            hidden_keys: vec!["clickup".into(), "url".into()],
         };
+
         let s = serialize(&c);
         let parsed = parse(&s);
         assert_eq!(parsed, c);
@@ -412,6 +421,7 @@ mod tests {
             share_token: None,
             share_port: None,
             filters: vec![("errand".into(), "@errand".into())],
+            notes_dir: Some("/tmp/notes".into()),
             hidden_keys: vec!["uid".into()],
         };
         written.save_to(&path).expect("save should succeed");

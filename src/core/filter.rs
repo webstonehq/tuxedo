@@ -219,6 +219,6 @@ mod tests {
         let (end_this_week, end_next_week) = get_week_cutoff("2026-06-18", &WeekStart::Monday)
             .expect("unable to get the week cutoff date");
         assert_eq!(end_this_week, "2026-06-21");
-        assert_eq!(end_next_week, "2026-06-29");
+        assert_eq!(end_next_week, "2026-06-28");
     }
 }

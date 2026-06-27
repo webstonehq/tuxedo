@@ -98,18 +98,15 @@ pub fn canonicalize_line(text: &str, today: NaiveDate) -> Result<todo::Task, tod
 /// already canonical after the first-Enter preview.
 pub fn finalize_line(text: &str, today_str: &str) -> Result<todo::Task, todo::ParseError> {
     let text = text.trim();
-    if text.is_empty() {
-        return Err(todo::ParseError::Empty);
+    let task = todo::parse_line(text)?;
+
+    if task.done || task.created_date.is_some() {
+        return Ok(task);
     }
-    let final_text = if !todo::starts_with_priority(text)
-        && !todo::starts_with_iso_date(text)
-        && !text.starts_with("x ")
-    {
-        format!("{today_str} {text}")
-    } else {
-        text.to_string()
-    };
-    todo::parse_line(&final_text)
+
+    let body = todo::strip_priority(text);
+    let prefix = &text[..text.len() - body.len()];
+    todo::parse_line(&format!("{prefix}{today_str} {body}"))
 }
 
 #[cfg(test)]
@@ -203,10 +200,11 @@ mod tests {
     }
 
     #[test]
-    fn canonicalize_does_not_prepend_date_when_priority_leads() {
+    fn canonicalize_prepends_date_after_priority() {
         let task = canonicalize_line("(A) urgent thing", today()).unwrap();
         assert_eq!(task.priority, Some('A'));
-        assert!(task.created_date.is_none());
+        assert_eq!(task.created_date.as_deref(), Some("2026-05-13"));
+        assert_eq!(task.raw, "(A) 2026-05-13 urgent thing");
     }
 
     #[test]
@@ -252,9 +250,24 @@ mod tests {
     }
 
     #[test]
-    fn finalize_skips_date_on_priority() {
+    fn finalize_inserts_date_after_priority() {
         let task = finalize_line("(B) cleanup", "2026-05-13").unwrap();
-        assert_eq!(task.raw, "(B) cleanup");
+        assert_eq!(task.raw, "(B) 2026-05-13 cleanup");
+        assert_eq!(task.created_date.as_deref(), Some("2026-05-13"));
+    }
+
+    #[test]
+    fn finalize_keeps_existing_date_after_priority() {
+        let task = finalize_line("(C) 2026-04-01 already dated", "2026-05-13").unwrap();
+        assert_eq!(task.raw, "(C) 2026-04-01 already dated");
+        assert_eq!(task.created_date.as_deref(), Some("2026-04-01"));
+    }
+
+    #[test]
+    fn finalize_treats_invalid_date_as_body() {
+        let task = finalize_line("9999-99-99 bogus", "2026-05-13").unwrap();
+        assert_eq!(task.raw, "2026-05-13 9999-99-99 bogus");
+        assert_eq!(task.created_date.as_deref(), Some("2026-05-13"));
     }
 
     #[test]

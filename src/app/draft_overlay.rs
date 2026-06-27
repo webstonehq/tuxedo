@@ -531,20 +531,65 @@ impl App {
     pub fn calendar_cancel(&mut self) {
         self.draft.set_overlay(None);
     }
+
+    /// Called after each character is typed into the draft while the calendar
+    /// is open in auto-trigger mode. Reads the value typed after `KEY:` at the
+    /// anchor and, if it parses as a complete `YYYY-MM-DD` date, moves the
+    /// calendar's focused cell to that date. Closes the calendar if the user
+    /// has backspaced past the colon (anchor's `KEY:` is no longer in buffer).
+    pub fn calendar_sync_from_draft(&mut self) {
+        let (anchor, target) = {
+            let Some(DraftOverlay::Calendar(s)) = self.draft.overlay() else {
+                return;
+            };
+            let Some(anchor) = s.anchor else {
+                return;
+            };
+            (anchor, s.target)
+        };
+        let key = match target {
+            CalendarTarget::Due => "due",
+            CalendarTarget::Threshold => "t",
+        };
+        let key_with_colon = format!("{key}:");
+        let value_start = anchor + key_with_colon.len();
+        let parsed_date = {
+            let text = self.draft.text();
+            if text.get(anchor..value_start) != Some(key_with_colon.as_str()) {
+                self.draft.set_overlay(None);
+                return;
+            }
+            let value = text[value_start..]
+                .split(|c: char| c.is_ascii_whitespace())
+                .next()
+                .unwrap_or("");
+            NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()
+        };
+        if let Some(date) = parsed_date
+            && let Some(DraftOverlay::Calendar(s)) = self.draft.overlay_mut()
+        {
+            s.focused = date;
+        }
+    }
 }
 
-/// Remove the `KEY:` literal at `anchor` and its single leading space, if
-/// any. Used by accept/clear paths when the picker was auto-triggered so the
-/// user's typed prefix doesn't become a duplicate token after we write the
-/// canonical one. No-op if the buffer no longer matches `KEY:` at `anchor`
-/// (e.g. the user edited the line — defensive).
+/// Remove the `KEY:VALUE` token at `anchor` and its single leading space, if
+/// any. Strips the whole token (key, colon, and any typed value) so that
+/// `apply_kv` can write the canonical form without leaving a duplicate or a
+/// bare value fragment in the buffer. No-op if the buffer no longer matches
+/// `KEY:` at `anchor` (e.g. the user edited the line — defensive).
 fn strip_trigger_literal(app: &mut App, key: &str, anchor: usize) {
     let key_with_colon = format!("{key}:");
     let text = app.draft.text();
-    let end = anchor + key_with_colon.len();
-    if text.get(anchor..end) != Some(key_with_colon.as_str()) {
+    let key_colon_end = anchor + key_with_colon.len();
+    if text.get(anchor..key_colon_end) != Some(key_with_colon.as_str()) {
         return;
     }
+    // Extend past any value the user typed (up to next whitespace or EOL).
+    let end = text[key_colon_end..]
+        .find(|c: char| c.is_ascii_whitespace())
+        .map(|i| key_colon_end + i)
+        .unwrap_or(text.len());
     let strip_start = if anchor > 0
         && text
             .as_bytes()
@@ -1481,5 +1526,68 @@ mod tests {
         assert_eq!(task.due.as_deref(), Some("2026-05-07"));
         assert_eq!(task.created_date.as_deref(), Some("2026-05-06"));
         assert!(task.raw.contains("Schedule team offsite"));
+    }
+
+    #[test]
+    fn typing_date_after_trigger_syncs_calendar_focused() {
+        let mut app = build_app("");
+        app.draft_set("Buy milk ".into());
+        for c in "due:".chars() {
+            app.draft_insert_char(c);
+        }
+        app.maybe_open_kv_overlay();
+        // Type a full ISO date into the draft while the calendar is open.
+        for c in "2026-12-25".chars() {
+            app.draft_insert_char(c);
+            app.calendar_sync_from_draft();
+        }
+        let s = app.calendar_state().expect("calendar should still be open");
+        assert_eq!(s.focused, NaiveDate::from_ymd_opt(2026, 12, 25).unwrap());
+    }
+
+    #[test]
+    fn typing_date_after_trigger_accept_writes_single_token() {
+        let mut app = build_app("");
+        app.draft_set("Buy milk ".into());
+        for c in "due:".chars() {
+            app.draft_insert_char(c);
+        }
+        app.maybe_open_kv_overlay();
+        for c in "2026-12-25".chars() {
+            app.draft_insert_char(c);
+            app.calendar_sync_from_draft();
+        }
+        app.calendar_accept();
+        assert_eq!(app.draft.text(), "Buy milk due:2026-12-25");
+        assert_eq!(app.draft.text().matches("due:").count(), 1);
+    }
+
+    #[test]
+    fn backspace_past_colon_closes_calendar() {
+        let mut app = build_app("");
+        for c in "due:".chars() {
+            app.draft_insert_char(c);
+        }
+        app.maybe_open_kv_overlay();
+        // Backspace once removes ':' — anchor's KEY: no longer present.
+        app.draft_backspace();
+        app.calendar_sync_from_draft();
+        assert!(app.draft.overlay().is_none(), "calendar should close");
+    }
+
+    #[test]
+    fn partial_date_does_not_move_focused() {
+        let mut app = build_app("");
+        for c in "due:".chars() {
+            app.draft_insert_char(c);
+        }
+        app.maybe_open_kv_overlay();
+        let initial_focused = app.calendar_state().unwrap().focused;
+        // Type an incomplete date — should not move the focused cell.
+        for c in "2026-12".chars() {
+            app.draft_insert_char(c);
+            app.calendar_sync_from_draft();
+        }
+        assert_eq!(app.calendar_state().unwrap().focused, initial_focused);
     }
 }

@@ -528,6 +528,17 @@ fn handle_insert_slash_menu(app: &mut App, key: KeyEvent) -> bool {
 }
 
 fn handle_insert_calendar(app: &mut App, key: KeyEvent) {
+    // In auto-trigger mode (anchor set): digit, dash, and backspace are
+    // forwarded to the draft buffer so the user can type the date directly.
+    // The calendar grid tracks the typed date as it becomes valid.
+    if app.calendar_state().is_some_and(|s| s.anchor.is_some()) {
+        let is_date_char = matches!(key.code, KeyCode::Char(c) if c.is_ascii_digit() || c == '-');
+        if is_date_char || matches!(key.code, KeyCode::Backspace) {
+            apply_to_draft(app, key);
+            app.calendar_sync_from_draft();
+            return;
+        }
+    }
     match key.code {
         KeyCode::Char('h') | KeyCode::Left => app.calendar_move(-1, 0),
         KeyCode::Char('l') | KeyCode::Right => app.calendar_move(1, 0),

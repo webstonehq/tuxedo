@@ -242,6 +242,11 @@ pub const ENTRIES: &[PaletteEntry] = &[
         keys: "r",
         action: Action::Reschedule,
     },
+    PaletteEntry {
+        label: "Change week start",
+        keys: "W",
+        action: Action::ChangeWeekStart,
+    },
 ];
 
 #[derive(Debug, Default, Clone)]

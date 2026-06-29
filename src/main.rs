@@ -551,6 +551,17 @@ fn handle_insert_slash_menu(app: &mut App, key: KeyEvent) -> bool {
 }
 
 fn handle_insert_calendar(app: &mut App, key: KeyEvent) {
+    // In auto-trigger mode (anchor set): digit, dash, and backspace are
+    // forwarded to the draft buffer so the user can type the date directly.
+    // The calendar grid tracks the typed date as it becomes valid.
+    if app.calendar_state().is_some_and(|s| s.anchor.is_some()) {
+        let is_date_char = matches!(key.code, KeyCode::Char(c) if c.is_ascii_digit() || c == '-');
+        if is_date_char || matches!(key.code, KeyCode::Backspace) {
+            apply_to_draft(app, key);
+            app.calendar_sync_from_draft();
+            return;
+        }
+    }
     match key.code {
         KeyCode::Char('h') | KeyCode::Left => app.calendar_move(-1, 0),
         KeyCode::Char('l') | KeyCode::Right => app.calendar_move(1, 0),
@@ -864,6 +875,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('H') => Action::ToggleShowDone,
         KeyCode::Char('F') => Action::ToggleShowFuture,
         KeyCode::Esc => Action::EscapeStack,
+        KeyCode::Char('W') => Action::ChangeWeekStart,
         _ => return None,
     })
 }
@@ -1115,6 +1127,10 @@ fn apply_action(app: &mut App, action: Action) {
                 app.mode = Mode::Insert;
                 app.open_calendar(CalendarTarget::Due);
             }
+        }
+        Action::ChangeWeekStart => {
+            app.toggle_week_start_date();
+            app.recompute_visible();
         }
     }
 }
@@ -1529,5 +1545,11 @@ mod tests {
         assert!(app.draft.overlay().is_none());
         let task = app.tasks().last().expect("task added");
         assert_eq!(task.due.as_deref(), Some("2026-06-07"));
+    }
+
+    #[test]
+    fn capital_w_toggles_week_start() {
+        let mut app = build_app();
+        assert_eq!(resolve(&mut app, key('W')), Some(Action::ChangeWeekStart));
     }
 }

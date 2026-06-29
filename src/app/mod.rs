@@ -1,5 +1,7 @@
+use core::fmt;
 use std::cell::Cell;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use crate::config::Config;
@@ -48,6 +50,38 @@ pub use types::{
     Sort, UNDO_LIMIT, View,
 };
 pub use visibility::GroupKey;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WeekStart {
+    Sunday,
+    Monday,
+}
+
+impl WeekStart {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WeekStart::Sunday => "sunday",
+            WeekStart::Monday => "monday",
+        }
+    }
+}
+
+impl fmt::Display for WeekStart {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for WeekStart {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "sunday" => Ok(WeekStart::Sunday),
+            "monday" => Ok(WeekStart::Monday),
+            _ => Err(()),
+        }
+    }
+}
 
 pub struct App {
     /// The headless durable store: tasks, archive, history, persistence, and
@@ -124,6 +158,7 @@ pub struct App {
     /// Theme index captured when the theme picker opened, so cancel
     /// can restore it.
     theme_pick_orig: usize,
+    pub week_start: WeekStart,
 }
 
 impl App {
@@ -184,6 +219,7 @@ impl App {
             notes_dir: note_dir,
             pending_editor_path: None,
             theme_pick_orig: 0,
+            week_start: WeekStart::Sunday,
         };
         app.recompute_visible();
         app

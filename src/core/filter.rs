@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 
 use chrono::{Datelike, Days, NaiveDate};
 
-use crate::app::{Filter, Sort};
+use crate::app::{Filter, Sort, WeekStart};
 use crate::search::subseq_match_ci;
 use crate::threshold;
 use crate::todo::{self, Task};
@@ -39,25 +39,29 @@ impl ListDueBucket {
     }
 }
 
-pub fn get_week_cutoff(today: &str) -> Option<(String, String)> {
+pub fn get_week_cutoff(today: &str, week_start: &WeekStart) -> Option<(String, String)> {
     let today = NaiveDate::parse_from_str(today, "%Y-%m-%d").ok()?;
     let weekday = today.weekday();
 
-    let days_since_sunday = weekday.num_days_from_sunday();
-    let days_til_saturday = 6 - days_since_sunday;
+    let days_from_start_week = match week_start {
+        WeekStart::Sunday => weekday.num_days_from_sunday(),
+        WeekStart::Monday => weekday.num_days_from_monday(),
+    };
 
-    let this_saturday = today.checked_add_days(Days::new(days_til_saturday as u64))?;
-    let next_saturday = today.checked_add_days(Days::new((days_til_saturday + 7) as u64))?;
+    let days_til_week_end = 6 - days_from_start_week;
 
-    Some((this_saturday.to_string(), next_saturday.to_string()))
+    let end_this_week = today.checked_add_days(Days::new(days_til_week_end as u64))?;
+    let end_next_week = today.checked_add_days(Days::new((days_til_week_end + 7) as u64))?;
+
+    Some((end_this_week.to_string(), end_next_week.to_string()))
 }
 
 /// If the date cannot be parsed we assign to Later
-pub fn due_bucket(task: &Task, today: &str) -> ListDueBucket {
+pub fn due_bucket(task: &Task, today: &str, week_start: &WeekStart) -> ListDueBucket {
     match task.due.as_deref() {
         None => ListDueBucket::NoDue,
         Some(d) => {
-            let Some((this_week, next_week)) = get_week_cutoff(today) else {
+            let Some((this_week, next_week)) = get_week_cutoff(today, week_start) else {
                 return ListDueBucket::Later;
             };
 
@@ -203,5 +207,18 @@ mod tests {
         let tasks = crate::todo::parse_file(raw);
         let projects = unique_values(&tasks, |t| &t.projects);
         assert_eq!(projects, vec!["health".to_string(), "work".to_string()]);
+    }
+
+    #[test]
+    fn get_week_cutoffs_for_all_configs() {
+        let (end_this_week, end_next_week) = get_week_cutoff("2026-06-18", &WeekStart::Sunday)
+            .expect("unable to get the week cutoff date");
+        assert_eq!(end_this_week, "2026-06-20");
+        assert_eq!(end_next_week, "2026-06-27");
+
+        let (end_this_week, end_next_week) = get_week_cutoff("2026-06-18", &WeekStart::Monday)
+            .expect("unable to get the week cutoff date");
+        assert_eq!(end_this_week, "2026-06-21");
+        assert_eq!(end_next_week, "2026-06-28");
     }
 }

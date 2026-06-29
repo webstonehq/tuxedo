@@ -56,6 +56,8 @@ impl App {
 
         filter::sort_by_prefs(&mut idxs, tasks, self.prefs.sort);
 
+        let week_start = &self.week_start;
+
         let groups: Vec<GroupKey> = match self.prefs.sort {
             Sort::File => vec![GroupKey::None; idxs.len()],
             Sort::Priority => idxs
@@ -64,7 +66,7 @@ impl App {
                 .collect(),
             Sort::Due => idxs
                 .iter()
-                .map(|&i| GroupKey::ListDue(filter::due_bucket(&tasks[i], today)))
+                .map(|&i| GroupKey::ListDue(filter::due_bucket(&tasks[i], today, week_start)))
                 .collect(),
         };
         self.visible_groups = groups;

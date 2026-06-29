@@ -1,6 +1,7 @@
 use std::io;
 
 use super::types::{Density, Sort};
+use crate::app::WeekStart;
 use crate::config::Config;
 use crate::theme::{self, Theme};
 
@@ -37,6 +38,7 @@ pub struct Prefs {
     /// Metadata keys whose `key:value` tokens are hidden from task rows.
     /// Config-only (no in-app toggle); see `Config::hidden_keys`.
     pub hidden_keys: Vec<String>,
+    pub week_start: WeekStart,
 }
 
 impl Prefs {
@@ -59,6 +61,7 @@ impl Prefs {
             show_done: cfg.show_done.unwrap_or(false),
             show_future: cfg.show_future.unwrap_or(false),
             hidden_keys: cfg.hidden_keys,
+            week_start: cfg.week_start.unwrap_or(WeekStart::Sunday),
         }
     }
 
@@ -123,6 +126,14 @@ impl Prefs {
 
     pub fn toggle_show_future(&mut self) {
         self.show_future = !self.show_future;
+    }
+
+    pub fn cycle_week_start(&mut self) -> String {
+        self.week_start = match self.week_start {
+            WeekStart::Sunday => WeekStart::Monday,
+            WeekStart::Monday => WeekStart::Sunday,
+        };
+        format!("week_start: {}", self.week_start)
     }
 
     /// Persist to the XDG config path. Returns the IO error so the caller

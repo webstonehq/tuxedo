@@ -5,6 +5,7 @@ pub mod app;
 pub mod cli;
 pub mod clipboard;
 pub mod cmd;
+pub mod editor;
 pub mod config;
 pub mod config_watcher;
 pub mod core;

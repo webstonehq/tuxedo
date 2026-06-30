@@ -119,6 +119,57 @@ impl App {
         }
     }
 
+    pub fn launch_editor(&mut self) {
+        use std::io::Write as _;
+
+        let idx = match self.selection.editing() {
+            Some(idx) => idx,
+            None => match self.cur_abs() {
+                Some(idx) => idx,
+                None => return,
+            },
+        };
+        let raw = match self.task_raw(idx) {
+            Some(r) => r,
+            None => return,
+        };
+
+        crossterm::terminal::disable_raw_mode().ok();
+        let _ = crossterm::execute!(
+            std::io::stdout(),
+            crossterm::terminal::LeaveAlternateScreen
+        );
+
+        let result = crate::editor::edit_in_editor(&raw);
+
+        let _ = crossterm::execute!(
+            std::io::stdout(),
+            crossterm::terminal::EnterAlternateScreen
+        );
+        crossterm::terminal::enable_raw_mode().ok();
+
+        match result {
+            Ok(Some(new_raw)) => {
+                match self.store.edit_line(idx, &new_raw) {
+                    EditOutcome::Saved { abs } => {
+                        self.flash("saved");
+                        self.after_mutation(abs);
+                    }
+                    EditOutcome::Empty => self.flash("task text cannot be empty"),
+                    EditOutcome::OutOfRange | EditOutcome::TermNotFound => {}
+                    EditOutcome::Aborted(r) => self.handle_reconcile_abort(r),
+                    EditOutcome::Error(e) => self.flash(format!("invalid: {e}")),
+                }
+            }
+            Ok(None) => {
+                self.flash("no changes");
+            }
+            Err(e) => {
+                self.flash(format!("editor error: {e}"));
+            }
+        }
+    }
+
     pub fn add_project_to_current(&mut self, name: &str) {
         let Some(abs) = self.cur_abs() else {
             return;

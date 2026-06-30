@@ -256,7 +256,7 @@ fn cmd_text_op(store: &mut Store, pos: &[String], json: bool, op: TextOp) -> i32
 }
 
 fn cmd_edit(store: &mut Store, pos: &[String], json: bool) -> i32 {
-    if pos.len() < 1 {
+    if pos.is_empty() {
         return usage("edit N");
     }
     let len = store.tasks().len();

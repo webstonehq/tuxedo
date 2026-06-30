@@ -40,9 +40,9 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
 
 /// Every recognized subcommand and alias.
 const SUBCOMMANDS: &[&str] = &[
-    "add", "a", "append", "app", "prepend", "prep", "replace", "pri", "p", "depri", "dp", "done",
-    "do", "complete", "del", "rm", "archive", "list", "ls", "listall", "lsa", "listpri", "lsp",
-    "listproj", "lsprj", "listcon", "lsc",
+    "add", "a", "append", "app", "prepend", "prep", "replace", "edit", "e", "pri", "p", "depri",
+    "dp", "done", "do", "complete", "del", "rm", "archive", "list", "ls", "listall", "lsa",
+    "listpri", "lsp", "listproj", "lsprj", "listcon", "lsc",
 ];
 
 /// Locate the subcommand: the first non-global token, if it is a known
@@ -112,6 +112,7 @@ pub fn run(argv: &[String]) -> Result<Option<i32>> {
         "listpri" | "lsp" => cmd_listpri(&store, pos, json),
         "listproj" | "lsprj" => cmd_listtags(&store, json, TagKind::Project),
         "listcon" | "lsc" => cmd_listtags(&store, json, TagKind::Context),
+        "edit" | "e" => cmd_edit(&mut store, pos, json),
         other => {
             eprintln!("tuxedo: unknown command: {other}");
             2
@@ -251,6 +252,48 @@ fn cmd_text_op(store: &mut Store, pos: &[String], json: bool, op: TextOp) -> i32
         EditOutcome::TermNotFound => err("term not found"),
         EditOutcome::Aborted(_) => err("file changed on disk; nothing changed"),
         EditOutcome::Error(e) => store_error(json, name, e),
+    }
+}
+
+fn cmd_edit(store: &mut Store, pos: &[String], json: bool) -> i32 {
+    if pos.len() < 1 {
+        return usage("edit N");
+    }
+    let len = store.tasks().len();
+    let abs = match parse_index(&pos[0], len) {
+        Ok(i) => i,
+        Err(e) => return err(e),
+    };
+    let old_raw = store.tasks()[abs].raw.clone();
+    match crate::editor::edit_in_editor(&old_raw) {
+        Ok(Some(new_raw)) => {
+            match store.edit_line(abs, &new_raw) {
+                EditOutcome::Saved { abs } => {
+                    let n = abs + 1;
+                    let t = &store.tasks()[abs];
+                    if json {
+                        json_task("edit", n, t);
+                    } else {
+                        println!("{n} {old_raw}");
+                        println!("TODO: Edited task to:");
+                        println!("{n} {}", t.raw);
+                    }
+                    0
+                }
+                EditOutcome::Empty => err("task text cannot be empty"),
+                EditOutcome::OutOfRange => err(format!("no task {}", abs + 1)),
+                EditOutcome::TermNotFound => err("term not found"),
+                EditOutcome::Aborted(_) => err("file changed on disk; nothing changed"),
+                EditOutcome::Error(e) => store_error(json, "edit", e),
+            }
+        }
+        Ok(None) => {
+            0
+        }
+        Err(e) => {
+            eprintln!("tuxedo edit: {e}");
+            1
+        }
     }
 }
 

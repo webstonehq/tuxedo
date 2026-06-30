@@ -972,6 +972,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('i') => Action::BeginEditInsert,
         KeyCode::Char('o') => Action::OpenNote,
         KeyCode::Char('O') => Action::CreateOrOpenNote,
+        KeyCode::Char('E') => Action::LaunchEditor,
         KeyCode::Char('x') => Action::ToggleComplete,
         // 'dd' chord. First press arms; second fires.
         KeyCode::Char('d') if app.chord.toggle('d') => Action::Delete,
@@ -1058,6 +1059,7 @@ fn apply_action(app: &mut App, action: Action) {
             Action::BeginAdd
             | Action::BeginEdit
             | Action::BeginEditInsert
+            | Action::LaunchEditor
             | Action::CyclePriority
             | Action::ToggleVisual
             | Action::ToggleSelected
@@ -1286,6 +1288,10 @@ fn apply_action(app: &mut App, action: Action) {
         Action::ChangeWeekStart => {
             app.toggle_week_start_date();
             app.recompute_visible();
+        }
+        Action::LaunchEditor => {
+            app.launch_editor();
+        }
         }
     }
 }

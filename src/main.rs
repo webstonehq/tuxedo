@@ -1297,7 +1297,6 @@ fn apply_action(app: &mut App, action: Action) {
         Action::LaunchEditor => {
             app.launch_editor();
         }
-        }
     }
 }
 

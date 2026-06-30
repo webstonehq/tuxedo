@@ -91,3 +91,38 @@ pub fn edit_in_editor(content: &str) -> Result<Option<String>> {
     }
     Ok(Some(new_content))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_editor_uses_env_var() {
+        unsafe { std::env::set_var("EDITOR", "/usr/bin/vim"); }
+        let result = resolve_editor().unwrap();
+        unsafe { std::env::remove_var("EDITOR"); }
+        assert_eq!(result, "/usr/bin/vim");
+    }
+
+    #[test]
+    fn resolve_editor_trims_env_value() {
+        unsafe { std::env::set_var("EDITOR", "  nano  "); }
+        let result = resolve_editor().unwrap();
+        unsafe { std::env::remove_var("EDITOR"); }
+        assert_eq!(result, "nano");
+    }
+
+    #[test]
+    fn resolve_editor_finds_system_editor_when_env_unset() {
+        let saved = std::env::var("EDITOR").ok();
+        unsafe { std::env::remove_var("EDITOR"); }
+        let result = resolve_editor();
+        if let Some(v) = saved {
+            unsafe { std::env::set_var("EDITOR", v); }
+        }
+        assert!(
+            result.is_ok(),
+            "resolve_editor should find a system editor: {result:?}"
+        );
+    }
+}

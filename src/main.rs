@@ -149,6 +149,7 @@ fn print_usage() {
     println!("  append, app N TEXT...     append text to task N");
     println!("  prepend, prep N TEXT...   prepend text to task N");
     println!("  replace N TEXT...         replace task N");
+    println!("  edit, e N                 edit task N with $EDITOR (vim, nano, ...)");
     println!("  pri, p N PRIORITY         set priority A-Z on task N");
     println!("  depri, dp N...            remove priority from task N");
     println!("  done, do N...             mark task N complete");

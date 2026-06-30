@@ -82,9 +82,7 @@ pub fn edit_in_editor(content: &str) -> Result<Option<String>> {
         .arg(&tf.path)
         .status()
         .with_context(|| format!("spawning editor: {editor}"))?;
-    if !status.success() {
-        anyhow::bail!("editor exited with {}", status);
-    }
+    let _ = status; // ignore exit code — user may have saved successfully
     let new_content = tf.read()?;
     if new_content.trim() == content.trim() {
         return Ok(None);

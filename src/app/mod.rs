@@ -113,6 +113,9 @@ pub struct App {
     /// `None` in tests/examples that don't care about the value.
     pub config_path: Option<PathBuf>,
     pub should_quit: bool,
+    /// Set after `launch_editor` restores the terminal so `run()` clears the
+    /// Terminal's back buffer before the next draw — avoids stale diffs.
+    pub needs_clear: bool,
     visible_cache: Vec<usize>,
     /// Parallel to `visible_cache`: `visible_groups[i]` is the group key for
     /// the row at `visible_cache[i]`. `GroupKey::None` for List under
@@ -206,6 +209,7 @@ impl App {
             file_path,
             config_path: None,
             should_quit: false,
+            needs_clear: false,
             visible_cache: Vec::new(),
             visible_groups: Vec::new(),
             latest_version: None,

@@ -145,6 +145,7 @@ impl App {
             crossterm::terminal::EnterAlternateScreen
         );
         crossterm::terminal::enable_raw_mode().ok();
+        self.needs_clear = true;
 
         match result {
             Ok(Some(new_raw)) => {

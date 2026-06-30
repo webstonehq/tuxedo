@@ -206,6 +206,10 @@ fn run(
             dirty = true;
         }
         if dirty {
+            if app.needs_clear {
+                terminal.clear()?;
+                app.needs_clear = false;
+            }
             // Extract URL runs from the completed frame before the borrow on
             // terminal ends, then write the OSC 8 overlay directly to the
             // backend writer. Doing this here (rather than inside `ui::draw`)

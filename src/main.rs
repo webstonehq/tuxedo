@@ -1713,6 +1713,7 @@ mod tests {
     }
 
     #[test]
+    #[test]
     fn capital_w_toggles_week_start() {
         let mut app = build_app();
         assert_eq!(resolve(&mut app, key('W')), Some(Action::ChangeWeekStart));
@@ -1805,5 +1806,12 @@ mod tests {
         app.set_search("abc".into());
         handle_search(&mut app, ctrl('u'));
         assert_eq!(app.draft.text(), "");
+    }
+
+    #[test]
+    fn e_resolves_to_launch_editor() {
+        let mut app = build_app();
+        let action = resolve(&mut app, key('E'));
+        assert_eq!(action, Some(Action::LaunchEditor));
     }
 }

@@ -810,4 +810,18 @@ mod tests {
         assert_eq!(f.context.as_deref(), Some("home"));
         assert_eq!(f.search, "pay rent");
     }
+
+    #[test]
+    fn edit_subcommand_recognized() {
+        let args: Vec<String> = ["edit".into(), "1".into()].into();
+        let idx = find_subcommand(&args);
+        assert_eq!(idx, Some(0));
+    }
+
+    #[test]
+    fn e_alias_recognized() {
+        let args: Vec<String> = ["e".into(), "1".into()].into();
+        let idx = find_subcommand(&args);
+        assert_eq!(idx, Some(0));
+    }
 }

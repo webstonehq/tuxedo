@@ -74,7 +74,7 @@ fn sibling(todo_path: &Path, name: &str) -> PathBuf {
 }
 
 /// Full save pipeline for one free-text line: natural-language rewrite,
-/// creation-date prepend, validation. Returns the parsed [`todo::Task`]
+/// creation-date insertion, validation. Returns the parsed [`todo::Task`]
 /// ready to push onto `App::tasks`. Used by the inbox drain and the
 /// `tuxedo serve` POST handler.
 pub fn canonicalize_line(text: &str, today: NaiveDate) -> Result<todo::Task, todo::ParseError> {
@@ -92,24 +92,47 @@ pub fn canonicalize_line(text: &str, today: NaiveDate) -> Result<todo::Task, tod
 }
 
 /// The post-NL half of [`canonicalize_line`]: skip the natural-language
-/// rewrite (the caller has already produced canonical form) and just
-/// prepend a creation date if missing, then validate. The add-prompt's
-/// second-Enter save path uses this directly — the draft buffer is
-/// already canonical after the first-Enter preview.
+/// rewrite (the caller has already produced canonical form), then give the
+/// line a creation date if it lacks one. A done line, or one that already
+/// carries a creation date, is returned unchanged; otherwise today's date is
+/// inserted after any leading priority token and the result validated. The
+/// add-prompt's second-Enter save path uses this directly, since the draft
+/// buffer is already canonical after the first-Enter preview.
 pub fn finalize_line(text: &str, today_str: &str) -> Result<todo::Task, todo::ParseError> {
     let text = text.trim();
-    if text.is_empty() {
-        return Err(todo::ParseError::Empty);
+    let mut task = todo::parse_line(text)?;
+
+    if task.done || task.created_date.is_some() {
+        return Ok(task);
     }
-    let final_text = if !todo::starts_with_priority(text)
-        && !todo::starts_with_iso_date(text)
-        && !text.starts_with("x ")
-    {
-        format!("{today_str} {text}")
-    } else {
-        text.to_string()
-    };
-    todo::parse_line(&final_text)
+
+    // A creation date is only worth inserting when `today_str` is a canonical
+    // `YYYY-MM-DD`. Callers may hand us a malformed `today` (see the defensive
+    // fallback in `Store::add_with`); splicing a non-date in would push a bogus
+    // token into the body. The length check pins the zero-padded form: chrono
+    // also accepts `2026-5-13`, which a later re-parse would not recognize as a
+    // creation date, so without it the reused task below would drift from a
+    // fresh parse.
+    if today_str.len() != 10 || NaiveDate::parse_from_str(today_str, "%Y-%m-%d").is_err() {
+        return Ok(task);
+    }
+
+    let stripped = todo::strip_priority(text);
+    let body = stripped.trim_start();
+    if todo::starts_with_iso_date(body) {
+        return Ok(task);
+    }
+
+    // Reuse the task we already parsed rather than re-parsing the rebuilt line.
+    // Inserting the date between the priority and the body leaves every
+    // body-derived field (projects, contexts, due, rec, threshold, notes)
+    // untouched, so only `raw`, `clean_raw`, and `created_date` differ.
+    let prefix = &text[..text.len() - stripped.len()];
+    let raw = format!("{prefix}{today_str} {body}");
+    task.clean_raw = todo::body_after_quoted_kv(&raw);
+    task.created_date = Some(today_str.to_string());
+    task.raw = raw;
+    Ok(task)
 }
 
 #[cfg(test)]
@@ -203,10 +226,11 @@ mod tests {
     }
 
     #[test]
-    fn canonicalize_does_not_prepend_date_when_priority_leads() {
+    fn canonicalize_prepends_date_after_priority() {
         let task = canonicalize_line("(A) urgent thing", today()).unwrap();
         assert_eq!(task.priority, Some('A'));
-        assert!(task.created_date.is_none());
+        assert_eq!(task.created_date.as_deref(), Some("2026-05-13"));
+        assert_eq!(task.raw, "(A) 2026-05-13 urgent thing");
     }
 
     #[test]
@@ -252,9 +276,89 @@ mod tests {
     }
 
     #[test]
-    fn finalize_skips_date_on_priority() {
+    fn finalize_inserts_date_after_priority() {
         let task = finalize_line("(B) cleanup", "2026-05-13").unwrap();
-        assert_eq!(task.raw, "(B) cleanup");
+        assert_eq!(task.raw, "(B) 2026-05-13 cleanup");
+        assert_eq!(task.created_date.as_deref(), Some("2026-05-13"));
+    }
+
+    #[test]
+    fn finalize_normalizes_extra_space_after_priority() {
+        let task = finalize_line("(A)  urgent", "2026-05-13").unwrap();
+        assert_eq!(task.raw, "(A) 2026-05-13 urgent");
+        assert_eq!(task.priority, Some('A'));
+        assert_eq!(task.created_date.as_deref(), Some("2026-05-13"));
+    }
+
+    #[test]
+    fn finalize_keeps_existing_date_after_priority() {
+        let task = finalize_line("(C) 2026-04-01 already dated", "2026-05-13").unwrap();
+        assert_eq!(task.raw, "(C) 2026-04-01 already dated");
+        assert_eq!(task.created_date.as_deref(), Some("2026-04-01"));
+    }
+
+    #[test]
+    fn finalize_leaves_date_shaped_invalid_prefix_untouched() {
+        let task = finalize_line("9999-99-99 bogus", "2026-05-13").unwrap();
+        assert_eq!(task.raw, "9999-99-99 bogus");
+        assert!(task.created_date.is_none());
+    }
+
+    #[test]
+    fn finalize_leaves_invalid_date_after_priority_untouched() {
+        let task = finalize_line("(A) 1234-56-78 order parts", "2026-05-13").unwrap();
+        assert_eq!(task.raw, "(A) 1234-56-78 order parts");
+        assert_eq!(task.priority, Some('A'));
+        assert!(task.created_date.is_none());
+    }
+
+    #[test]
+    fn finalize_reuse_matches_fresh_parse() {
+        // The date-insertion path reuses the first parse instead of parsing
+        // the rebuilt line again. Guard that shortcut: it must produce exactly
+        // what a fresh parse of the canonical line would, every field included.
+        let line = r#"(A) ship +rel @work due:2026-06-01 rec:+1w t:2026-05-20 note:"call ops""#;
+        let got = finalize_line(line, "2026-05-13").unwrap();
+        let want = todo::parse_line(
+            r#"(A) 2026-05-13 ship +rel @work due:2026-06-01 rec:+1w t:2026-05-20 note:"call ops""#,
+        )
+        .unwrap();
+        assert_eq!(got.raw, want.raw);
+        assert_eq!(got.clean_raw, want.clean_raw);
+        assert_eq!(got.created_date, want.created_date);
+        assert_eq!(got.priority, want.priority);
+        assert_eq!(got.projects, want.projects);
+        assert_eq!(got.contexts, want.contexts);
+        assert_eq!(got.due, want.due);
+        assert_eq!(got.rec, want.rec);
+        assert_eq!(got.threshold, want.threshold);
+        assert_eq!(got.notes, want.notes);
+        assert_eq!(got.done, want.done);
+        assert_eq!(got.done_date, want.done_date);
+    }
+
+    #[test]
+    fn finalize_skips_injection_when_today_noncanonical() {
+        // chrono parses `2026-5-13`, but a re-parse would not treat it as a
+        // creation date; the length guard keeps us from inserting it.
+        let task = finalize_line("(A) task", "2026-5-13").unwrap();
+        assert_eq!(task.raw, "(A) task");
+        assert!(task.created_date.is_none());
+    }
+
+    #[test]
+    fn finalize_skips_injection_when_today_invalid() {
+        // A malformed `today` must not be spliced into the body. Priority-led
+        // lines (the path this change touches) and bare bodies alike are left
+        // verbatim rather than gaining a bogus token.
+        let task = finalize_line("(A) task", "not-a-date").unwrap();
+        assert_eq!(task.raw, "(A) task");
+        assert_eq!(task.priority, Some('A'));
+        assert!(task.created_date.is_none());
+
+        let bare = finalize_line("task", "not-a-date").unwrap();
+        assert_eq!(bare.raw, "task");
+        assert!(bare.created_date.is_none());
     }
 
     #[test]

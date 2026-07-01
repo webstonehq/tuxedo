@@ -1,7 +1,7 @@
 use super::App;
 use super::draft::prev_char_boundary;
 use super::types::{AUTOCOMPLETE_CAP, Mode};
-use crate::todo::{self, Task, starts_with_iso_date, starts_with_priority};
+use crate::todo::{self, Task};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenKind {
@@ -147,20 +147,17 @@ impl App {
         self.draft.step_autocomplete(n, forward);
     }
 
-    /// What `add_from_draft` would parse if the user hit Enter now: the
-    /// trimmed draft, with today's date prepended when no priority/date/done
-    /// marker is already present, run through `parse_line`. Returns None for
-    /// an empty draft (no preview row to render).
+    /// What `add_from_draft` would parse if the user hit Enter now: the trimmed
+    /// draft run through the exact same `inbox::finalize_line` the save path
+    /// uses, so the preview row always matches what will be stored (creation
+    /// date inserted after any priority, etc.). Returns None for an empty draft
+    /// (no preview row to render).
     pub fn preview_parse(&self) -> Option<Result<Task, todo::ParseError>> {
         let trimmed = self.draft.text().trim();
         if trimmed.is_empty() {
             return None;
         }
-        let mut text = trimmed.to_string();
-        if !starts_with_priority(&text) && !starts_with_iso_date(&text) && !text.starts_with("x ") {
-            text = format!("{} {}", self.store.today(), text);
-        }
-        Some(todo::parse_line(&text))
+        Some(crate::inbox::finalize_line(trimmed, self.store.today()))
     }
 
     /// Replace the active token with the currently selected match. No-op when
@@ -420,12 +417,13 @@ mod tests {
     }
 
     #[test]
-    fn preview_parse_does_not_prepend_when_priority_present() {
+    fn preview_parse_inserts_date_after_priority() {
         let mut app = build_app("");
         app.draft_set("(A) Buy milk".into());
         let r = app.preview_parse().unwrap().unwrap();
         assert_eq!(r.priority, Some('A'));
-        assert!(r.created_date.is_none());
+        assert_eq!(r.created_date.as_deref(), Some("2026-05-06"));
+        assert_eq!(r.raw, "(A) 2026-05-06 Buy milk");
     }
 
     #[test]

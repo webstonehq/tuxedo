@@ -4,7 +4,7 @@
 //! All task logic (recurrence, persistence, reconciliation) lives in the store.
 
 use super::App;
-use super::types::AddOutcome;
+use super::types::{AddOutcome, View};
 use crate::app::WeekStart;
 use crate::core::AddOutcome as CoreAdd;
 use crate::core::{
@@ -12,6 +12,7 @@ use crate::core::{
     PriorityOutcome, TagOutcome, UnarchiveOutcome, UndoOutcome,
 };
 use crate::nl;
+use crate::note;
 
 impl App {
     pub fn toggle_complete(&mut self, abs: usize) {
@@ -154,6 +155,67 @@ impl App {
         }
     }
 
+    pub fn open_note_for_current(&mut self) {
+        self.open_note_for_current_with_create(false);
+    }
+
+    pub fn create_or_open_note_for_current(&mut self) {
+        self.open_note_for_current_with_create(true);
+    }
+
+    fn open_note_for_current_with_create(&mut self, create: bool) {
+        let Some(task) = self.cur_task().cloned() else {
+            return;
+        };
+        let target = note::target_for_task(&task, self.notes_dir());
+
+        if !target.existed_in_task {
+            if !create {
+                self.flash("no note; press O to create");
+                return;
+            }
+            if matches!(self.view(), View::Archive) {
+                self.flash("archived task has no note");
+                return;
+            }
+            let Some(abs) = self.cur_task_index_in_tasks() else {
+                return;
+            };
+            match self.store.append_at(abs, &format!("note:{}", target.rel)) {
+                EditOutcome::Saved { abs } => self.after_mutation(abs),
+                EditOutcome::Aborted(r) => {
+                    self.handle_reconcile_abort(r);
+                    return;
+                }
+                EditOutcome::Error(e) => {
+                    self.flash(format!("note link failed: {e}"));
+                    return;
+                }
+                EditOutcome::Empty | EditOutcome::OutOfRange | EditOutcome::TermNotFound => return,
+            }
+        }
+
+        if target.path.exists() {
+            self.queue_editor_path(target.path);
+            return;
+        }
+        if !create {
+            self.flash("note missing; press O to create");
+            return;
+        }
+        if let Some(parent) = target.path.parent()
+            && let Err(e) = std::fs::create_dir_all(parent)
+        {
+            self.flash(format!("note mkdir failed: {e}"));
+            return;
+        }
+        if let Err(e) = std::fs::write(&target.path, note::note_template(&task)) {
+            self.flash(format!("note create failed: {e}"));
+            return;
+        }
+        self.queue_editor_path(target.path);
+    }
+
     pub fn undo(&mut self) {
         match self.store.undo() {
             UndoOutcome::Undone => {
@@ -232,8 +294,9 @@ impl App {
 mod tests {
     use crate::app::{
         WeekStart,
-        test_support::{build_app, test_path},
+        test_support::{build_app, build_app_with_config, test_path},
     };
+    use crate::config::Config;
 
     #[test]
     fn open_file_rebinds_path_body_and_resets_cursor() {
@@ -296,6 +359,65 @@ mod tests {
         assert_eq!(app.tasks()[0].contexts, vec!["home"]);
         assert_eq!(app.tasks()[0].raw, "a @home");
         assert_eq!(app.flash_active(), Some("invalid context name"));
+    }
+
+    #[test]
+    fn create_or_open_note_appends_link_creates_file_and_queues_editor() {
+        let dir = test_path().with_extension("notes");
+        let cfg = Config {
+            notes_dir: Some(dir.to_string_lossy().into_owned()),
+            ..Config::default()
+        };
+        let mut app = build_app_with_config("Write PR summary +work @desk\n", cfg);
+
+        app.create_or_open_note_for_current();
+
+        let raw = &app.tasks()[0].raw;
+        assert!(
+            raw.contains("note:projects/tuxedo-tasks/write-pr-summary.md"),
+            "task should get stable generated note token: {raw}"
+        );
+        let expected = dir.join("projects/tuxedo-tasks/write-pr-summary.md");
+        assert_eq!(app.take_pending_editor_path(), Some(expected.clone()));
+        let body = std::fs::read_to_string(expected).expect("created note exists");
+        assert!(body.starts_with("# Write PR summary\n"));
+        assert!(body.contains("## My notes\n\n"));
+    }
+
+    #[test]
+    fn open_note_without_existing_token_does_not_create_or_mutate_task() {
+        let dir = test_path().with_extension("notes");
+        let cfg = Config {
+            notes_dir: Some(dir.to_string_lossy().into_owned()),
+            ..Config::default()
+        };
+        let mut app = build_app_with_config("Write PR summary +work @desk\n", cfg);
+
+        app.open_note_for_current();
+
+        assert_eq!(app.tasks()[0].raw, "Write PR summary +work @desk");
+        assert_eq!(app.flash_active(), Some("no note; press O to create"));
+        assert!(app.take_pending_editor_path().is_none());
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn open_note_with_existing_file_queues_editor_without_rewriting_task() {
+        let dir = test_path().with_extension("notes");
+        let note = dir.join("projects/example.md");
+        std::fs::create_dir_all(note.parent().expect("note parent")).expect("create note parent");
+        std::fs::write(&note, "# Existing\n").expect("write existing note");
+        let cfg = Config {
+            notes_dir: Some(dir.to_string_lossy().into_owned()),
+            ..Config::default()
+        };
+        let raw = "Write PR summary +work note:projects/example.md\n";
+        let mut app = build_app_with_config(raw, cfg);
+
+        app.open_note_for_current();
+
+        assert_eq!(app.tasks()[0].raw, raw.trim());
+        assert_eq!(app.take_pending_editor_path(), Some(note));
     }
 
     #[test]

@@ -406,6 +406,8 @@ The modal keys below apply in Normal mode:
 | `a` | toggle archive view |
 | `A` | archive completed tasks → `done.txt` |
 | `H` | toggle showing done tasks in the main list |
+| `o` | open the current task's existing `note:<path>` in `$VISUAL` / `$EDITOR` |
+| `O` | create the current task's note if needed, then open it |
 
 ### Layout & theme
 
@@ -449,8 +451,10 @@ Standard [todo.txt](https://github.com/todotxt/todo.txt) lines:
 - `+project` — project tag
 - `@context` — context tag
 - `key:value` — extension; `due:YYYY-MM-DD` is recognized for sort and
-  due-bucket grouping in the list view. Keys you'd rather not see can be
-  hidden from the rows via [`hide_keys`](#hiding-keyvalue-tags)
+  due-bucket grouping in the list view. `note:<path>` is recognized by the
+  note actions (`o` / `O`): relative paths resolve under `notes_dir`, then
+  `$NOTES_DIR`, then `~/notes`. Keys you'd rather not see can be hidden from
+  the rows via [`hide_keys`](#hiding-keyvalue-tags)
 - `rec:[+]N{d,b,w,m,y}` — recurrence; on completion (`x`), tuxedo inserts
   a fresh copy of the task with `due:` advanced by `N` days, business
   days (Mon–Fri), weeks, months, or years. The `+` prefix means
@@ -567,6 +571,16 @@ Saved searches (created with `fs`) are written one per line as
 round-trip as plain text, so you can add, rename, or delete them by editing
 `config.toml` directly; a repeated `filter.<name>` keeps the last value, and
 `<name>` may not contain `=`.
+
+Task-note actions resolve relative `note:<path>` tokens under `notes_dir`.
+If `notes_dir` is not set, tuxedo falls back to `$NOTES_DIR` and then
+`~/notes`. `O` creates missing notes under `projects/tuxedo-tasks/` using a
+small Markdown template and appends the generated `note:<path>` token to the
+task; `o` only opens an existing linked note.
+
+```toml
+notes_dir = ~/notes
+```
 
 ### Hiding `key:value` tags
 

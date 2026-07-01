@@ -10,6 +10,7 @@ pub mod core;
 pub mod inbox;
 pub mod keybinds;
 pub mod nl;
+pub mod note;
 pub mod recurrence;
 pub mod sample;
 pub mod search;

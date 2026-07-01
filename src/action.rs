@@ -49,6 +49,8 @@ pub enum Action {
     ToggleShowFuture,
     CopyLine,
     CopyBody,
+    OpenNote,
+    CreateOrOpenNote,
     EscapeStack,
     /// Open the phone-capture overlay (QR + URL). First invocation lazily
     /// binds the HTTP server; subsequent invocations just re-show the
@@ -104,6 +106,8 @@ impl Action {
             "toggle_show_future" => Some(Self::ToggleShowFuture),
             "copy_line" => Some(Self::CopyLine),
             "copy_body" => Some(Self::CopyBody),
+            "open_note" | "note" => Some(Self::OpenNote),
+            "create_or_open_note" | "create_note" => Some(Self::CreateOrOpenNote),
             "escape_stack" | "escape" => Some(Self::EscapeStack),
             "open_share" | "share" => Some(Self::OpenShare),
             "open_theme_picker" | "theme_picker" => Some(Self::OpenThemePicker),
@@ -134,6 +138,23 @@ mod tests {
         assert_eq!(
             Action::from_keybind_name("theme_picker"),
             Some(Action::OpenThemePicker)
+        );
+    }
+
+    #[test]
+    fn open_note_is_rebindable() {
+        assert_eq!(
+            Action::from_keybind_name("open_note"),
+            Some(Action::OpenNote)
+        );
+        assert_eq!(Action::from_keybind_name("note"), Some(Action::OpenNote));
+        assert_eq!(
+            Action::from_keybind_name("create_or_open_note"),
+            Some(Action::CreateOrOpenNote)
+        );
+        assert_eq!(
+            Action::from_keybind_name("create_note"),
+            Some(Action::CreateOrOpenNote)
         );
     }
 }

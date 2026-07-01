@@ -206,6 +206,50 @@ impl DraftState {
         }
     }
 
+    /// Delete from the start of the previous word to the cursor (`Ctrl+W`).
+    /// Whitespace-delimited, mirroring `move_word_backward` and matching
+    /// readline's unix-word-rubout.
+    pub fn delete_word_backward(&mut self) {
+        let end = self.cursor.byte();
+        if end == 0 {
+            return;
+        }
+        let s = &self.text;
+        let mut start = prev_char_boundary(s, end);
+        // Skip whitespace immediately before the cursor, then the word itself.
+        while start > 0 && s.as_bytes()[start].is_ascii_whitespace() {
+            start = prev_char_boundary(s, start);
+        }
+        while start > 0 && !s.as_bytes()[prev_char_boundary(s, start)].is_ascii_whitespace() {
+            start = prev_char_boundary(s, start);
+        }
+        self.text.drain(start..end);
+        self.cursor = DraftCursor(start);
+        self.reset_autocomplete();
+    }
+
+    /// Delete from the start of the line to the cursor (`Ctrl+U`).
+    pub fn kill_to_start(&mut self) {
+        let pos = self.cursor.byte();
+        if pos == 0 {
+            return;
+        }
+        self.text.drain(0..pos);
+        self.cursor = DraftCursor::zero();
+        self.reset_autocomplete();
+    }
+
+    /// Delete from the cursor to the end of the line (`Ctrl+K`). The cursor
+    /// stays put.
+    pub fn kill_to_end(&mut self) {
+        let pos = self.cursor.byte();
+        if pos >= self.text.len() {
+            return;
+        }
+        self.text.truncate(pos);
+        self.reset_autocomplete();
+    }
+
     /// Move to the end of the current or next word (`e`).
     pub fn move_word_end(&mut self) {
         let s = &self.text;
@@ -328,6 +372,18 @@ impl App {
     pub fn draft_delete_word_forward(&mut self) {
         self.draft.delete_word_forward();
     }
+
+    pub fn draft_delete_word_backward(&mut self) {
+        self.draft.delete_word_backward();
+    }
+
+    pub fn draft_kill_to_start(&mut self) {
+        self.draft.kill_to_start();
+    }
+
+    pub fn draft_kill_to_end(&mut self) {
+        self.draft.kill_to_end();
+    }
 }
 
 pub(super) fn prev_char_boundary(s: &str, i: usize) -> usize {
@@ -418,5 +474,84 @@ mod tests {
         assert_eq!(app.draft.cursor(), 3);
         app.draft_backspace();
         assert_eq!(app.draft.text(), "caé");
+    }
+
+    #[test]
+    fn draft_delete_word_backward_removes_prior_word() {
+        let mut app = build_app("");
+        app.draft_set("hello world".into());
+        // Cursor parks at end (11) after `set`.
+        app.draft_delete_word_backward();
+        assert_eq!(app.draft.text(), "hello ");
+        assert_eq!(app.draft.cursor(), 6);
+    }
+
+    #[test]
+    fn draft_delete_word_backward_eats_trailing_space_then_word() {
+        let mut app = build_app("");
+        app.draft_set("hello world ".into());
+        app.draft_delete_word_backward();
+        assert_eq!(app.draft.text(), "hello ");
+        assert_eq!(app.draft.cursor(), 6);
+    }
+
+    #[test]
+    fn draft_delete_word_backward_at_start_is_noop() {
+        let mut app = build_app("");
+        app.draft_set("hello".into());
+        app.draft_home();
+        app.draft_delete_word_backward();
+        assert_eq!(app.draft.text(), "hello");
+        assert_eq!(app.draft.cursor(), 0);
+    }
+
+    #[test]
+    fn draft_delete_word_backward_respects_multibyte_boundary() {
+        // "café com" — 'é' is two bytes; the deleted word must start on a
+        // char boundary so the surviving "café " stays valid UTF-8.
+        let mut app = build_app("");
+        app.draft_set("café com".into());
+        app.draft_delete_word_backward();
+        assert_eq!(app.draft.text(), "café ");
+    }
+
+    #[test]
+    fn draft_kill_to_start_removes_text_before_cursor() {
+        let mut app = build_app("");
+        app.draft_set("hello world".into());
+        app.draft.force_cursor(6); // between "hello " and "world"
+        app.draft_kill_to_start();
+        assert_eq!(app.draft.text(), "world");
+        assert_eq!(app.draft.cursor(), 0);
+    }
+
+    #[test]
+    fn draft_kill_to_start_at_start_is_noop() {
+        let mut app = build_app("");
+        app.draft_set("hello".into());
+        app.draft_home();
+        app.draft_kill_to_start();
+        assert_eq!(app.draft.text(), "hello");
+        assert_eq!(app.draft.cursor(), 0);
+    }
+
+    #[test]
+    fn draft_kill_to_end_removes_text_after_cursor() {
+        let mut app = build_app("");
+        app.draft_set("hello world".into());
+        app.draft.force_cursor(5); // right after "hello"
+        app.draft_kill_to_end();
+        assert_eq!(app.draft.text(), "hello");
+        assert_eq!(app.draft.cursor(), 5);
+    }
+
+    #[test]
+    fn draft_kill_to_end_at_end_is_noop() {
+        let mut app = build_app("");
+        app.draft_set("hello".into());
+        // Cursor already at end after `set`.
+        app.draft_kill_to_end();
+        assert_eq!(app.draft.text(), "hello");
+        assert_eq!(app.draft.cursor(), 5);
     }
 }

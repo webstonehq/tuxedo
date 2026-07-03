@@ -795,12 +795,12 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     // Weekday row.
     let dow_header = if app.week_start == WeekStart::Sunday {
         Span::styled(
-            "  S   M   T   W   T   F   S ",
+            "  S  M   T   W   T   F   S  ",
             Style::default().fg(theme.dim),
         )
     } else {
         Span::styled(
-            "  M   T   W   T   F   S   S ",
+            "  M   T   W   T   F   S   S  ",
             Style::default().fg(theme.dim),
         )
     };
@@ -815,7 +815,7 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
         }
         let mut spans: Vec<Span> = vec![Span::raw("  ")];
         for col in 0..7 {
-            let pos = day - lead + col;
+            let pos = day - lead + col - 1;
             if pos < 0 || pos >= days_in_month as i64 {
                 spans.push(Span::styled("    ", Style::default().bg(theme.panel)));
             } else {

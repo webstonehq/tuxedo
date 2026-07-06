@@ -57,6 +57,7 @@ pub enum Action {
     /// Open the theme picker dialog (j/k to preview, Enter to accept).
     OpenThemePicker,
     ChangeWeekStart,
+    OpenEditor, // Open todo.txt in $EDITOR
 }
 
 impl Action {

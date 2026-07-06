@@ -1,7 +1,8 @@
 #![warn(clippy::unwrap_used)]
 
-use std::io;
+use std::os::unix::process::CommandExt;
 use std::time::{Duration, Instant};
+use std::{env, io};
 
 use anyhow::{Context, Result};
 use ratatui::DefaultTerminal;
@@ -793,6 +794,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('e') => Action::BeginEdit,
         KeyCode::Char('i') => Action::BeginEditInsert,
         KeyCode::Char('x') => Action::ToggleComplete,
+        KeyCode::Char('E') => Action::OpenEditor,
         // 'dd' chord. First press arms; second fires.
         KeyCode::Char('d') if app.chord.toggle('d') => Action::Delete,
         // 'yy' chord copies the whole line; 'yb' (after 'y' is armed) copies
@@ -1054,6 +1056,27 @@ fn apply_action(app: &mut App, action: Action) {
             app.cursor = 0;
             app.recompute_visible();
             app.save_prefs();
+        }
+        Action::OpenEditor => {
+            if let Ok(editor) = env::var("EDITOR") {
+                let _ = crossterm::terminal::disable_raw_mode();
+                let _ = crossterm::execute!(
+                    std::io::stdout(),
+                    crossterm::terminal::LeaveAlternateScreen
+                );
+
+                let file_to_edit = "./todo.txt";
+                let error = std::process::Command::new(&editor).arg(file_to_edit).exec();
+
+                let _ = crossterm::terminal::enable_raw_mode();
+                let _ = crossterm::execute!(
+                    std::io::stdout(),
+                    crossterm::terminal::EnterAlternateScreen
+                );
+                app.flash(format!("Failed to run $EDITOR: {}", error));
+            } else {
+                app.flash("$EDITOR not set");
+            }
         }
         Action::CopyLine => copy_current_task(app, false),
         Action::CopyBody => copy_current_task(app, true),

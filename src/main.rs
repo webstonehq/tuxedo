@@ -313,44 +313,107 @@ enum DraftEffect {
     TextChanged,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DraftAction {
+    Backspace,
+    DeleteForward,
+    MoveLeft,
+    MoveRight,
+    MoveHome,
+    MoveEnd,
+    DeleteWordBackward,
+    InsertChar(char),
+}
+
+fn resolve_draft_shortcut(key: KeyEvent) -> Option<DraftAction> {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+
+    if ctrl {
+        return match key.code {
+            KeyCode::Char('a') => Some(DraftAction::MoveHome),
+            KeyCode::Char('e') => Some(DraftAction::MoveEnd),
+            KeyCode::Char('w') => Some(DraftAction::DeleteWordBackward),
+            KeyCode::Char('h') => Some(DraftAction::DeleteWordBackward),
+            _ => None,
+        };
+    }
+    None
+}
+
+fn resolve_draft_action(key: KeyEvent) -> Option<DraftAction> {
+    if let Some(action) = resolve_draft_shortcut(key) {
+        return Some(action);
+    }
+
+    match key.code {
+        KeyCode::Backspace => Some(DraftAction::Backspace),
+        KeyCode::Delete => Some(DraftAction::DeleteForward),
+        KeyCode::Left => Some(DraftAction::MoveLeft),
+        KeyCode::Right => Some(DraftAction::MoveRight),
+        KeyCode::Home => Some(DraftAction::MoveHome),
+        KeyCode::End => Some(DraftAction::MoveEnd),
+        KeyCode::Char(c)
+            if !key.modifiers.contains(KeyModifiers::CONTROL)
+                && !key.modifiers.contains(KeyModifiers::ALT) =>
+        {
+            Some(DraftAction::InsertChar(c))
+        }
+        _ => None,
+    }
+}
+
+fn apply_draft_action(app: &mut App, action: DraftAction) -> DraftEffect {
+    match action {
+        DraftAction::Backspace => {
+            app.draft_backspace();
+            DraftEffect::TextChanged
+        }
+        DraftAction::DeleteForward => {
+            app.draft_delete_forward();
+            DraftEffect::TextChanged
+        }
+        DraftAction::MoveLeft => {
+            app.draft_left();
+            DraftEffect::CursorMoved
+        }
+        DraftAction::MoveRight => {
+            app.draft_right();
+            DraftEffect::CursorMoved
+        }
+        DraftAction::MoveHome => {
+            app.draft_home();
+            DraftEffect::CursorMoved
+        }
+        DraftAction::MoveEnd => {
+            app.draft_end();
+            DraftEffect::CursorMoved
+        }
+        DraftAction::DeleteWordBackward => {
+            app.draft_delete_word_backward();
+            DraftEffect::TextChanged
+        }
+        DraftAction::InsertChar(c) => {
+            app.draft_insert_char(c);
+            DraftEffect::TextChanged
+        }
+    }
+}
+
 /// Apply a standard text-editing key (Backspace/Delete/arrows/Home/End/Char)
 /// to the draft. Centralizes the canonical key list so insert/search/prompt
 /// modes stay in sync as bindings evolve.
 fn apply_to_draft(app: &mut App, key: KeyEvent) -> DraftEffect {
-    match key.code {
-        KeyCode::Backspace => {
-            app.draft_backspace();
-            DraftEffect::TextChanged
-        }
-        KeyCode::Delete => {
-            app.draft_delete_forward();
-            DraftEffect::TextChanged
-        }
-        KeyCode::Char(c) => {
-            app.draft_insert_char(c);
-            DraftEffect::TextChanged
-        }
-        KeyCode::Left => {
-            app.draft_left();
-            DraftEffect::CursorMoved
-        }
-        KeyCode::Right => {
-            app.draft_right();
-            DraftEffect::CursorMoved
-        }
-        KeyCode::Home => {
-            app.draft_home();
-            DraftEffect::CursorMoved
-        }
-        KeyCode::End => {
-            app.draft_end();
-            DraftEffect::CursorMoved
-        }
-        _ => DraftEffect::Unhandled,
-    }
+    resolve_draft_action(key)
+        .map(|action| apply_draft_action(app, action))
+        .unwrap_or(DraftEffect::Unhandled)
 }
 
 fn handle_insert_normal(app: &mut App, key: KeyEvent) {
+    if let Some(action) = resolve_draft_shortcut(key) {
+        apply_draft_action(app, action);
+        return;
+    }
+
     match key.code {
         KeyCode::Enter => {
             let outcome = if app.selection.editing().is_some() {

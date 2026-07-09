@@ -125,6 +125,41 @@ impl DraftState {
         self.reset_autocomplete();
     }
 
+    /// Delete from the previous word boundary to the cursor (`Ctrl-w` / `Ctrl-Backspace`).
+    pub fn delete_word_backward(&mut self) {
+        let pos = self.cursor.byte();
+        if pos == 0 {
+            return;
+        }
+
+        let s = &self.text;
+        let mut start = pos;
+
+        // First eat whitespace before the cursor.
+        while start > 0 {
+            let prev = prev_char_boundary(s, start);
+            if !s.as_bytes()[prev].is_ascii_whitespace() {
+                break;
+            }
+            start = prev;
+        }
+
+        // Then eat the previous word.
+        while start > 0 {
+            let prev = prev_char_boundary(s, start);
+            if s.as_bytes()[prev].is_ascii_whitespace() {
+                break;
+            }
+            start = prev;
+        }
+
+        if start < pos {
+            self.text.drain(start..pos);
+            self.cursor = DraftCursor(start);
+            self.reset_autocomplete();
+        }
+    }
+
     pub fn delete_forward(&mut self) {
         let pos = self.cursor.byte();
         if pos >= self.text.len() {
@@ -291,6 +326,10 @@ impl App {
 
     pub fn draft_backspace(&mut self) {
         self.draft.backspace();
+    }
+
+    pub fn draft_delete_word_backward(&mut self) {
+        self.draft.delete_word_backward();
     }
 
     pub fn draft_delete_forward(&mut self) {

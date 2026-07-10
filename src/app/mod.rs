@@ -7,6 +7,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use crate::config::Config;
 use crate::core::Store;
 use crate::core::outcome::{DrainReport, Reconcile};
+use crate::note;
 use crate::serve::{self, ShareInfo};
 use crate::theme::{self, Theme};
 use crate::todo::Task;
@@ -148,6 +149,12 @@ pub struct App {
     /// palette). Once bound, the entry stays for the rest of the
     /// session and the overlay just re-displays the saved QR.
     share: Option<ShareInfo>,
+    /// Base directory used by note actions. Relative `note:<path>` tokens are
+    /// resolved under this directory, and generated notes are created below it.
+    pub(crate) notes_dir: PathBuf,
+    /// Path queued for opening in the user's editor after the TUI temporarily
+    /// restores the terminal. Set by OpenNote and drained by the run loop.
+    pending_editor_path: Option<PathBuf>,
     /// Theme index captured when the theme picker opened, so cancel
     /// can restore it.
     theme_pick_orig: usize,
@@ -175,6 +182,7 @@ impl App {
 
     fn from_store(store: Store, file_path: PathBuf, cfg: Config) -> Self {
         // Read saved filters before `cfg` is moved into `Prefs::from_config`.
+        let note_dir = note::notes_dir_from_config(cfg.notes_dir.as_deref());
         let saved_filters = cfg
             .filters
             .iter()
@@ -208,6 +216,8 @@ impl App {
             command_palette: CommandPaletteState::default(),
             view_scroll: [Cell::new(0), Cell::new(0)],
             share: None,
+            notes_dir: note_dir,
+            pending_editor_path: None,
             theme_pick_orig: 0,
             week_start: WeekStart::Sunday,
         };
@@ -426,6 +436,18 @@ impl App {
     /// The cached "today" (ISO `YYYY-MM-DD`) the store resolves dates against.
     pub fn today(&self) -> &str {
         self.store.today()
+    }
+
+    pub fn queue_editor_path(&mut self, path: PathBuf) {
+        self.pending_editor_path = Some(path);
+    }
+
+    pub fn notes_dir(&self) -> &PathBuf {
+        &self.notes_dir
+    }
+
+    pub fn take_pending_editor_path(&mut self) -> Option<PathBuf> {
+        self.pending_editor_path.take()
     }
 
     /// True when at least one task is marked done. Used by the binary to

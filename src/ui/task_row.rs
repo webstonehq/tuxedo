@@ -750,6 +750,152 @@ mod tests {
         );
     }
 
+    /// Base opts for the wrap tests: no gutter extras, no cursor.
+    fn wrap_opts<'a>() -> RowOpts<'a> {
+        RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: None,
+            today: "2026-05-06",
+            hidden_keys: &[],
+        }
+    }
+
+    /// Display width of a built line (sum of span widths).
+    fn line_width(line: &Line) -> usize {
+        line.spans.iter().map(Span::width).sum()
+    }
+
+    /// All span text of a line, concatenated.
+    fn line_text(line: &Line) -> String {
+        line.spans.iter().map(|s| s.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn wrap_splits_long_body_at_word_boundaries() {
+        let task = parse_line("Call the dentist about the appointment tomorrow").unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, 24);
+        assert!(lines.len() > 1, "expected multiple lines, got {lines:?}");
+        for l in &lines {
+            assert!(line_width(l) <= 24, "line overflows: {:?}", line_text(l));
+        }
+        let joined: String = lines.iter().map(line_text).collect::<Vec<_>>().join(" ");
+        for word in ["Call", "dentist", "appointment", "tomorrow"] {
+            assert!(joined.contains(word), "missing {word:?} in {joined:?}");
+        }
+        // No word was split: every line after the gutter/indent starts and
+        // ends on a word boundary from the original body.
+        assert!(lines[1].spans[0].content.chars().all(|c| c == ' '));
+    }
+
+    #[test]
+    fn wrap_hard_breaks_unbroken_word() {
+        let long = format!("x{}", "a".repeat(60));
+        let task = parse_line(&long).unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, 20);
+        assert!(lines.len() > 1);
+        for l in &lines {
+            assert!(line_width(l) <= 20, "line overflows: {:?}", line_text(l));
+        }
+        let total_a: usize = lines
+            .iter()
+            .map(|l| line_text(l).chars().filter(|&c| c == 'a').count())
+            .sum();
+        assert_eq!(total_a, 60, "hard break must not drop characters");
+    }
+
+    #[test]
+    fn wrap_keeps_separator_before_hard_broken_word() {
+        let long = format!("foo {}", "a".repeat(60));
+        let task = parse_line(&long).unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, 20);
+        assert!(
+            line_text(&lines[0]).contains("foo a"),
+            "separator between 'foo' and the long word must survive: {:?}",
+            line_text(&lines[0]),
+        );
+    }
+
+    #[test]
+    fn wrap_measures_wide_chars_by_display_width() {
+        // Each CJK char is 2 columns; gutter is 6. "日本語" (6) fits the
+        // first line at width 14 but "テスト" (6, +1 separator) does not.
+        let task = parse_line("日本語 テスト").unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, 14);
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        for l in &lines {
+            assert!(line_width(l) <= 14, "line overflows: {:?}", line_text(l));
+        }
+        assert!(line_text(&lines[0]).contains("日本語"));
+        assert!(line_text(&lines[1]).contains("テスト"));
+    }
+
+    #[test]
+    fn wrap_exact_boundary_width_stays_single_line() {
+        // Gutter (6) + "aaa bb" (6) lands exactly on width 12.
+        let task = parse_line("aaa bb").unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, 12);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        // One column narrower must wrap.
+        let lines = build_lines(&task, wrap_opts(), &MUTED, 11);
+        assert_eq!(lines.len(), 2, "{lines:?}");
+    }
+
+    #[test]
+    fn wrap_strips_hidden_keys_before_measuring() {
+        let h = vec!["uid".to_string()];
+        let mut opts = wrap_opts();
+        opts.hidden_keys = &h;
+        // Without stripping, uid:aaaaaaaaaaaaaaaaaaaa would force a second
+        // line; with it the visible body fits in one.
+        let task = parse_line("short uid:aaaaaaaaaaaaaaaaaaaa task").unwrap();
+        let lines = build_lines(&task, opts, &MUTED, 24);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(!line_text(&lines[0]).contains("uid:"));
+    }
+
+    #[test]
+    fn wrap_continuation_lines_carry_cursor_style() {
+        let task = parse_line("Call the dentist about the appointment tomorrow").unwrap();
+        let mut opts = wrap_opts();
+        opts.cursor = true;
+        let lines = build_lines(&task, opts, &MUTED, 24);
+        assert!(lines.len() > 1);
+        for l in &lines {
+            assert_eq!(
+                l.style.bg,
+                Some(MUTED.cursor),
+                "every wrapped line keeps the cursor background",
+            );
+        }
+    }
+
+    #[test]
+    fn wrap_continuation_indent_matches_gutter_width() {
+        let task = parse_line("(A) Call the dentist about the appointment tomorrow").unwrap();
+        let mut opts = wrap_opts();
+        opts.show_line_num = true;
+        let lines = build_lines(&task, opts, &MUTED, 28);
+        assert!(lines.len() > 1);
+        // Gutter: "  1 " (4) + glyph (2) + "(A) " (4) = 10 columns.
+        let indent = &lines[1].spans[0];
+        assert_eq!(indent.content.as_ref(), " ".repeat(10));
+    }
+
+    #[test]
+    fn wrap_wide_width_matches_single_line_content() {
+        let task = parse_line("(B) Buy milk +groceries @errands due:2026-05-10").unwrap();
+        let single = build_line(&task, wrap_opts(), &MUTED);
+        let lines = build_lines(&task, wrap_opts(), &MUTED, 200);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(line_text(&lines[0]), line_text(&single));
+        assert_eq!(lines[0].style, single.style);
+    }
+
     #[test]
     fn non_listed_key_not_hidden() {
         let h = vec!["uid".to_string()];

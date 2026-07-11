@@ -459,6 +459,88 @@ fn welcome_overlay() {
     snapshot_app("welcome_overlay", &app);
 }
 
+// ---------------------------------------------------------------------------
+// Row wrapping (`wrap_rows`)
+// ---------------------------------------------------------------------------
+
+/// Long-row fixture for the wrap scenes. With both sidebars on, the center
+/// pane is 40 columns wide, so every row here overflows it: a prose row with
+/// tags, an unbroken URL (hard-break case), a CJK row (double-width case),
+/// and a short control row that must stay single-line.
+const WRAP_BODY: &str = "(A) 2026-05-01 Draft the quarterly report for the platform team covering migration progress +work @laptop due:2026-05-20\n\
+Read https://example.com/really/long/url/thatkeepsgoingwaypastanyreasonablepanewidth @links\n\
+翻訳のレビューをする長いタスクの説明文をここに書いて折り返しの挙動を確認する +i18n\n\
+short task +ok\n";
+
+/// Fixture paths unique to the wrap scenes so parallel tests can't race on
+/// the shared `FIXTURE_PATH` contents. Hard-coded for stable header output.
+const WRAP_FIXTURE_PATH: &str = "/tmp/tuxedo-snapshot-wrap.txt";
+const WRAP_FIXTURE_DONE_PATH: &str = "/tmp/tuxedo-snapshot-wrap-done.txt";
+
+fn make_wrap_app(body: &str) -> App {
+    std::fs::write(WRAP_FIXTURE_PATH, body).expect("seed wrap fixture file");
+    let mut app = App::new(
+        PathBuf::from(WRAP_FIXTURE_PATH),
+        body.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app
+}
+
+#[test]
+fn list_wrap_on() {
+    let mut app = make_wrap_app(WRAP_BODY);
+    app.prefs.wrap_rows = true;
+    snapshot_app("list_wrap_on", &app);
+}
+
+#[test]
+fn archive_wrap_on() {
+    let done_body = "x 2026-05-05 2026-05-01 Archived very long completed task that runs well past the right edge of the pane +work @laptop uid:abc-123\n";
+    std::fs::write(WRAP_FIXTURE_PATH, WRAP_BODY).expect("seed wrap fixture file");
+    std::fs::write(WRAP_FIXTURE_DONE_PATH, done_body).expect("seed wrap done file");
+    let mut app = App::new_with_done(
+        PathBuf::from(WRAP_FIXTURE_PATH),
+        PathBuf::from(WRAP_FIXTURE_DONE_PATH),
+        WRAP_BODY.to_string(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.prefs.density = Density::Compact;
+    app.prefs.wrap_rows = true;
+    app.set_view(View::Archive);
+    // done.txt loads on a background thread; pump until it lands.
+    for _ in 0..200 {
+        if app.poll_archive() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(!app.archive().tasks().is_empty(), "done.txt should load");
+    snapshot_app("archive_wrap_on", &app);
+}
+
+/// With `wrap_rows` on but every row narrower than the pane, the rendered
+/// frame must be byte- and style-identical to `wrap_rows` off — wrapping is
+/// a strict no-op until a row actually overflows.
+#[test]
+fn wrap_on_is_noop_when_rows_fit() {
+    let body = "(A) Buy milk +shop\nCall mom @phone\nWrite notes\n";
+    let mut app = make_wrap_app(body);
+    let backend_off = render(&app);
+    app.prefs.wrap_rows = true;
+    let backend_on = render(&app);
+    assert_eq!(buffer_to_text(&backend_off), buffer_to_text(&backend_on));
+    assert_eq!(
+        buffer_to_styled(&backend_off),
+        buffer_to_styled(&backend_on)
+    );
+}
+
 /// Build a synthetic todo body with N rows so the list overflows any
 /// reasonable viewport. Each row gets a unique label we can search for in the
 /// rendered buffer.

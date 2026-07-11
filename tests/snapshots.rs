@@ -497,6 +497,16 @@ fn list_wrap_on() {
     snapshot_app("list_wrap_on", &app);
 }
 
+/// Locks the *default* treatment of the same overflowing fixture: with
+/// `wrap_rows` off every row must stay on one clipped line, exactly as
+/// before the wrap feature existed. Guards the default path against any
+/// future change that routes it through the wrap machinery.
+#[test]
+fn list_wrap_off_long_rows() {
+    let app = make_wrap_app(WRAP_BODY);
+    snapshot_app("list_wrap_off_long_rows", &app);
+}
+
 #[test]
 fn archive_wrap_on() {
     let done_body = "x 2026-05-05 2026-05-01 Archived very long completed task that runs well past the right edge of the pane +work @laptop uid:abc-123\n";

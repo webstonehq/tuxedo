@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(&buf)
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot-wrap.txt  •  4 DETAIL                           
+                                                                                                    
+ PROJECTS                  (1)  PRIORITY A  ────────────────────── priority  (A)                    
+   +i18n             1      1 ▸ (A) Draft the quarterly report for created   2026-05-01             
+   +ok               1     (3)  NO PRIORITY  ───────────────────── due       2026-05-20  2026-05-20 
+   +work             1      2       Read https://example.com/reall projects  +work                  
+                            3       翻 訳 の レ ビ ュ ー を す る 長 い タ ス ク  contexts  @laptop                
+ CONTEXTS                   4       short task +ok                                                  
+   @laptop           1                                             RAW                              
+   @links            1                                                                              
+                                                                   (A) 2026-05-01 Draft the         
+                                                                   quarterly report for the         
+                                                                   platform team covering migration 
+                                                                   progress +work @laptop           
+                                                                   due:2026-05-20                   
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ NORMAL   j/k · n new · r reschedule · x done · / search · ? h4 open · 2026-05-06 · tuxedo 2026.6.3

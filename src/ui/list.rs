@@ -42,7 +42,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let visible = app.visible_indices();
     let groups = app.visible_groups();
     let mut lines: Vec<Line> = Vec::new();
-    let mut cursor_span: Option<(usize, usize)> = None;
+    let mut cursor_span: Option<std::ops::Range<usize>> = None;
 
     if visible.is_empty() {
         lines.push(Line::from(Span::styled(
@@ -84,13 +84,14 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 hidden_keys: &app.prefs.hidden_keys,
             };
             let start = lines.len();
-            if app.prefs.wrap_rows {
-                lines.extend(task_row::build_lines(task, opts, theme, body_area.width));
-            } else {
-                lines.push(task_row::build_line(task, opts, theme));
-            }
+            lines.extend(task_row::build_lines(
+                task,
+                opts,
+                theme,
+                app.prefs.wrap_rows.then_some(body_area.width),
+            ));
             if i == app.cursor {
-                cursor_span = Some((start, lines.len() - start));
+                cursor_span = Some(start..lines.len());
             }
             if matches!(gk, GroupKey::None) && i != last {
                 for _ in 0..blank {

@@ -12,6 +12,10 @@ notify = "8"
 qrcode = { version = "0.14", default-features = false }
 ratatui = "0.30.0"
 tiny_http = "0.12"
+# Both already in the tree as ratatui's own transitive deps — no new code
+# compiled; used directly by the row-wrap machinery (task_row::build_lines).
+unicode-segmentation = "1"
+unicode-width = "0.2"
 
 [dev-dependencies]
 insta = "1.47"

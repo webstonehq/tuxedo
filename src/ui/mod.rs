@@ -205,14 +205,14 @@ pub(crate) fn density_blank_lines(d: crate::app::Density) -> usize {
 
 /// Compute the new vertical scroll offset for a paragraph-backed list so the
 /// cursor row stays inside the viewport. `prev` is the previous frame's offset,
-/// `cursor_span` is the cursor row's `(first_line, line_count)` (or `None` if
-/// there's no cursor row in the current build, e.g. when the list is empty) —
-/// `line_count` is 1 today unless row wrapping is on. `height` is the viewport
-/// height in rows; `total` is the total line count. A cursor row taller than
-/// the viewport pins its first line to the top.
+/// `cursor_span` is the cursor row's line range (or `None` if there's no
+/// cursor row in the current build, e.g. when the list is empty) — one line
+/// long today unless row wrapping is on. `height` is the viewport height in
+/// rows; `total` is the total line count. A cursor row taller than the
+/// viewport pins its first line to the top.
 pub(crate) fn keep_cursor_visible(
     prev: u16,
-    cursor_span: Option<(usize, usize)>,
+    cursor_span: Option<std::ops::Range<usize>>,
     height: u16,
     total: usize,
 ) -> u16 {
@@ -223,14 +223,16 @@ pub(crate) fn keep_cursor_visible(
     let max_offset = total.saturating_sub(h);
     let prev = usize::from(prev).min(max_offset);
     let new = match cursor_span {
-        Some((start, len)) => {
-            let end = start + len.max(1) - 1;
+        Some(span) => {
+            // Rows always occupy at least one line; treat a degenerate empty
+            // range as its start line.
+            let last = span.end.max(span.start + 1) - 1;
             let mut off = prev;
-            if end >= off + h {
-                off = end + 1 - h;
+            if last >= off + h {
+                off = last + 1 - h;
             }
-            if start < off {
-                off = start;
+            if span.start < off {
+                off = span.start;
             }
             off
         }
@@ -245,26 +247,26 @@ mod tests {
 
     #[test]
     fn no_scroll_when_content_fits() {
-        assert_eq!(keep_cursor_visible(0, Some((5, 1)), 10, 8), 0);
-        assert_eq!(keep_cursor_visible(0, Some((7, 1)), 10, 8), 0);
+        assert_eq!(keep_cursor_visible(0, Some(5..6), 10, 8), 0);
+        assert_eq!(keep_cursor_visible(0, Some(7..8), 10, 8), 0);
     }
 
     #[test]
     fn scrolls_down_when_cursor_below_viewport() {
         // viewport rows 0..5, cursor at line 7 -> offset = 7 - 5 + 1 = 3
-        assert_eq!(keep_cursor_visible(0, Some((7, 1)), 5, 20), 3);
+        assert_eq!(keep_cursor_visible(0, Some(7..8), 5, 20), 3);
     }
 
     #[test]
     fn scrolls_up_when_cursor_above_viewport() {
         // prev offset 10, cursor at line 3 -> offset = 3
-        assert_eq!(keep_cursor_visible(10, Some((3, 1)), 5, 20), 3);
+        assert_eq!(keep_cursor_visible(10, Some(3..4), 5, 20), 3);
     }
 
     #[test]
     fn keeps_previous_offset_when_cursor_in_viewport() {
         // prev 5, cursor at line 7, height 5 -> 7 in [5, 10), stays 5
-        assert_eq!(keep_cursor_visible(5, Some((7, 1)), 5, 20), 5);
+        assert_eq!(keep_cursor_visible(5, Some(7..8), 5, 20), 5);
     }
 
     #[test]
@@ -276,25 +278,25 @@ mod tests {
     #[test]
     fn handles_degenerate_inputs() {
         assert_eq!(keep_cursor_visible(0, None, 0, 100), 0);
-        assert_eq!(keep_cursor_visible(0, Some((0, 1)), 5, 0), 0);
+        assert_eq!(keep_cursor_visible(0, Some(0..1), 5, 0), 0);
     }
 
     #[test]
     fn scrolls_down_until_wrapped_cursor_row_fully_visible() {
         // Cursor row spans lines 7..=9 (3 wrapped lines), viewport height 5.
         // The whole span must land inside: offset = 9 + 1 - 5 = 5.
-        assert_eq!(keep_cursor_visible(0, Some((7, 3)), 5, 20), 5);
+        assert_eq!(keep_cursor_visible(0, Some(7..10), 5, 20), 5);
     }
 
     #[test]
     fn keeps_offset_when_wrapped_cursor_row_already_visible() {
         // Span 5..=7 inside viewport [4, 9) -> unchanged.
-        assert_eq!(keep_cursor_visible(4, Some((5, 3)), 5, 20), 4);
+        assert_eq!(keep_cursor_visible(4, Some(5..8), 5, 20), 4);
     }
 
     #[test]
     fn wrapped_row_taller_than_viewport_pins_first_line() {
         // Span 10..=17 can't fit in height 5; show its first line.
-        assert_eq!(keep_cursor_visible(0, Some((10, 8)), 5, 40), 10);
+        assert_eq!(keep_cursor_visible(0, Some(10..18), 5, 40), 10);
     }
 }

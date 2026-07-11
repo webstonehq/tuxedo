@@ -35,7 +35,6 @@ const DIALOG_H: u16 = 8;
 const DIALOG_MIN_W: u16 = 40;
 const DIALOG_MAX_W: u16 = 100;
 
-const HELP_MAX_H: u16 = 29;
 const HELP_MIN_W: u16 = 76;
 const HELP_MAX_W: u16 = 120;
 
@@ -119,7 +118,10 @@ pub fn draw(frame: &mut Frame, app: &App) {
             }
         }
         Mode::Help => {
-            let h: u16 = area.height.saturating_sub(3).min(HELP_MAX_H);
+            // Height tracks the help content (see `help::required_height`)
+            // so new keybinding rows can't clip the format section, with a
+            // 2-row margin kept on short terminals.
+            let h: u16 = area.height.saturating_sub(2).min(help::required_height());
             let w: u16 = (u32::from(area.width) * 9 / 10)
                 .clamp(u32::from(HELP_MIN_W), u32::from(HELP_MAX_W))
                 as u16;

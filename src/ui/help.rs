@@ -83,6 +83,24 @@ const FORMAT: Section = (
     ],
 );
 
+/// Overlay height needed to show every row: the taller keybinding column,
+/// the divider, the format section, and the surrounding border. Derived from
+/// the section tables so adding a keybinding can never silently clip the
+/// bottom of the overlay again.
+pub(crate) fn required_height() -> u16 {
+    let kb = column_rows(&[NAVIGATION, EDITING]).max(column_rows(&[VIEW, SYSTEM]));
+    let fmt = 1 + FORMAT.1.len().div_ceil(2);
+    u16::try_from(kb + 1 + fmt + 2).unwrap_or(u16::MAX)
+}
+
+/// Rows one column of `render_sections_trimmed` output occupies: a header
+/// row plus one row per item per section, with a blank row between sections
+/// (the trailing blank is trimmed).
+fn column_rows(sections: &[Section]) -> usize {
+    let items: usize = sections.iter().map(|(_, items)| items.len()).sum();
+    items + 2 * sections.len() - 1
+}
+
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     let block = Block::default()
@@ -231,5 +249,27 @@ fn pad_str(s: &str, w: usize) -> String {
         let mut o = s.to_string();
         o.push_str(&" ".repeat(w - len));
         o
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::MUTED;
+
+    /// `required_height` must track exactly what `render` lays out — a
+    /// mismatch is how a new keybinding row silently clipped the FORMAT
+    /// section once before.
+    #[test]
+    fn required_height_matches_rendered_rows() {
+        let kb_rows = two_columns(&MUTED, 100, &[NAVIGATION, EDITING], &[VIEW, SYSTEM]).len();
+        let (fmt_left, fmt_right) = FORMAT.1.split_at(FORMAT.1.len().div_ceil(2));
+        let fmt_rows = two_columns(&MUTED, 100, &[(FORMAT.0, fmt_left)], &[("", fmt_right)]).len();
+        let border = 2;
+        let divider = 1;
+        assert_eq!(
+            required_height(),
+            u16::try_from(kb_rows + divider + fmt_rows + border).expect("small"),
+        );
     }
 }

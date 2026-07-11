@@ -318,6 +318,7 @@ toggle_right_pane = "]"
 open_theme_picker = "T"
 cycle_density     = "D"
 toggle_line_num   = "L"
+toggle_wrap       = "w"
 # cycle_theme has no default — bind a key to cycle themes without the picker:
 # cycle_theme = "Ctrl-t"
 
@@ -418,6 +419,7 @@ The modal keys below apply in Normal mode:
 | `T` | open theme picker |
 | `D` | cycle density: compact → comfortable → cozy |
 | `L` | toggle line numbers |
+| `w` | wrap long rows |
 
 ### System
 
@@ -586,6 +588,20 @@ task; `o` only opens an existing linked note.
 ```toml
 notes_dir = ~/notes
 ```
+
+### Wrapping long rows
+
+By default the list keeps every task on one dense line and clips whatever
+doesn't fit the pane. Set `wrap_rows` (or press `w`) to wrap long rows onto
+indented continuation lines in the list and archive views instead:
+
+```toml
+wrap_rows = true
+```
+
+Wrapping is display-only and defaults to off. Tags hidden via `hide_keys`
+are stripped before the wrap width is measured, and the detail pane is
+unaffected (it always shows the full text).
 
 ### Hiding `key:value` tags
 

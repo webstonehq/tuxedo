@@ -136,6 +136,219 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     Line::from(spans).style(line_style)
 }
 
+/// Build one *or more* lines for a task row, wrapping the body at word
+/// boundaries to `width` columns. Continuation lines are indented to the
+/// body's start column so the glyph/priority/line-number gutter stays clean,
+/// and they carry the row's line style so cursor/selection highlighting
+/// spans every wrapped line. Width accounting reuses ratatui's own
+/// `Span::width` (unicode-width), matching how `Paragraph` measures cells.
+///
+/// The single-line path (`build_line`) is untouched; callers only take this
+/// route when the `wrap_rows` pref is on. The detail pane keeps its own
+/// string-level `wrap_words` because it wraps *unstyled* raw text before
+/// styling tokens; here the spans are already styled (search-match
+/// highlighting can split a word into single-char spans), so wrapping has
+/// to preserve span boundaries instead of re-splitting a plain string.
+pub fn build_lines<'a>(
+    task: &'a Task,
+    opts: RowOpts<'a>,
+    theme: &Theme,
+    width: u16,
+) -> Vec<Line<'a>> {
+    let line = build_line(task, opts, theme);
+    let style = line.style;
+    let mut spans = line.spans;
+
+    // The fixed-width gutter emitted by `build_line` before any body text:
+    // optional line number, optional visual-mode checkbox, status glyph,
+    // priority cell. Kept verbatim on the first line; its display width
+    // becomes the continuation indent.
+    let prefix_count =
+        (2 + usize::from(opts.show_line_num) + usize::from(opts.multi_mode)).min(spans.len());
+    let body: Vec<Span<'a>> = spans.split_off(prefix_count);
+    let prefix = spans;
+    let indent: usize = prefix.iter().map(Span::width).sum();
+
+    wrap_spans(prefix, body, style, usize::from(width), indent)
+}
+
+/// Greedy word-boundary wrap over pre-styled spans. `total_w` is the full
+/// row width; `indent` is both the first line's initial occupancy (the
+/// gutter) and the leading pad of every continuation line. Whitespace runs
+/// at a break point are dropped, like any conventional word wrap. A word
+/// wider than a whole continuation line is hard-broken at character
+/// boundaries rather than overflowing (or looping forever).
+fn wrap_spans<'a>(
+    prefix: Vec<Span<'a>>,
+    body: Vec<Span<'a>>,
+    style: Style,
+    total_w: usize,
+    indent: usize,
+) -> Vec<Line<'a>> {
+    // Guarantee at least one usable body column so degenerate pane widths
+    // can't stall the loop; anything past the real width is clipped by the
+    // renderer exactly as before.
+    let avail = total_w.max(indent + 1);
+    let mut out: Vec<Line<'a>> = Vec::new();
+    let mut cur: Vec<Span<'a>> = prefix;
+    let mut cur_w = indent;
+    // Body columns already emitted on the current line. Whitespace only
+    // "commits" when a word follows it on the same line, so line breaks
+    // swallow the separator instead of leaking leading spaces.
+    let mut cur_has_body = false;
+    let mut pending_ws: Vec<Span<'a>> = Vec::new();
+    let mut pending_ws_w = 0usize;
+
+    for atom in split_atoms(body) {
+        match atom {
+            Atom::Ws(span) => {
+                pending_ws_w += span.width();
+                pending_ws.push(span);
+            }
+            Atom::Word(word) => {
+                let word_w: usize = word.iter().map(Span::width).sum();
+                if cur_w + pending_ws_w + word_w <= avail {
+                    cur.append(&mut pending_ws);
+                    cur_w += pending_ws_w + word_w;
+                    pending_ws_w = 0;
+                    cur.extend(word);
+                    cur_has_body = true;
+                } else if indent + word_w <= avail {
+                    pending_ws.clear();
+                    pending_ws_w = 0;
+                    out.push(Line::from(std::mem::take(&mut cur)).style(style));
+                    cur.push(indent_span(indent));
+                    cur_w = indent + word_w;
+                    cur.extend(word);
+                    cur_has_body = true;
+                } else {
+                    // Commit the separator when it still fits so the head of
+                    // the hard-broken word doesn't glue onto the previous
+                    // word; otherwise the break swallows it as usual.
+                    if cur_has_body && cur_w + pending_ws_w < avail {
+                        cur.append(&mut pending_ws);
+                        cur_w += pending_ws_w;
+                    } else {
+                        pending_ws.clear();
+                    }
+                    pending_ws_w = 0;
+                    hard_break(
+                        &mut out,
+                        &mut cur,
+                        &mut cur_w,
+                        &mut cur_has_body,
+                        word,
+                        avail,
+                        indent,
+                        style,
+                    );
+                }
+            }
+        }
+    }
+    out.push(Line::from(cur).style(style));
+    out
+}
+
+/// Emit an over-long word across as many lines as needed, splitting at
+/// character boundaries by display width.
+#[allow(clippy::too_many_arguments)]
+fn hard_break<'a>(
+    out: &mut Vec<Line<'a>>,
+    cur: &mut Vec<Span<'a>>,
+    cur_w: &mut usize,
+    cur_has_body: &mut bool,
+    word: Vec<Span<'a>>,
+    avail: usize,
+    indent: usize,
+    style: Style,
+) {
+    for span in word {
+        let mut start = 0usize;
+        for (idx, ch) in span.content.char_indices() {
+            let ch_w = char_display_width(ch);
+            // Break before this char would overflow — but never emit an
+            // empty body line (a char wider than the whole body column is
+            // force-placed and clipped, guaranteeing progress).
+            if *cur_w + ch_w > avail && (*cur_has_body || start < idx) {
+                if start < idx {
+                    cur.push(slice_span(&span, start, idx));
+                    start = idx;
+                }
+                out.push(Line::from(std::mem::take(cur)).style(style));
+                cur.push(indent_span(indent));
+                *cur_w = indent;
+                *cur_has_body = false;
+            }
+            *cur_w += ch_w;
+        }
+        if start < span.content.len() {
+            let end = span.content.len();
+            cur.push(slice_span(&span, start, end));
+        }
+        *cur_has_body = true;
+    }
+}
+
+enum Atom<'a> {
+    Ws(Span<'a>),
+    Word(Vec<Span<'a>>),
+}
+
+/// Split spans into alternating whitespace / word atoms. Adjacent non-space
+/// runs from *different* spans merge into one word (search-match highlighting
+/// splits a single word into per-char spans; a break inside it would be
+/// wrong), while each whitespace run stays its own atom.
+fn split_atoms(body: Vec<Span<'_>>) -> Vec<Atom<'_>> {
+    let mut atoms: Vec<Atom> = Vec::new();
+    for span in body {
+        let content = span.content.as_ref();
+        let mut rest = 0usize;
+        while rest < content.len() {
+            let s = &content[rest..];
+            let is_ws = s
+                .chars()
+                .next()
+                .expect("rest < len guarantees a char")
+                .is_whitespace();
+            let run_len = s
+                .find(|c: char| c.is_whitespace() != is_ws)
+                .unwrap_or(s.len());
+            let piece = slice_span(&span, rest, rest + run_len);
+            if is_ws {
+                atoms.push(Atom::Ws(piece));
+            } else if let Some(Atom::Word(word)) = atoms.last_mut() {
+                word.push(piece);
+            } else {
+                atoms.push(Atom::Word(vec![piece]));
+            }
+            rest += run_len;
+        }
+    }
+    atoms
+}
+
+/// Sub-slice a span, preserving its style. Borrowed content stays borrowed
+/// (the common case — body spans point into `task.raw`); owned content is
+/// re-allocated for the slice.
+fn slice_span<'a>(span: &Span<'a>, start: usize, end: usize) -> Span<'a> {
+    match &span.content {
+        std::borrow::Cow::Borrowed(s) => Span::styled(&s[start..end], span.style),
+        std::borrow::Cow::Owned(s) => Span::styled(s[start..end].to_string(), span.style),
+    }
+}
+
+fn indent_span<'a>(indent: usize) -> Span<'a> {
+    Span::raw(" ".repeat(indent))
+}
+
+/// Display width of a single char, measured through ratatui's own
+/// unicode-width path so wrap math and cell clipping can't disagree.
+fn char_display_width(ch: char) -> usize {
+    let mut buf = [0u8; 4];
+    Span::raw(&*ch.encode_utf8(&mut buf)).width()
+}
+
 fn push_token_spans<'a>(
     spans: &mut Vec<Span<'a>>,
     token: &'a str,

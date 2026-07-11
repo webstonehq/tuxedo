@@ -42,7 +42,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let visible = app.visible_indices();
     let groups = app.visible_groups();
     let mut lines: Vec<Line> = Vec::new();
-    let mut cursor_line: Option<usize> = None;
+    let mut cursor_span: Option<(usize, usize)> = None;
 
     if visible.is_empty() {
         lines.push(Line::from(Span::styled(
@@ -83,10 +83,15 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 today: app.today(),
                 hidden_keys: &app.prefs.hidden_keys,
             };
-            if i == app.cursor {
-                cursor_line = Some(lines.len());
+            let start = lines.len();
+            if app.prefs.wrap_rows {
+                lines.extend(task_row::build_lines(task, opts, theme, body_area.width));
+            } else {
+                lines.push(task_row::build_line(task, opts, theme));
             }
-            lines.push(task_row::build_line(task, opts, theme));
+            if i == app.cursor {
+                cursor_span = Some((start, lines.len() - start));
+            }
             if matches!(gk, GroupKey::None) && i != last {
                 for _ in 0..blank {
                     lines.push(Line::raw(""));
@@ -98,7 +103,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let scroll_cell = &app.view_scroll[View::List.idx()];
     let scroll = keep_cursor_visible(
         scroll_cell.get(),
-        cursor_line,
+        cursor_span,
         body_area.height,
         lines.len(),
     );

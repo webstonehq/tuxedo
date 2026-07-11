@@ -208,6 +208,11 @@ pub const ENTRIES: &[PaletteEntry] = &[
         action: Action::ToggleLineNum,
     },
     PaletteEntry {
+        label: "wrap long rows",
+        keys: "w",
+        action: Action::ToggleWrap,
+    },
+    PaletteEntry {
         label: "open help",
         keys: "?",
         action: Action::OpenHelp,
@@ -539,6 +544,7 @@ mod tests {
             Action::CycleTheme,
             Action::CycleDensity,
             Action::ToggleLineNum,
+            Action::ToggleWrap,
             Action::ToggleShowDone,
             Action::ToggleShowFuture,
             Action::CopyLine,

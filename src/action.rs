@@ -45,6 +45,8 @@ pub enum Action {
     CycleTheme,
     CycleDensity,
     ToggleLineNum,
+    /// Wrap long task rows onto continuation lines (list + archive views).
+    ToggleWrap,
     ToggleShowDone,
     ToggleShowFuture,
     CopyLine,
@@ -102,6 +104,7 @@ impl Action {
             "cycle_theme" => Some(Self::CycleTheme),
             "cycle_density" => Some(Self::CycleDensity),
             "toggle_line_num" | "toggle_line_numbers" => Some(Self::ToggleLineNum),
+            "toggle_wrap" | "toggle_wrap_rows" => Some(Self::ToggleWrap),
             "toggle_show_done" => Some(Self::ToggleShowDone),
             "toggle_show_future" => Some(Self::ToggleShowFuture),
             "copy_line" => Some(Self::CopyLine),
@@ -138,6 +141,18 @@ mod tests {
         assert_eq!(
             Action::from_keybind_name("theme_picker"),
             Some(Action::OpenThemePicker)
+        );
+    }
+
+    #[test]
+    fn toggle_wrap_is_rebindable() {
+        assert_eq!(
+            Action::from_keybind_name("toggle_wrap"),
+            Some(Action::ToggleWrap)
+        );
+        assert_eq!(
+            Action::from_keybind_name("toggle_wrap_rows"),
+            Some(Action::ToggleWrap)
         );
     }
 

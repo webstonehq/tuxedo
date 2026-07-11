@@ -55,6 +55,7 @@ const VIEW: Section = (
         ("T", "cycle theme"),
         ("D", "cycle density"),
         ("L", "toggle line numbers"),
+        ("w", "wrap long rows"),
     ],
 );
 

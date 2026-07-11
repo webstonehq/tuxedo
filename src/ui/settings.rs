@@ -75,6 +75,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             "  show future in list",
             Some(format!("{}  (F to toggle)", on(app.prefs.show_future))),
         ),
+        (
+            "  wrap long rows",
+            Some(format!("{}  (w to toggle)", on(app.prefs.wrap_rows))),
+        ),
         ("", Some("".into())),
         ("BEHAVIOR", None),
         (

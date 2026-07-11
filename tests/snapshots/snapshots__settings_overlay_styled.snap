@@ -17,13 +17,13 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}   detail sidebar              {/}{fg=#6b7280 bg=#1a1d23}on  (] to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}   show done in list           {/}{fg=#6b7280 bg=#1a1d23}off  (H to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                   {/}
 {fg=#c8ccd4 bg=#1a1d23}   show future in list         {/}{fg=#6b7280 bg=#1a1d23}off  (F to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                   {/}
+{fg=#c8ccd4 bg=#1a1d23}   wrap long rows              {/}{fg=#6b7280 bg=#1a1d23}off  (w to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                   {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}BEHAVIOR{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                           {/}
 {fg=#c8ccd4 bg=#1a1d23}   default sort                {/}{fg=#6b7280 bg=#1a1d23}priority (s to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                                {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}KEYBINDINGS{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                        {/}
 {fg=#c8ccd4 bg=#1a1d23}                               {/}{fg=#6b7280 bg=#1a1d23}press ? for the full list{/}{fg=#c8ccd4 bg=#1a1d23}                                            {/}
-{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}

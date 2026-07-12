@@ -19,11 +19,12 @@ expression: buffer_to_text(&buf)
    @l│    x                 toggle complete           T                 cycle theme           │     
    @p│    dd                delete task               D                 cycle density         │     
      │    p                 cycle priority A→B→C→·    L                 toggle line numbers   │     
-     │    c                 add/remove context                                                │     
-     │    +                 add project             SYSTEM                                    │     
-     │    yy                copy line to clipboard    : / Ctrl-P        command palette       │     
-     │    yb                copy body only            s                 share capture QR      │     
-     │    u                 undo                      ? / ,             help / settings       │     
+     │    c                 add/remove context        w                 wrap long rows        │     
+     │    +                 add project                                                       │     
+     │    yy                copy line to clipboard  SYSTEM                                    │     
+     │    yb                copy body only            : / Ctrl-P        command palette       │     
+     │    u                 undo                      s                 share capture QR      │     
+     │                                                ? / ,             help / settings       │     
      │                                                q                 quit                  │     
      │────────────────────────────────────────────────────────────────────────────────────────│     
      │  FORMAT                                                                                │     
@@ -32,5 +33,4 @@ expression: buffer_to_text(&buf)
      │    +project          project tag(s)            rec:+Nu           strict: anchor on due:│     
      │    @context          context tag(s)            x DATE BODY       completed task prefix │     
      └────────────────────────────────────────────────────────────────────────────────────────┘     
-                                                                                                    
  HELP   ? close help                                         15 open · 2026-05-06 · tuxedo 2026.6.3

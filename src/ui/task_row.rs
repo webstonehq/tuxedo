@@ -1,5 +1,7 @@
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 use crate::search::subseq_match_ci;
 use crate::theme::Theme;
@@ -22,10 +24,24 @@ pub struct RowOpts<'a> {
 }
 
 pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<'a> {
-    let mut spans: Vec<Span<'a>> = Vec::new();
+    let (mut spans, body, style) = build_line_parts(task, opts, theme);
+    spans.extend(body);
+    Line::from(spans).style(style)
+}
+
+/// Gutter spans, body spans, and row style for one task. The gutter/body
+/// boundary is authoritative here — `build_lines` wraps the body and indents
+/// continuations by the gutter's width, so the split must come from the same
+/// place that emits the spans.
+fn build_line_parts<'a>(
+    task: &'a Task,
+    opts: RowOpts<'a>,
+    theme: &Theme,
+) -> (Vec<Span<'a>>, Vec<Span<'a>>, Style) {
+    let mut gutter: Vec<Span<'a>> = Vec::new();
 
     if opts.show_line_num {
-        spans.push(Span::styled(
+        gutter.push(Span::styled(
             format!("{:>3} ", opts.idx_label + 1),
             Style::default().fg(theme.dim),
         ));
@@ -37,7 +53,7 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
         } else {
             theme.dim
         };
-        spans.push(Span::styled(mark, Style::default().fg(c)));
+        gutter.push(Span::styled(mark, Style::default().fg(c)));
     }
 
     // status glyph + priority box
@@ -53,21 +69,22 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     if opts.cursor {
         glyph_style = glyph_style.add_modifier(Modifier::BOLD);
     }
-    spans.push(Span::styled(glyph, glyph_style));
+    gutter.push(Span::styled(glyph, glyph_style));
 
     if task.done {
-        spans.push(Span::styled("    ", Style::default().fg(theme.done)));
+        gutter.push(Span::styled("    ", Style::default().fg(theme.done)));
     } else if let Some(p) = task.priority {
-        spans.push(Span::styled(
+        gutter.push(Span::styled(
             format!("({}) ", p),
             Style::default()
                 .fg(theme.priority_color(p))
                 .add_modifier(Modifier::BOLD),
         ));
     } else {
-        spans.push(Span::raw("    "));
+        gutter.push(Span::raw("    "));
     }
 
+    let mut spans: Vec<Span<'a>> = Vec::new();
     // body — walk &str slices instead of collecting Vec<char>. Spans borrow
     // straight from `task.raw`, so most rows allocate only for the format!()
     // calls above.
@@ -133,7 +150,268 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     } else {
         Style::default()
     };
-    Line::from(spans).style(line_style)
+    (gutter, spans, line_style)
+}
+
+/// Minimum body columns required before wrapping engages. Below this the
+/// pane is essentially all gutter, and wrapping would emit one (clipped,
+/// invisible) column per line — strictly worse than the classic clipped
+/// single line, which at least keeps the list compact.
+const MIN_WRAP_BODY_COLS: usize = 4;
+
+/// Build the lines for a task row. With `wrap_width: None` this is exactly
+/// one line, identical to `build_line`. With `Some(width)` the body wraps at
+/// word boundaries to `width` columns: continuation lines are indented to
+/// the body's start column so the glyph/priority/line-number gutter stays
+/// clean, and they carry the row's line style so cursor/selection
+/// highlighting spans every wrapped line. Width accounting uses the same
+/// unicode-width measurements as ratatui's renderer, so wrap math and cell
+/// clipping can't disagree.
+///
+/// Rows that fit `width`, and panes too narrow to wrap usefully (see
+/// `MIN_WRAP_BODY_COLS`), take an allocation-free fast path back to the
+/// single-line form.
+///
+/// The detail pane keeps its own string-level `wrap_words` because it wraps
+/// *unstyled* raw text before styling tokens; here the spans are already
+/// styled (search-match highlighting can split a word into single-char
+/// spans), so wrapping has to preserve span boundaries instead of
+/// re-splitting a plain string.
+pub fn build_lines<'a>(
+    task: &'a Task,
+    opts: RowOpts<'a>,
+    theme: &Theme,
+    wrap_width: Option<u16>,
+) -> Vec<Line<'a>> {
+    let (gutter, body, style) = build_line_parts(task, opts, theme);
+    let single = |mut gutter: Vec<Span<'a>>, body: Vec<Span<'a>>| {
+        gutter.extend(body);
+        vec![Line::from(gutter).style(style)]
+    };
+    let Some(width) = wrap_width else {
+        return single(gutter, body);
+    };
+    let total = usize::from(width);
+    let indent: usize = gutter.iter().map(Span::width).sum();
+    if total < indent + MIN_WRAP_BODY_COLS {
+        return single(gutter, body);
+    }
+    let body_w: usize = body.iter().map(Span::width).sum();
+    if indent + body_w <= total {
+        return single(gutter, body);
+    }
+    wrap_spans(gutter, body, style, total, indent)
+}
+
+/// In-progress wrap state shared by `wrap_spans` and `hard_break`: the
+/// completed lines, the line being filled, and its display width. `cur_w`
+/// is the single source of truth — fit checks and the "line already shows
+/// body text" test both derive from it, so the two functions can't drift
+/// out of sync.
+struct LineAcc<'a> {
+    done: Vec<Line<'a>>,
+    cur: Vec<Span<'a>>,
+    cur_w: usize,
+    avail: usize,
+    indent: usize,
+    style: Style,
+}
+
+impl<'a> LineAcc<'a> {
+    fn new(gutter: Vec<Span<'a>>, avail: usize, indent: usize, style: Style) -> Self {
+        Self {
+            done: Vec::new(),
+            cur: gutter,
+            cur_w: indent,
+            avail,
+            indent,
+            style,
+        }
+    }
+
+    fn fits(&self, w: usize) -> bool {
+        self.cur_w + w <= self.avail
+    }
+
+    /// Whether the current line holds anything beyond the gutter/indent.
+    fn has_body(&self) -> bool {
+        self.cur_w > self.indent
+    }
+
+    fn push(&mut self, span: Span<'a>, w: usize) {
+        self.cur.push(span);
+        self.cur_w += w;
+    }
+
+    /// Close the current line and open an indented continuation.
+    fn break_line(&mut self) {
+        self.done
+            .push(Line::from(std::mem::take(&mut self.cur)).style(self.style));
+        self.cur.push(indent_span(self.indent));
+        self.cur_w = self.indent;
+    }
+
+    fn finish(mut self) -> Vec<Line<'a>> {
+        self.done.push(Line::from(self.cur).style(self.style));
+        self.done
+    }
+}
+
+/// Greedy word-boundary wrap over pre-styled spans. `total_w` is the full
+/// row width; `indent` is both the first line's initial occupancy (the
+/// gutter) and the leading pad of every continuation line. Whitespace runs
+/// at a break point are dropped, like any conventional word wrap; a word
+/// wider than a whole continuation line is hard-broken at grapheme
+/// boundaries. The caller guarantees `total_w >= indent + MIN_WRAP_BODY_COLS`.
+fn wrap_spans<'a>(
+    gutter: Vec<Span<'a>>,
+    body: Vec<Span<'a>>,
+    style: Style,
+    total_w: usize,
+    indent: usize,
+) -> Vec<Line<'a>> {
+    let mut acc = LineAcc::new(gutter, total_w, indent, style);
+    // Whitespace is held back and only committed when a word follows it on
+    // the same line, so line breaks swallow the separator instead of
+    // leaking leading spaces onto continuations.
+    let mut pending_ws: Vec<Span<'a>> = Vec::new();
+    for atom in split_atoms(body) {
+        match atom {
+            Atom::Ws(span) => pending_ws.push(span),
+            Atom::Word(word) => {
+                let ws_w: usize = pending_ws.iter().map(Span::width).sum();
+                let word_w: usize = word.iter().map(Span::width).sum();
+                if acc.fits(ws_w + word_w) {
+                    for s in pending_ws.drain(..) {
+                        let w = s.width();
+                        acc.push(s, w);
+                    }
+                    for s in word {
+                        let w = s.width();
+                        acc.push(s, w);
+                    }
+                } else if acc.indent + word_w <= acc.avail {
+                    pending_ws.clear();
+                    acc.break_line();
+                    for s in word {
+                        let w = s.width();
+                        acc.push(s, w);
+                    }
+                } else {
+                    // Over-long word. Keep the separator on this line when it
+                    // fits; when it doesn't, break first — either way the
+                    // word's head can never glue onto the previous word.
+                    if acc.has_body() {
+                        if acc.fits(ws_w) {
+                            for s in pending_ws.drain(..) {
+                                let w = s.width();
+                                acc.push(s, w);
+                            }
+                        } else {
+                            acc.break_line();
+                        }
+                    }
+                    pending_ws.clear();
+                    hard_break(&mut acc, word);
+                }
+            }
+        }
+    }
+    acc.finish()
+}
+
+/// Emit an over-long word across as many lines as needed, splitting at
+/// grapheme-cluster boundaries so combining marks, variation selectors
+/// (VS16 emoji), and ZWJ sequences are never torn apart. Each cluster is
+/// measured string-level — the same way ratatui's renderer draws it — so
+/// packed lines never overflow the pane. A cluster wider than the whole
+/// body column is force-placed (and clipped) rather than looping.
+fn hard_break<'a>(acc: &mut LineAcc<'a>, word: Vec<Span<'a>>) {
+    for span in word {
+        let mut chunk_start = 0usize;
+        let mut chunk_w = 0usize;
+        for (idx, g) in span.content.grapheme_indices(true) {
+            let g_w = g.width();
+            // Break before this cluster would overflow — but never emit an
+            // empty body line, guaranteeing progress.
+            if !acc.fits(chunk_w + g_w) && (acc.has_body() || chunk_start < idx) {
+                if chunk_start < idx {
+                    let piece = slice_span(&span, chunk_start, idx);
+                    acc.push(piece, chunk_w);
+                    chunk_start = idx;
+                    chunk_w = 0;
+                }
+                acc.break_line();
+            }
+            chunk_w += g_w;
+        }
+        if chunk_start < span.content.len() {
+            let end = span.content.len();
+            let piece = slice_span(&span, chunk_start, end);
+            acc.push(piece, chunk_w);
+        }
+    }
+}
+
+enum Atom<'a> {
+    Ws(Span<'a>),
+    Word(Vec<Span<'a>>),
+}
+
+/// Split spans into alternating whitespace / word atoms. Adjacent non-space
+/// runs from *different* spans merge into one word (search-match highlighting
+/// splits a single word into per-char spans; a break inside it would be
+/// wrong), while each whitespace run stays its own atom.
+fn split_atoms(body: Vec<Span<'_>>) -> Vec<Atom<'_>> {
+    let mut atoms: Vec<Atom> = Vec::new();
+    for span in body {
+        let content = span.content.as_ref();
+        let mut rest = 0usize;
+        while rest < content.len() {
+            let s = &content[rest..];
+            let is_ws = s
+                .chars()
+                .next()
+                .expect("rest < len guarantees a char")
+                .is_whitespace();
+            let run_len = s
+                .find(|c: char| c.is_whitespace() != is_ws)
+                .unwrap_or(s.len());
+            let piece = slice_span(&span, rest, rest + run_len);
+            if is_ws {
+                atoms.push(Atom::Ws(piece));
+            } else if let Some(Atom::Word(word)) = atoms.last_mut() {
+                word.push(piece);
+            } else {
+                atoms.push(Atom::Word(vec![piece]));
+            }
+            rest += run_len;
+        }
+    }
+    atoms
+}
+
+/// Sub-slice a span, preserving its style. Borrowed content stays borrowed
+/// (the common case — body spans point into `task.raw`); owned content is
+/// re-allocated for the slice.
+fn slice_span<'a>(span: &Span<'a>, start: usize, end: usize) -> Span<'a> {
+    match &span.content {
+        std::borrow::Cow::Borrowed(s) => Span::styled(&s[start..end], span.style),
+        std::borrow::Cow::Owned(s) => Span::styled(s[start..end].to_string(), span.style),
+    }
+}
+
+/// Continuation-line pad. Real gutters are at most 14 columns (line number
+/// 4 + visual checkbox 4 + glyph 2 + priority 4), so the static pad is
+/// allocation-free in practice; the fallback keeps pathological indents
+/// correct anyway.
+fn indent_span<'a>(indent: usize) -> Span<'a> {
+    const PAD: &str = "                                ";
+    if indent <= PAD.len() {
+        Span::raw(&PAD[..indent])
+    } else {
+        Span::raw(" ".repeat(indent))
+    }
 }
 
 fn push_token_spans<'a>(
@@ -535,6 +813,250 @@ mod tests {
             Some(MUTED.dim),
             "URL must not pick up the dim key-value color",
         );
+    }
+
+    /// Base opts for the wrap tests: no gutter extras, no cursor.
+    fn wrap_opts<'a>() -> RowOpts<'a> {
+        RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: None,
+            today: "2026-05-06",
+            hidden_keys: &[],
+        }
+    }
+
+    /// Display width of a built line (sum of span widths).
+    fn line_width(line: &Line) -> usize {
+        line.spans.iter().map(Span::width).sum()
+    }
+
+    /// All span text of a line, concatenated.
+    fn line_text(line: &Line) -> String {
+        line.spans.iter().map(|s| s.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn wrap_splits_long_body_at_word_boundaries() {
+        let task = parse_line("Call the dentist about the appointment tomorrow").unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, Some(24));
+        assert!(lines.len() > 1, "expected multiple lines, got {lines:?}");
+        for l in &lines {
+            assert!(line_width(l) <= 24, "line overflows: {:?}", line_text(l));
+        }
+        let joined: String = lines.iter().map(line_text).collect::<Vec<_>>().join(" ");
+        for word in ["Call", "dentist", "appointment", "tomorrow"] {
+            assert!(joined.contains(word), "missing {word:?} in {joined:?}");
+        }
+        // No word was split: every line after the gutter/indent starts and
+        // ends on a word boundary from the original body.
+        assert!(lines[1].spans[0].content.chars().all(|c| c == ' '));
+    }
+
+    #[test]
+    fn wrap_hard_breaks_unbroken_word() {
+        let long = format!("x{}", "a".repeat(60));
+        let task = parse_line(&long).unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, Some(20));
+        assert!(lines.len() > 1);
+        for l in &lines {
+            assert!(line_width(l) <= 20, "line overflows: {:?}", line_text(l));
+        }
+        let total_a: usize = lines
+            .iter()
+            .map(|l| line_text(l).chars().filter(|&c| c == 'a').count())
+            .sum();
+        assert_eq!(total_a, 60, "hard break must not drop characters");
+    }
+
+    #[test]
+    fn wrap_keeps_separator_before_hard_broken_word() {
+        let long = format!("foo {}", "a".repeat(60));
+        let task = parse_line(&long).unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, Some(20));
+        assert!(
+            line_text(&lines[0]).contains("foo a"),
+            "separator between 'foo' and the long word must survive: {:?}",
+            line_text(&lines[0]),
+        );
+    }
+
+    #[test]
+    fn wrap_measures_wide_chars_by_display_width() {
+        // Each CJK char is 2 columns; gutter is 6. "日本語" (6) fits the
+        // first line at width 14 but "テスト" (6, +1 separator) does not.
+        let task = parse_line("日本語 テスト").unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, Some(14));
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        for l in &lines {
+            assert!(line_width(l) <= 14, "line overflows: {:?}", line_text(l));
+        }
+        assert!(line_text(&lines[0]).contains("日本語"));
+        assert!(line_text(&lines[1]).contains("テスト"));
+    }
+
+    #[test]
+    fn wrap_exact_boundary_width_stays_single_line() {
+        // Gutter (6) + "aaa bb" (6) lands exactly on width 12.
+        let task = parse_line("aaa bb").unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, Some(12));
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        // One column narrower must wrap.
+        let lines = build_lines(&task, wrap_opts(), &MUTED, Some(11));
+        assert_eq!(lines.len(), 2, "{lines:?}");
+    }
+
+    #[test]
+    fn wrap_strips_hidden_keys_before_measuring() {
+        let h = vec!["uid".to_string()];
+        let mut opts = wrap_opts();
+        opts.hidden_keys = &h;
+        // Without stripping, uid:aaaaaaaaaaaaaaaaaaaa would force a second
+        // line; with it the visible body fits in one.
+        let task = parse_line("short uid:aaaaaaaaaaaaaaaaaaaa task").unwrap();
+        let lines = build_lines(&task, opts, &MUTED, Some(24));
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(!line_text(&lines[0]).contains("uid:"));
+    }
+
+    #[test]
+    fn wrap_continuation_lines_carry_cursor_style() {
+        let task = parse_line("Call the dentist about the appointment tomorrow").unwrap();
+        let mut opts = wrap_opts();
+        opts.cursor = true;
+        let lines = build_lines(&task, opts, &MUTED, Some(24));
+        assert!(lines.len() > 1);
+        for l in &lines {
+            assert_eq!(
+                l.style.bg,
+                Some(MUTED.cursor),
+                "every wrapped line keeps the cursor background",
+            );
+        }
+    }
+
+    #[test]
+    fn wrap_continuation_indent_matches_gutter_width() {
+        let task = parse_line("(A) Call the dentist about the appointment tomorrow").unwrap();
+        let mut opts = wrap_opts();
+        opts.show_line_num = true;
+        let lines = build_lines(&task, opts, &MUTED, Some(28));
+        assert!(lines.len() > 1);
+        // Gutter: "  1 " (4) + glyph (2) + "(A) " (4) = 10 columns.
+        let indent = &lines[1].spans[0];
+        assert_eq!(indent.content.as_ref(), " ".repeat(10));
+    }
+
+    #[test]
+    fn wrap_wide_width_matches_single_line_content() {
+        let task = parse_line("(B) Buy milk +groceries @errands due:2026-05-10").unwrap();
+        let single = build_line(&task, wrap_opts(), &MUTED);
+        let lines = build_lines(&task, wrap_opts(), &MUTED, Some(200));
+        assert_eq!(lines.len(), 1);
+        assert_eq!(line_text(&lines[0]), line_text(&single));
+        assert_eq!(lines[0].style, single.style);
+    }
+
+    #[test]
+    fn wrap_hard_break_keeps_every_scalar_in_zwj_emoji() {
+        // Per-char width sums overestimate ZWJ ligature width, so breaks land
+        // early — the invariant is "never overflow, never lose a scalar".
+        let fam = "👨‍👩‍👧‍👦".repeat(12);
+        let task = parse_line(&fam).unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, Some(20));
+        let joined: String = lines.iter().map(line_text).collect();
+        let scalars_in: usize = fam.chars().count();
+        let scalars_out = joined.chars().filter(|c| !matches!(c, ' ')).count();
+        assert_eq!(scalars_out, scalars_in, "no scalar lost");
+    }
+
+    #[test]
+    fn wrap_never_orphans_combining_marks_at_line_start() {
+        let word = "e\u{301}".repeat(40); // e + COMBINING ACUTE
+        let task = parse_line(&word).unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, Some(20));
+        for l in &lines[1..] {
+            let text = line_text(l);
+            let first_nonspace = text.chars().find(|c| *c != ' ');
+            assert_ne!(
+                first_nonspace,
+                Some('\u{301}'),
+                "line must not start with a combining mark: {text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn wrap_falls_back_to_single_line_in_degenerate_pane() {
+        // Width (4) is narrower than the gutter (6) plus MIN_WRAP_BODY_COLS:
+        // wrapping would emit one clipped, invisible column per line, so the
+        // row must fall back to the classic clipped single line instead.
+        let task = parse_line("some words here to wrap").unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, Some(4));
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        let single = build_line(&task, wrap_opts(), &MUTED);
+        assert_eq!(line_text(&lines[0]), line_text(&single));
+    }
+
+    #[test]
+    fn wrap_never_fuses_words_across_hard_break() {
+        // Regression: word 1 fills the line to one column short of the pane
+        // edge; word 2 needs a hard break. The separator must not be
+        // swallowed while the same line keeps filling — that rendered
+        // "aaaaaaaaaaaaac" with the words glued together.
+        let task = parse_line("aaaaaaaaaaaaa cccccccccccccccc").unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, Some(20));
+        assert!(lines.len() > 1);
+        for l in &lines {
+            let text = line_text(l);
+            assert!(
+                !text.contains("ac"),
+                "words fused across the hard break: {text:?}",
+            );
+            assert!(line_width(l) <= 20, "line overflows: {text:?}");
+        }
+        let total_c: usize = lines
+            .iter()
+            .map(|l| line_text(l).chars().filter(|&c| c == 'c').count())
+            .sum();
+        assert_eq!(total_c, 16, "hard break must not drop characters");
+    }
+
+    #[test]
+    fn wrap_hard_break_measures_vs16_emoji_string_level() {
+        // Regression: "❤\u{FE0F}" (heart + variation selector) is 1 column
+        // when its scalars are measured one by one but 2 columns as a
+        // cluster — which is how ratatui draws it. Char-level accounting
+        // packed twice as many per line and the overflow was clipped
+        // invisibly at the pane edge.
+        let word = "\u{2764}\u{FE0F}".repeat(20);
+        let task = parse_line(&word).unwrap();
+        let lines = build_lines(&task, wrap_opts(), &MUTED, Some(20));
+        assert!(lines.len() > 1);
+        let mut hearts = 0usize;
+        for l in &lines {
+            assert!(
+                line_width(l) <= 20,
+                "line renders wider than the pane: {:?}",
+                line_text(l),
+            );
+            hearts += line_text(l).chars().filter(|&c| c == '\u{2764}').count();
+        }
+        assert_eq!(hearts, 20, "no cluster may be clipped away");
+    }
+
+    #[test]
+    fn wrap_fully_hidden_body_stays_single_line() {
+        let h = vec!["uid".to_string()];
+        let mut opts = wrap_opts();
+        opts.hidden_keys = &h;
+        let task = parse_line("uid:abc-123").unwrap();
+        let lines = build_lines(&task, opts, &MUTED, Some(20));
+        assert_eq!(lines.len(), 1);
     }
 
     #[test]

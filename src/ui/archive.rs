@@ -56,7 +56,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let mut lines: Vec<Line> = Vec::new();
     let mut last_date: Option<&str> = None;
-    let mut cursor_line: Option<usize> = None;
+    let mut cursor_span: Option<std::ops::Range<usize>> = None;
 
     for (i, (&abs, gk)) in visible.iter().zip(groups.iter()).enumerate() {
         let date = match gk {
@@ -99,16 +99,22 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             today: app.today(),
             hidden_keys: &app.prefs.hidden_keys,
         };
+        let start = lines.len();
+        lines.extend(task_row::build_lines(
+            task,
+            opts,
+            theme,
+            app.prefs.wrap_rows.then_some(body_area.width),
+        ));
         if i == app.cursor {
-            cursor_line = Some(lines.len());
+            cursor_span = Some(start..lines.len());
         }
-        lines.push(task_row::build_line(task, opts, theme));
     }
 
     let scroll_cell = &app.view_scroll[View::Archive.idx()];
     let scroll = keep_cursor_visible(
         scroll_cell.get(),
-        cursor_line,
+        cursor_span,
         body_area.height,
         lines.len(),
     );

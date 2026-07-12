@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(&buf)
+---
+ FILTERS                   ▶▮◀ done.txt  •  1 tasks  •  sort:compl DETAIL                           
+                                                                                                    
+ PROJECTS                  2026-05-05  1 completed                 priority                         
+   +i18n             1      1 ✓     Archived very long completed   created   2026-05-01             
+   +ok               1              task that runs well past the   projects  +work                  
+   +work             1              right edge of the pane +work   contexts  @laptop                
+                                    @laptop uid:abc-123            done      2026-05-05             
+ CONTEXTS                                                                                           
+   @laptop           1                                             RAW                              
+   @links            1                                                                              
+                                                                   x 2026-05-05 2026-05-01 Archived 
+                                                                   very long completed task that    
+                                                                   runs well past the right edge of 
+                                                                   the pane +work @laptop           
+                                                                   uid:abc-123                      
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ ARCHIVE   j/k · n new · r reschedule · x done · / search 1 archived · 2026-05-06 · tuxedo 2026.6.3

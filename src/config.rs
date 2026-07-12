@@ -26,6 +26,10 @@ pub struct Config {
     pub show_status_bar: Option<bool>,
     pub show_done: Option<bool>,
     pub show_future: Option<bool>,
+    /// Wrap long task rows onto continuation lines in the list and archive
+    /// views instead of truncating them at the pane edge. Off by default so
+    /// the dense single-line layout stays exactly as before.
+    pub wrap_rows: Option<bool>,
     /// 64-character lowercase-hex token gating the in-TUI capture server.
     /// Persisted across sessions so phone bookmarks survive a relaunch.
     /// Stored on disk; only meaningful for LAN access, but flagged here
@@ -149,6 +153,7 @@ fn parse(s: &str) -> Config {
             "show_status_bar" => c.show_status_bar = parse_bool(v),
             "show_done" => c.show_done = parse_bool(v),
             "show_future" => c.show_future = parse_bool(v),
+            "wrap_rows" => c.wrap_rows = parse_bool(v),
             // Reject anything that isn't a valid hex token so we don't
             // carry forward a corrupt value that the server would later
             // refuse to compare against.
@@ -220,6 +225,9 @@ fn serialize(c: &Config) -> String {
     if let Some(v) = c.show_future {
         let _ = writeln!(out, "show_future = {v}");
     }
+    if let Some(v) = c.wrap_rows {
+        let _ = writeln!(out, "wrap_rows = {v}");
+    }
     if let Some(v) = &c.share_token {
         let _ = writeln!(out, "share_token = {v}");
     }
@@ -274,6 +282,7 @@ mod tests {
             show_status_bar: Some(true),
             show_done: Some(true),
             show_future: Some(true),
+            wrap_rows: Some(true),
             share_token: Some("a".repeat(64)),
             share_port: Some(18080),
             filters: vec![
@@ -433,6 +442,7 @@ mod tests {
             show_status_bar: Some(false),
             show_done: Some(true),
             show_future: Some(false),
+            wrap_rows: Some(false),
             share_token: None,
             share_port: None,
             filters: vec![("errand".into(), "@errand".into())],

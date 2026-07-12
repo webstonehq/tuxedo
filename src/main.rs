@@ -1027,6 +1027,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('T') => Action::OpenThemePicker,
         KeyCode::Char('D') => Action::CycleDensity,
         KeyCode::Char('L') => Action::ToggleLineNum,
+        KeyCode::Char('w') => Action::ToggleWrap,
         KeyCode::Char('H') => Action::ToggleShowDone,
         KeyCode::Char('F') => Action::ToggleShowFuture,
         KeyCode::Esc => Action::EscapeStack,
@@ -1221,6 +1222,10 @@ fn apply_action(app: &mut App, action: Action) {
         Action::CycleDensity => app.cycle_density(),
         Action::ToggleLineNum => {
             app.prefs.toggle_line_num();
+            app.save_prefs();
+        }
+        Action::ToggleWrap => {
+            app.prefs.toggle_wrap_rows();
             app.save_prefs();
         }
         Action::ToggleShowDone => {
@@ -1710,6 +1715,12 @@ mod tests {
     fn capital_w_toggles_week_start() {
         let mut app = build_app();
         assert_eq!(resolve(&mut app, key('W')), Some(Action::ChangeWeekStart));
+    }
+
+    #[test]
+    fn lowercase_w_toggles_wrap() {
+        let mut app = build_app();
+        assert_eq!(resolve(&mut app, key('w')), Some(Action::ToggleWrap));
     }
 
     #[test]

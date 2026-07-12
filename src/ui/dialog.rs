@@ -775,9 +775,6 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     let today = NaiveDate::parse_from_str(app.today(), "%Y-%m-%d").ok();
     let first_of_month =
         NaiveDate::from_ymd_opt(focused.year(), focused.month(), 1).unwrap_or(focused);
-    // Sunday-leading week: weekday().num_days_from_sunday() ∈ 0..7.
-    let lead = first_of_month.weekday().num_days_from_sunday() as i64;
-    let days_in_month = days_in_month(focused.year(), focused.month());
 
     let mut lines: Vec<Line> = Vec::new();
     // Header: « Month YYYY »
@@ -792,53 +789,43 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     ])
     .style(Style::default().bg(theme.panel));
     lines.push(header);
-    // Weekday row.
+    // Weekday row. Each label occupies a 4-char column ("  X ") so it lines up
+    // with the day numbers below, which render as ` {:>2} `.
     let dow_header = if app.week_start == WeekStart::Sunday {
         Span::styled(
-            "  S  M   T   W   T   F   S  ",
+            "  S   M   T   W   T   F   S ",
             Style::default().fg(theme.dim),
         )
     } else {
         Span::styled(
-            "  M   T   W   T   F   S   S  ",
+            "  M   T   W   T   F   S   S ",
             Style::default().fg(theme.dim),
         )
     };
     let dow = Line::from(vec![Span::raw("  "), dow_header]).style(Style::default().bg(theme.panel));
     lines.push(dow);
-    // Up to 6 week rows. Break before any all-blank row so February-style
-    // months don't leave a trailing empty week.
-    let mut day = 1i64;
-    for _week in 0..6 {
-        if day - lead >= days_in_month as i64 {
-            break;
-        }
+    // Up to 6 week rows; `calendar_cells` stops before any all-blank trailing row.
+    for row in calendar_cells(first_of_month, app.week_start) {
         let mut spans: Vec<Span> = vec![Span::raw("  ")];
-        for col in 0..7 {
-            let pos = day - lead + col - 1;
-            if pos < 0 || pos >= days_in_month as i64 {
-                spans.push(Span::styled("    ", Style::default().bg(theme.panel)));
-            } else {
-                let n = if app.week_start == WeekStart::Monday {
-                    (pos + 1) as u32
-                } else {
-                    (pos) as u32
-                };
-                let cell = NaiveDate::from_ymd_opt(focused.year(), focused.month(), n);
-                let is_today = today == cell;
-                let is_focus = focused.day() == n;
-                let mut style = Style::default().fg(theme.fg).bg(theme.panel);
-                if is_today {
-                    style = style.fg(theme.today);
+        for cell in row {
+            match cell {
+                None => spans.push(Span::styled("    ", Style::default().bg(theme.panel))),
+                Some(n) => {
+                    let date = NaiveDate::from_ymd_opt(focused.year(), focused.month(), n);
+                    let is_today = today == date;
+                    let is_focus = focused.day() == n;
+                    let mut style = Style::default().fg(theme.fg).bg(theme.panel);
+                    if is_today {
+                        style = style.fg(theme.today);
+                    }
+                    if is_focus {
+                        style = style.bg(theme.cursor).add_modifier(Modifier::BOLD);
+                    }
+                    spans.push(Span::styled(format!(" {:>2} ", n), style));
                 }
-                if is_focus {
-                    style = style.bg(theme.cursor).add_modifier(Modifier::BOLD);
-                }
-                spans.push(Span::styled(format!(" {:>2} ", n), style));
             }
         }
         lines.push(Line::from(spans).style(Style::default().bg(theme.panel)));
-        day += 7;
     }
     // Spacer + focused-date label.
     lines.push(Line::raw("").style(Style::default().bg(theme.panel)));
@@ -1166,6 +1153,39 @@ fn days_in_month(year: i32, month: u32) -> u32 {
     }
 }
 
+/// Build the calendar grid for `first_of_month`'s month as rows of 7 columns.
+/// Each cell is `Some(day)` for a real day-of-month or `None` for a blank
+/// leading/trailing cell. Column 0 is the configured week-start weekday.
+fn calendar_cells(
+    first_of_month: chrono::NaiveDate,
+    week_start: WeekStart,
+) -> Vec<[Option<u32>; 7]> {
+    use chrono::Datelike;
+    // Leading blank cells before day 1, measured from the configured week start.
+    let lead = match week_start {
+        WeekStart::Sunday => first_of_month.weekday().num_days_from_sunday(),
+        WeekStart::Monday => first_of_month.weekday().num_days_from_monday(),
+    } as i64;
+    let days = days_in_month(first_of_month.year(), first_of_month.month()) as i64;
+
+    let mut weeks = Vec::new();
+    // Day index (0-based) at column 0 of the current week; starts negative so the
+    // first `lead` cells fall outside 0..days and render blank.
+    let mut start = -lead;
+    while start < days {
+        let mut row = [None; 7];
+        for (col, cell) in row.iter_mut().enumerate() {
+            let idx = start + col as i64;
+            if (0..days).contains(&idx) {
+                *cell = Some((idx + 1) as u32);
+            }
+        }
+        weeks.push(row);
+        start += 7;
+    }
+    weeks
+}
+
 fn month_name(m: u32) -> &'static str {
     match m {
         1 => "January",
@@ -1270,6 +1290,37 @@ mod tests {
         app.mode = Mode::Insert;
         app.draft_set_insert(draft.to_string());
         app
+    }
+
+    #[test]
+    fn calendar_cells_sunday_start_places_days_without_off_by_one() {
+        use crate::app::WeekStart;
+        // May 2026: the 1st is a Friday (weekday index 5 in a Sunday-leading grid).
+        let first = chrono::NaiveDate::from_ymd_opt(2026, 5, 1).unwrap();
+        let grid = super::calendar_cells(first, WeekStart::Sunday);
+
+        // Leading blanks Sun..Thu, then day 1 under Friday, day 2 under Saturday.
+        assert_eq!(
+            grid[0],
+            [None, None, None, None, None, Some(1), Some(2)],
+            "first day must land under its real weekday with no phantom day 0"
+        );
+
+        // Every real day appears exactly once, in order 1..=31 (no 0, no missing 31).
+        let days: Vec<u32> = grid.iter().flatten().flatten().copied().collect();
+        assert_eq!(days, (1..=31).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn calendar_cells_monday_start_shifts_first_column() {
+        use crate::app::WeekStart;
+        // May 2026, 1st = Friday. In a Monday-leading grid Friday is column 4.
+        let first = chrono::NaiveDate::from_ymd_opt(2026, 5, 1).unwrap();
+        let grid = super::calendar_cells(first, WeekStart::Monday);
+
+        assert_eq!(grid[0], [None, None, None, None, Some(1), Some(2), Some(3)]);
+        let days: Vec<u32> = grid.iter().flatten().flatten().copied().collect();
+        assert_eq!(days, (1..=31).collect::<Vec<_>>());
     }
 
     #[test]

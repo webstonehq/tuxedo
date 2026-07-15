@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tuxedo CLI"
+  short_description: "Manage todo.txt tasks safely with Tuxedo"
+  default_prompt: "Use $tuxedo-cli to manage my tasks safely with the installed Tuxedo CLI."

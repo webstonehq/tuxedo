@@ -120,6 +120,43 @@ another theme is skipped with a warning at startup.
 
 ## Install
 
+### Agent skill
+
+The repository's [`tuxedo-cli`](skills/tuxedo-cli/SKILL.md) skill teaches AI
+agents to manage tasks safely with the installed Tuxedo CLI. Install the
+default-branch copy directly from GitHub; the repository copy is the source of
+truth until versioned skill packages are available.
+
+Personal Codex:
+
+```sh
+mkdir -p ~/.codex/skills/tuxedo-cli/agents
+curl -fsSL https://raw.githubusercontent.com/webstonehq/tuxedo/main/skills/tuxedo-cli/SKILL.md -o ~/.codex/skills/tuxedo-cli/SKILL.md
+curl -fsSL https://raw.githubusercontent.com/webstonehq/tuxedo/main/skills/tuxedo-cli/agents/openai.yaml -o ~/.codex/skills/tuxedo-cli/agents/openai.yaml
+```
+
+Project-local agent skill:
+
+```sh
+mkdir -p .agents/skills/tuxedo-cli/agents
+curl -fsSL https://raw.githubusercontent.com/webstonehq/tuxedo/main/skills/tuxedo-cli/SKILL.md -o .agents/skills/tuxedo-cli/SKILL.md
+curl -fsSL https://raw.githubusercontent.com/webstonehq/tuxedo/main/skills/tuxedo-cli/agents/openai.yaml -o .agents/skills/tuxedo-cli/agents/openai.yaml
+```
+
+Personal Claude Code:
+
+```sh
+mkdir -p ~/.claude/skills/tuxedo-cli
+curl -fsSL https://raw.githubusercontent.com/webstonehq/tuxedo/main/skills/tuxedo-cli/SKILL.md -o ~/.claude/skills/tuxedo-cli/SKILL.md
+```
+
+Project-local Claude Code:
+
+```sh
+mkdir -p .claude/skills/tuxedo-cli
+curl -fsSL https://raw.githubusercontent.com/webstonehq/tuxedo/main/skills/tuxedo-cli/SKILL.md -o .claude/skills/tuxedo-cli/SKILL.md
+```
+
 ### Homebrew (macOS, Linux)
 
 ```sh

@@ -85,8 +85,19 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .active()
         .map(|c| format!(" {c}…"))
         .unwrap_or_default();
+
+    // Append a count indicator (e.g. " 12…") so the motion sequences like 12j/5G
+    // give visible feedback when pressed. Only shown while active.
+    let count_suffix = app
+        .count
+        .active()
+        .map(|c| format!(" {c}…"))
+        .unwrap_or_default();
+
     // Layout: mode chip on left, hint in middle, right text right-aligned.
-    let chip_text = format!(" {mode_label}{chord_suffix} ");
+    // Count comes before chord since a count prefix is typed first (e.g.
+    // `5gg`), matching the order keys are actually pressed.
+    let chip_text = format!(" {mode_label}{count_suffix}{chord_suffix} ");
     let chip_w = chip_text.chars().count() as u16;
     let update_w = update_suffix
         .as_deref()

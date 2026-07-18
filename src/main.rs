@@ -251,6 +251,10 @@ fn run(
             app.chord.clear();
             dirty = true;
         }
+        if app.count.should_clear() {
+            app.count.clear();
+            dirty = true;
+        }
     }
     Ok(())
 }
@@ -957,6 +961,12 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
             _ => None,
         };
     }
+
+    if let KeyCode::Char(c @ '0'..='9') = key.code {
+        app.count.push_digit(c);
+        return None;
+    }
+
     Some(match key.code {
         KeyCode::Char('q') => Action::Quit,
         KeyCode::Char('j') | KeyCode::Down => Action::CursorDown,
@@ -1031,6 +1041,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('F') => Action::ToggleShowFuture,
         KeyCode::Esc => Action::EscapeStack,
         KeyCode::Char('W') => Action::ChangeWeekStart,
+
         _ => return None,
     })
 }
@@ -1083,14 +1094,36 @@ fn apply_action(app: &mut App, action: Action) {
         Action::Quit => app.should_quit = true,
         Action::CursorDown => {
             if len > 0 {
-                app.cursor = (app.cursor + 1).min(len - 1);
+                app.cursor = (app.cursor + app.count.take().unwrap_or(1) as usize).min(len - 1);
             }
         }
-        Action::CursorUp => app.cursor = app.cursor.saturating_sub(1),
-        Action::CursorTop => app.cursor = 0,
+        Action::CursorUp => {
+            app.cursor = app
+                .cursor
+                .saturating_sub(app.count.take().unwrap_or(1) as usize)
+        }
+        Action::CursorTop => {
+            // `0` is skipped (same as plain `gg`), matching vim. A count
+            // beyond the list length clamps to the last item instead of
+            // going out of bounds; on an empty list it just stays at 0.
+            let n = app.count.take().unwrap_or(0) as usize;
+            app.cursor = if n == 0 || len == 0 {
+                0
+            } else {
+                (n - 1).min(len - 1)
+            };
+        }
         Action::CursorBottom => {
             if len > 0 {
-                app.cursor = len - 1;
+                // skipping on '0' is acceptable as it's the same in vim
+                if let n = app.count.take().unwrap_or(0) as usize
+                    && n < len
+                    && n != 0
+                {
+                    app.cursor = n - 1;
+                } else {
+                    app.cursor = len - 1;
+                }
             }
         }
         Action::HalfPageDown => {

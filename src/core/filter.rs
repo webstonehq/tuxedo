@@ -210,6 +210,16 @@ mod tests {
     }
 
     #[test]
+    fn priority_sort_keeps_due_fallback_and_file_order_for_ties() {
+        let tasks = crate::todo::parse_file(
+            "(A) later due:2026-06-20\n(B) middle\n(A) same first due:2026-06-01\n(A) sooner due:2026-05-01\n(A) same second due:2026-06-01\nnone\n",
+        );
+        let mut indices = vec![0, 1, 2, 3, 4, 5];
+        sort_by_prefs(&mut indices, &tasks, Sort::Priority);
+        assert_eq!(indices, [3, 2, 4, 0, 1, 5]);
+    }
+
+    #[test]
     fn get_week_cutoffs_for_all_configs() {
         let (end_this_week, end_next_week) = get_week_cutoff("2026-06-18", &WeekStart::Sunday)
             .expect("unable to get the week cutoff date");

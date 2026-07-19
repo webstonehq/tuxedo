@@ -72,6 +72,15 @@ pub enum PriorityOutcome {
 }
 
 #[derive(Debug)]
+pub enum MoveOutcome {
+    Moved,
+    Unchanged,
+    Aborted(Reconcile),
+    OutOfRange,
+    Error(StoreError),
+}
+
+#[derive(Debug)]
 pub enum DeleteOutcome {
     Deleted { abs: usize },
     Aborted(Reconcile),

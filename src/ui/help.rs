@@ -30,6 +30,7 @@ const EDITING: Section = (
         ("x", "toggle complete"),
         ("dd", "delete task"),
         ("p", "cycle priority A→B→C→·"),
+        ("J / K", "move task down / up"),
         ("c", "add/remove context"),
         ("+", "add project"),
         ("yy", "copy line to clipboard"),

@@ -33,6 +33,19 @@ impl Selection {
         self.selected.clear();
     }
 
+    pub fn remap_swaps(&mut self, swaps: &[(usize, usize)]) {
+        for &(a, b) in swaps {
+            let a_selected = self.selected.remove(&a);
+            let b_selected = self.selected.remove(&b);
+            if a_selected {
+                self.selected.insert(b);
+            }
+            if b_selected {
+                self.selected.insert(a);
+            }
+        }
+    }
+
     pub fn editing(&self) -> Option<usize> {
         self.editing
     }

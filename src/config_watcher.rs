@@ -38,6 +38,7 @@ pub fn spawn(config_path: PathBuf) -> Option<mpsc::Receiver<()>> {
     watcher.watch(&dir, RecursiveMode::NonRecursive).ok()?;
 
     thread::spawn(move || {
+        let _watcher = watcher;
         let mut pending: Option<Instant> = None;
 
         loop {
@@ -54,7 +55,9 @@ pub fn spawn(config_path: PathBuf) -> Option<mpsc::Receiver<()>> {
             if let Some(since) = pending
                 && since.elapsed() >= DEBOUNCE
             {
-                let _ = tx.send(());
+                if tx.send(()).is_err() {
+                    break;
+                }
                 pending = None;
             }
         }
@@ -77,4 +80,27 @@ fn is_relevant(event: &Event, target: &str) -> bool {
         event.kind,
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn watcher_delivers_changes() {
+        let dir = std::env::temp_dir().join(format!(
+            "tuxedo-config-watcher-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "theme = Muted Slate\n").expect("write config");
+        let rx = spawn(path.clone()).expect("start watcher");
+        std::fs::write(path, "theme = Terminal\n").expect("update config");
+        assert_eq!(rx.recv_timeout(Duration::from_secs(2)), Ok(()));
+        drop(rx);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

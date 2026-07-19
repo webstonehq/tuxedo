@@ -264,8 +264,8 @@ fn poll_config_reload(app: &mut App, rx: &Option<mpsc::Receiver<()>>) -> bool {
         None => return false,
     };
     match rx.try_recv() {
-        Ok(()) | Err(mpsc::TryRecvError::Disconnected) => {}
-        Err(mpsc::TryRecvError::Empty) => return false,
+        Ok(()) => {}
+        Err(mpsc::TryRecvError::Empty | mpsc::TryRecvError::Disconnected) => return false,
     }
     let Some(ref path) = app.config_path else {
         return true;
@@ -1420,6 +1420,14 @@ mod tests {
             "2026-05-07".into(),
             Config::default(),
         )
+    }
+
+    #[test]
+    fn disconnected_config_watcher_is_ignored() {
+        let mut app = build_app();
+        let (tx, rx) = mpsc::channel();
+        drop(tx);
+        assert!(!poll_config_reload(&mut app, &Some(rx)));
     }
 
     #[test]

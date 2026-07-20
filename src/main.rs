@@ -1298,18 +1298,43 @@ fn handle_normal(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
 }
 
 fn copy_current_task(app: &mut App, body_only: bool) {
-    let Some(raw) = app.cur_task().map(|t| t.raw.clone()) else {
+    let multi = app.view() == View::List && app.mode == Mode::Visual && !app.selection.is_empty();
+    let count = if multi { app.selection.len() } else { 1 };
+    let Some(payload) = copy_payload(app, body_only) else {
+        if multi {
+            app.flash("selection includes hidden tasks");
+        }
         return;
     };
-    let payload = if body_only {
-        todo::body_only(&raw)
-    } else {
-        raw
-    };
     match clipboard::copy(&payload) {
-        Ok(()) => app.flash(if body_only { "copied (body)" } else { "copied" }),
+        Ok(()) => app.flash(match (body_only, count) {
+            (false, 1) => "copied".into(),
+            (true, 1) => "copied (body)".into(),
+            (false, count) => format!("copied {count}"),
+            (true, count) => format!("copied {count} (body)"),
+        }),
         Err(e) => app.flash(format!("copy failed: {e}")),
     }
+}
+
+fn copy_payload(app: &App, body_only: bool) -> Option<String> {
+    let format = |raw: &str| {
+        if body_only {
+            todo::body_only(raw)
+        } else {
+            raw.to_string()
+        }
+    };
+    if app.view() == View::List && app.mode == Mode::Visual && !app.selection.is_empty() {
+        let lines: Vec<_> = app
+            .visible_indices()
+            .iter()
+            .filter(|&&abs| app.selection.is_selected(abs))
+            .map(|&abs| format(&app.tasks()[abs].raw))
+            .collect();
+        return (lines.len() == app.selection.len()).then(|| lines.join("\n"));
+    }
+    app.cur_task().map(|task| format(&task.raw))
 }
 
 #[cfg(test)]
@@ -1317,6 +1342,7 @@ mod tests {
     use super::*;
     use chrono::NaiveDate;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use tuxedo::app::Sort;
     use tuxedo::config::Config;
 
     fn key(c: char) -> KeyEvent {
@@ -1549,6 +1575,34 @@ mod tests {
         assert_eq!(resolve(&mut app, key('y')), None);
         // 'b' after armed 'y' copies the body.
         assert_eq!(resolve(&mut app, key('b')), Some(Action::CopyBody));
+    }
+
+    #[test]
+    fn visual_copy_payload_uses_display_order() {
+        let mut app = build_app_with_archive("(B) Second @phone\n(A) First +work\n", None);
+        app.mode = Mode::Visual;
+        app.selection.toggle(0);
+        app.selection.toggle(1);
+
+        assert_eq!(
+            copy_payload(&app, false).as_deref(),
+            Some("(A) First +work\n(B) Second @phone")
+        );
+        assert_eq!(copy_payload(&app, true).as_deref(), Some("First\nSecond"));
+    }
+
+    #[test]
+    fn visual_copy_rejects_hidden_selections() {
+        let mut app = build_app_with_archive("first +work\nhidden +home\n", None);
+        app.prefs.sort = Sort::File;
+        app.mode = Mode::Visual;
+        app.selection.toggle(0);
+        app.selection.toggle(1);
+        app.set_project_filter(Some("work".into()));
+
+        assert_eq!(copy_payload(&app, false), None);
+        copy_current_task(&mut app, false);
+        assert_eq!(app.flash_active(), Some("selection includes hidden tasks"));
     }
 
     #[test]

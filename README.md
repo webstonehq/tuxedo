@@ -402,6 +402,7 @@ The modal keys below apply in Normal mode:
 | `S` | cycle sort: priority → due → file order |
 | `v` | enter visual / multi-select; `space` toggles a row |
 | `x` / `dd` (in visual) | bulk-complete / bulk-delete the selection |
+| `yy` / `yb` (in visual) | copy selected lines / bodies |
 | `l` | list (default) view |
 | `a` | toggle archive view |
 | `A` | archive completed tasks → `done.txt` |

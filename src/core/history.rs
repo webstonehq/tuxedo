@@ -47,10 +47,14 @@ impl Store {
         }
         match self.history.pop() {
             Some(prev) => {
-                self.tasks = prev;
+                let current = std::mem::replace(&mut self.tasks, prev);
                 match self.persist() {
                     Ok(()) => UndoOutcome::Undone,
-                    Err(e) => UndoOutcome::Error(e),
+                    Err(e) => {
+                        let prev = std::mem::replace(&mut self.tasks, current);
+                        self.history.push(prev);
+                        UndoOutcome::Error(e)
+                    }
                 }
             }
             None => UndoOutcome::Nothing,
@@ -70,5 +74,35 @@ mod tests {
             store.push_history();
         }
         assert_eq!(store.history.len(), UNDO_LIMIT);
+    }
+
+    #[test]
+    fn failed_undo_restores_tasks_and_history() {
+        let mut store = build_store("first\nsecond\n");
+        assert!(matches!(
+            store.move_tasks(&[(0, 1)]),
+            crate::core::MoveOutcome::Moved
+        ));
+        let tmp_path = store.file_path.with_extension("tmp");
+        let _ = std::fs::remove_file(&tmp_path);
+        let _ = std::fs::remove_dir_all(&tmp_path);
+        std::fs::create_dir(&tmp_path).expect("create blocking temp directory");
+
+        assert!(matches!(store.undo(), UndoOutcome::Error(_)));
+        assert_eq!(
+            store
+                .tasks()
+                .iter()
+                .map(|task| task.raw.as_str())
+                .collect::<Vec<_>>(),
+            ["second", "first"]
+        );
+        assert_eq!(store.history.len(), 1);
+        assert_eq!(
+            std::fs::read_to_string(&store.file_path).expect("read todo.txt"),
+            "second\nfirst\n"
+        );
+
+        std::fs::remove_dir(&tmp_path).expect("remove blocking temp directory");
     }
 }

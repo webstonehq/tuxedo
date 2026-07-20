@@ -288,6 +288,8 @@ toggle_complete      = "x"
 delete               = "dd"
 reschedule           = "r"
 cycle_priority       = "p"
+move_task_down       = "J"
+move_task_up         = "K"
 begin_prompt_context = "c"
 copy_line            = "yy"
 copy_body            = "yb"
@@ -358,11 +360,15 @@ chords like `ZZ`, modifier forms like `Ctrl-n` / `Alt-x`, named keys like
 | `x` | toggle complete |
 | `dd` | delete task |
 | `p` | cycle priority A → B → C → · |
+| `J` / `K` | move task down / up within current sort ties |
 | `c` | add or remove a context |
 | `+` | add a project |
 | `yy` | copy current line to clipboard |
 | `yb` | copy current body only (no priority, dates, projects, contexts, `key:value`) |
 | `u` | undo (50 levels) |
+
+Movement preserves the active sort: priority mode requires matching priority and due date, due mode requires matching due date, and file mode allows unrestricted movement.
+Visual selections move in one undoable operation and must be fully visible within one sort tie.
 
 ### Edit dialog
 

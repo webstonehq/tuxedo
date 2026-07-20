@@ -17,15 +17,15 @@ expression: buffer_to_text(&buf)
    @errands         │   toggle complete                                      x │6                   
    @home            │   delete task                                         dd │                    
    @laptop          │   cycle priority                                       p │                    
-   @phone           │   add project to current task                          + │                    
+   @phone           │   move task down                                       J │                    
+                    │   move task up                                         K │                    
+                    │   add project to current task                          + │                    
                     │   add or remove context on current task                c │                    
                     │   copy line to clipboard                              yy │                    
                     │   copy body to clipboard                              yb │                    
                     │   open task note                                       o │                    
                     │   create or open task note                             O │                    
                     │   undo                                                 u │                    
-                    │   cursor down                                      j / ↓ │                    
-                    │   cursor up                                        k / ↑ │                    
                     │  ↑↓ / Ctrl-N/P navigate · Enter run · Esc cancel         │                    
                     └──────────────────────────────────────────────────────────┘                    
                                                                                                     

@@ -1,7 +1,7 @@
 use super::Store;
 use super::outcome::{
     AddOutcome, BulkCompleteOutcome, BulkDeleteOutcome, CompleteOutcome, DeleteOutcome,
-    EditOutcome, PriorityOutcome, Reconcile, StoreError, TagOutcome,
+    EditOutcome, MoveOutcome, PriorityOutcome, Reconcile, StoreError, TagOutcome,
 };
 use crate::recurrence::{self, RecSpec};
 use crate::todo::{self, TagError};
@@ -101,6 +101,36 @@ impl Store {
                 Err(e) => PriorityOutcome::Error(e),
             },
             Err(e) => PriorityOutcome::Error(StoreError::Parse(e)),
+        }
+    }
+
+    pub fn move_tasks(&mut self, swaps: &[(usize, usize)]) -> MoveOutcome {
+        match self.reconcile() {
+            Reconcile::Unchanged => {}
+            other => return MoveOutcome::Aborted(other),
+        }
+        if swaps
+            .iter()
+            .any(|&(abs, target)| abs >= self.tasks.len() || target >= self.tasks.len())
+        {
+            return MoveOutcome::OutOfRange;
+        }
+        if swaps.is_empty() || swaps.iter().all(|(abs, target)| abs == target) {
+            return MoveOutcome::Unchanged;
+        }
+        let previous = self.tasks.clone();
+        for &(abs, target) in swaps {
+            self.tasks.swap(abs, target);
+        }
+        match self.persist() {
+            Ok(()) => {
+                self.history.push(previous);
+                MoveOutcome::Moved
+            }
+            Err(e) => {
+                self.tasks = previous;
+                MoveOutcome::Error(e)
+            }
         }
     }
 
@@ -632,6 +662,83 @@ mod tests {
         assert_eq!(store.tasks()[0].priority, Some('A'));
         store.set_priority_at(0, None);
         assert_eq!(store.tasks()[0].priority, None);
+    }
+
+    #[test]
+    fn move_task_persists_and_undoes() {
+        let mut store = build_store("first\nsecond\nthird\n");
+        assert!(matches!(
+            store.move_tasks(&[(1, 2), (0, 1)]),
+            MoveOutcome::Moved
+        ));
+        assert_eq!(
+            store
+                .tasks()
+                .iter()
+                .map(|task| task.raw.as_str())
+                .collect::<Vec<_>>(),
+            ["third", "first", "second"]
+        );
+        assert_eq!(
+            std::fs::read_to_string(&store.file_path).expect("read todo.txt"),
+            "third\nfirst\nsecond\n"
+        );
+        store.undo();
+        assert_eq!(
+            store
+                .tasks()
+                .iter()
+                .map(|task| task.raw.as_str())
+                .collect::<Vec<_>>(),
+            ["first", "second", "third"]
+        );
+    }
+
+    #[test]
+    fn move_tasks_rolls_back_when_persist_fails() {
+        let mut store = build_store("first\nsecond\n");
+        let tmp_path = store.file_path.with_extension("tmp");
+        let _ = std::fs::remove_file(&tmp_path);
+        let _ = std::fs::remove_dir_all(&tmp_path);
+        std::fs::create_dir(&tmp_path).expect("create blocking temp directory");
+        let history_len = store.history.len();
+
+        assert!(matches!(store.move_tasks(&[(0, 1)]), MoveOutcome::Error(_)));
+        assert_eq!(
+            store
+                .tasks()
+                .iter()
+                .map(|task| task.raw.as_str())
+                .collect::<Vec<_>>(),
+            ["first", "second"]
+        );
+        assert_eq!(store.history.len(), history_len);
+        assert_eq!(
+            std::fs::read_to_string(&store.file_path).expect("read todo.txt"),
+            "first\nsecond\n"
+        );
+
+        std::fs::remove_dir(&tmp_path).expect("remove blocking temp directory");
+    }
+
+    #[test]
+    fn move_tasks_aborts_after_external_edit() {
+        let mut store = build_store("first\nsecond\n");
+        std::fs::write(&store.file_path, "external\nfirst\nsecond\n")
+            .expect("write external change");
+
+        assert!(matches!(
+            store.move_tasks(&[(0, 1)]),
+            MoveOutcome::Aborted(Reconcile::Reloaded)
+        ));
+        assert_eq!(
+            store
+                .tasks()
+                .iter()
+                .map(|task| task.raw.as_str())
+                .collect::<Vec<_>>(),
+            ["external", "first", "second"]
+        );
     }
 
     #[test]

@@ -149,6 +149,7 @@ fn print_usage() {
     println!("  append, app N TEXT...     append text to task N");
     println!("  prepend, prep N TEXT...   prepend text to task N");
     println!("  replace N TEXT...         replace task N");
+    println!("  edit, e N                 edit task N with $EDITOR (vim, nano, ...)");
     println!("  pri, p N PRIORITY         set priority A-Z on task N");
     println!("  depri, dp N...            remove priority from task N");
     println!("  done, do N...             mark task N complete");
@@ -228,7 +229,13 @@ fn run(
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
                     handle_key(app, key, keybinds);
                     if let Some(path) = app.take_pending_editor_path() {
-                        open_path_in_editor(&path)?;
+                        terminal = open_path_in_editor(&path)?;
+                    }
+                    if let Some((_idx, raw)) = app.take_pending_editor_task() {
+                        ratatui::restore();
+                        let result = tuxedo::editor::edit_in_editor(&raw);
+                        terminal = ratatui::try_init()?;
+                        app.finish_editor_edit(&result);
                     }
                     dirty = true;
                 }
@@ -283,24 +290,18 @@ fn poll_config_reload(app: &mut App, rx: &Option<mpsc::Receiver<()>>) -> bool {
     }
 }
 
-fn open_path_in_editor(path: &std::path::Path) -> Result<()> {
+fn open_path_in_editor(path: &std::path::Path) -> Result<DefaultTerminal> {
     let editor = std::env::var("VISUAL")
         .or_else(|_| std::env::var("EDITOR"))
         .unwrap_or_else(|_| "nvim".to_string());
     ratatui::restore();
-    let status = std::process::Command::new(&editor)
+    let result = std::process::Command::new(&editor)
         .arg(path)
         .status()
         .with_context(|| format!("failed to launch editor `{editor}`"));
-    ratatui::crossterm::terminal::enable_raw_mode()?;
-    ratatui::crossterm::execute!(
-        io::stdout(),
-        ratatui::crossterm::terminal::EnterAlternateScreen
-    )?;
-    match status {
-        Ok(_) => Ok(()),
-        Err(e) => Err(e),
-    }
+    let terminal = ratatui::try_init()?;
+    result?;
+    Ok(terminal)
 }
 
 fn next_timeout(app: &App) -> Duration {
@@ -972,6 +973,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('i') => Action::BeginEditInsert,
         KeyCode::Char('o') => Action::OpenNote,
         KeyCode::Char('O') => Action::CreateOrOpenNote,
+        KeyCode::Char('E') => Action::LaunchEditor,
         KeyCode::Char('x') => Action::ToggleComplete,
         // 'dd' chord. First press arms; second fires.
         KeyCode::Char('d') if app.chord.toggle('d') => Action::Delete,
@@ -1058,6 +1060,7 @@ fn apply_action(app: &mut App, action: Action) {
             Action::BeginAdd
             | Action::BeginEdit
             | Action::BeginEditInsert
+            | Action::LaunchEditor
             | Action::CyclePriority
             | Action::ToggleVisual
             | Action::ToggleSelected
@@ -1286,6 +1289,13 @@ fn apply_action(app: &mut App, action: Action) {
         Action::ChangeWeekStart => {
             app.toggle_week_start_date();
             app.recompute_visible();
+        }
+        Action::LaunchEditor => {
+            if let Some(idx) = app.cur_abs()
+                && let Some(raw) = app.task_raw(idx)
+            {
+                app.start_editor_edit(idx, raw);
+            }
         }
     }
 }
@@ -1707,6 +1717,7 @@ mod tests {
     }
 
     #[test]
+    #[test]
     fn capital_w_toggles_week_start() {
         let mut app = build_app();
         assert_eq!(resolve(&mut app, key('W')), Some(Action::ChangeWeekStart));
@@ -1799,5 +1810,12 @@ mod tests {
         app.set_search("abc".into());
         handle_search(&mut app, ctrl('u'));
         assert_eq!(app.draft.text(), "");
+    }
+
+    #[test]
+    fn e_resolves_to_launch_editor() {
+        let mut app = build_app();
+        let action = resolve(&mut app, key('E'));
+        assert_eq!(action, Some(Action::LaunchEditor));
     }
 }

@@ -75,6 +75,6 @@ fn is_relevant(event: &Event, target: &str) -> bool {
 
     matches!(
         event.kind,
-        EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
+        EventKind::Create(_) | EventKind::Modify(_)
     )
 }

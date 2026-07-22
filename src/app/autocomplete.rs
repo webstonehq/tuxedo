@@ -117,7 +117,7 @@ impl App {
         };
         let prefix_lc = target.prefix.to_lowercase();
         let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
-        for t in self.store.tasks() {
+        for t in self.store.tasks().iter().chain(self.store.archive().tasks()) {
             let source = match target.kind {
                 TokenKind::Project => &t.projects,
                 TokenKind::Context => &t.contexts,

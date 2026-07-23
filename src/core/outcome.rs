@@ -106,6 +106,16 @@ pub enum EditOutcome {
 }
 
 #[derive(Debug)]
+pub enum UUIDOutcome {
+    Added { abs: usize, uuid: String },
+    Removed { abs: usize, uuid: String },
+    Unchanged { abs: usize, uuid: String },
+    OutOfRange,
+    Aborted(Reconcile),
+    Error(StoreError),
+}
+
+#[derive(Debug)]
 pub enum TagOutcome {
     Added {
         abs: usize,

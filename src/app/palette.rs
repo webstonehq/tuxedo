@@ -78,6 +78,11 @@ pub const ENTRIES: &[PaletteEntry] = &[
         action: Action::CreateOrOpenNote,
     },
     PaletteEntry {
+        label: "add new subtask",
+        keys: "b",
+        action: Action::BeginAddSubtask,
+    },
+    PaletteEntry {
         label: "undo",
         keys: "u",
         action: Action::Undo,

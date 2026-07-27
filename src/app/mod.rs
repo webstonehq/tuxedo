@@ -383,7 +383,7 @@ impl App {
     pub fn pick_theme_step(&mut self, forward: bool) {
         let all = theme::all();
         let len = all.len();
-        if len <= 1 {
+        if len <= 1{ 
             return;
         }
         let cur = self.prefs.theme_idx();

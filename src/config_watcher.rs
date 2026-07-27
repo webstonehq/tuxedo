@@ -38,6 +38,10 @@ pub fn spawn(config_path: PathBuf) -> Option<mpsc::Receiver<()>> {
     watcher.watch(&dir, RecursiveMode::NonRecursive).ok()?;
 
     thread::spawn(move || {
+        // Keep the watcher alive for the life of this thread — dropping it
+        // tears down the OS-level watch (and on macOS/FSEvents, can flush a
+        // burst of stale replayed events right as it's invalidated).
+        let _watcher = watcher;
         let mut pending: Option<Instant> = None;
 
         loop {

@@ -119,6 +119,32 @@ impl App {
         }
     }
 
+    pub fn finish_editor_edit(&mut self, result: &anyhow::Result<Option<String>>) {
+        let Some((idx, _old_raw)) = self.pending_editor_task.take() else {
+            return;
+        };
+        match result {
+            Ok(Some(new_raw)) => {
+                match self.store.edit_line(idx, new_raw) {
+                    EditOutcome::Saved { abs } => {
+                        self.flash("saved");
+                        self.after_mutation(abs);
+                    }
+                    EditOutcome::Empty => self.flash("task text cannot be empty"),
+                    EditOutcome::OutOfRange | EditOutcome::TermNotFound => {}
+                    EditOutcome::Aborted(r) => self.handle_reconcile_abort(r),
+                    EditOutcome::Error(e) => self.flash(format!("invalid: {e}")),
+                }
+            }
+            Ok(None) => {
+                self.flash("no changes");
+            }
+            Err(e) => {
+                self.flash(format!("editor error: {e}"));
+            }
+        }
+    }
+
     pub fn add_project_to_current(&mut self, name: &str) {
         let Some(abs) = self.cur_abs() else {
             return;

@@ -155,6 +155,9 @@ pub struct App {
     /// Path queued for opening in the user's editor after the TUI temporarily
     /// restores the terminal. Set by OpenNote and drained by the run loop.
     pending_editor_path: Option<PathBuf>,
+    /// Task index and raw text queued for editing in $EDITOR. Set by
+    /// `LaunchEditor` and drained by the run loop after terminal restore.
+    pending_editor_task: Option<(usize, String)>,
     /// Theme index captured when the theme picker opened, so cancel
     /// can restore it.
     theme_pick_orig: usize,
@@ -218,6 +221,7 @@ impl App {
             share: None,
             notes_dir: note_dir,
             pending_editor_path: None,
+            pending_editor_task: None,
             theme_pick_orig: 0,
             week_start: WeekStart::Sunday,
         };
@@ -448,6 +452,14 @@ impl App {
 
     pub fn take_pending_editor_path(&mut self) -> Option<PathBuf> {
         self.pending_editor_path.take()
+    }
+
+    pub fn start_editor_edit(&mut self, idx: usize, raw: String) {
+        self.pending_editor_task = Some((idx, raw));
+    }
+
+    pub fn take_pending_editor_task(&mut self) -> Option<(usize, String)> {
+        self.pending_editor_task.take()
     }
 
     /// True when at least one task is marked done. Used by the binary to

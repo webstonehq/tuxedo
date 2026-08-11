@@ -972,6 +972,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('i') => Action::BeginEditInsert,
         KeyCode::Char('o') => Action::OpenNote,
         KeyCode::Char('O') => Action::CreateOrOpenNote,
+        KeyCode::Char('b') => Action::BeginAddSubtask,
         KeyCode::Char('x') => Action::ToggleComplete,
         // 'dd' chord. First press arms; second fires.
         KeyCode::Char('d') if app.chord.toggle('d') => Action::Delete,
@@ -1056,6 +1057,7 @@ fn apply_action(app: &mut App, action: Action) {
                 return;
             }
             Action::BeginAdd
+            | Action::BeginAddSubtask
             | Action::BeginEdit
             | Action::BeginEditInsert
             | Action::CyclePriority
@@ -1101,6 +1103,26 @@ fn apply_action(app: &mut App, action: Action) {
             app.mode = Mode::Insert;
             app.draft_clear();
             app.selection.exit_edit();
+        }
+        // TODO: implement adding a new subtask. Test if the task under the cursor already has a
+        // uuid and if not generate one. Add the partof:<parent-uuid> to the subtask
+        Action::BeginAddSubtask => {
+            app.mode = Mode::Insert;
+            if let Some(abs) = app.cur_abs() {
+                let part_of_uuid = app.gen_uuid(abs);
+                match part_of_uuid {
+                    tuxedo::core::outcome::UUIDOutcome::Added { abs, uuid }
+                    | tuxedo::core::outcome::UUIDOutcome::Removed { abs, uuid }
+                    | tuxedo::core::outcome::UUIDOutcome::Unchanged { abs, uuid } => {
+                        app.draft_sub(uuid)
+                    }
+                    tuxedo::core::outcome::UUIDOutcome::OutOfRange => todo!(),
+                    tuxedo::core::outcome::UUIDOutcome::Aborted(reconcile) => todo!(),
+                    tuxedo::core::outcome::UUIDOutcome::Error(store_error) => todo!(),
+                }
+
+                app.selection.exit_edit();
+            }
         }
         Action::BeginEdit => {
             if let Some(abs) = app.cur_abs()

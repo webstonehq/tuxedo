@@ -12,6 +12,7 @@ pub enum Action {
     HalfPageDown,
     HalfPageUp,
     BeginAdd,
+    BeginAddSubtask,
     /// Edit the current task starting in Normal (vim) mode (`e`).
     BeginEdit,
     /// Edit the current task starting in Insert mode (`i`).
@@ -73,6 +74,7 @@ impl Action {
             "half_page_down" => Some(Self::HalfPageDown),
             "half_page_up" => Some(Self::HalfPageUp),
             "begin_add" | "add" => Some(Self::BeginAdd),
+            "begin_add_subtask" | "add_subtask" => Some(Self::BeginAddSubtask),
             "begin_edit" | "edit" => Some(Self::BeginEdit),
             "begin_edit_insert" | "edit_insert" => Some(Self::BeginEditInsert),
             "toggle_complete" => Some(Self::ToggleComplete),

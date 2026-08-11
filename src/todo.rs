@@ -56,6 +56,7 @@ pub struct Task {
     /// filter parses it on demand via `crate::threshold`.
     pub threshold: Option<String>,
     pub notes: Vec<String>,
+    pub uuid: Option<String>,
 }
 
 pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
@@ -91,6 +92,7 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
     let projects = collect_tokens(rest, '+');
     let contexts = collect_tokens(rest, '@');
     let due = find_kv(rest, "due");
+    let uuid = find_kv(rest, "uuid");
     let rec = find_kv(rest, "rec");
     let threshold = find_kv(rest, "t");
     let notes = find_quoted_kv(rest, "note");
@@ -109,6 +111,7 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
         rec,
         threshold,
         notes,
+        uuid,
     })
 }
 
@@ -279,6 +282,40 @@ impl Task {
             after_x.to_string()
         };
         self.replace_from_raw(&body)
+    }
+
+    // Set or replace this tasks uuid
+    pub fn set_uuid(&mut self, uuid: &str) -> Result<(), ParseError> {
+        let mut found = false;
+        let mut tokens: Vec<String> = self
+            .raw
+            .split(' ')
+            .map(|tok| {
+                if tok.starts_with("uuid:") && !found {
+                    found = true;
+                    format!("uuid:{}", uuid)
+                } else {
+                    tok.to_string()
+                }
+            })
+            .collect();
+        if !found {
+            tokens.push(format!("uuid:{}", uuid));
+        }
+        let new_raw = tokens.join(" ");
+        self.replace_from_raw(&new_raw)
+    }
+
+    /// Generate a uuid for the task if it has none
+    pub fn gen_uuid(&mut self) -> Result<String, ParseError> {
+        match &self.uuid {
+            Some(uuid) => Ok(uuid.clone()),
+            None => {
+                let uuid = uuid::Uuid::new_v4().to_string();
+                self.set_uuid(&uuid)?;
+                Ok(uuid)
+            }
+        }
     }
 
     /// Set or clear this task's priority. The priority byte is replaced in

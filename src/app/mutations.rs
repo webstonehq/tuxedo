@@ -7,6 +7,7 @@ use super::App;
 use super::types::{AddOutcome, View};
 use crate::app::WeekStart;
 use crate::core::AddOutcome as CoreAdd;
+use crate::core::outcome::UUIDOutcome;
 use crate::core::{
     ArchiveDeleteOutcome, ArchiveOutcome, CompleteOutcome, DeleteOutcome, EditOutcome,
     PriorityOutcome, TagOutcome, UnarchiveOutcome, UndoOutcome,
@@ -33,6 +34,10 @@ impl App {
             CompleteOutcome::OutOfRange => {}
             CompleteOutcome::Error(e) => self.flash(format!("complete failed: {e}")),
         }
+    }
+
+    pub fn gen_uuid(&mut self, abs: usize) -> UUIDOutcome {
+        self.store.gen_uuid(abs)
     }
 
     pub fn cycle_priority(&mut self, abs: usize) {

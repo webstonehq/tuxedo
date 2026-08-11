@@ -12,6 +12,7 @@ notify = "8"
 qrcode = { version = "0.14", default-features = false }
 ratatui = "0.30.0"
 tiny_http = "0.12"
+uuid = { version = "1.24.0", features = ["v4"] }
 
 [dev-dependencies]
 insta = "1.47"

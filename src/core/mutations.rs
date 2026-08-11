@@ -3,6 +3,7 @@ use super::outcome::{
     AddOutcome, BulkCompleteOutcome, BulkDeleteOutcome, CompleteOutcome, DeleteOutcome,
     EditOutcome, PriorityOutcome, Reconcile, StoreError, TagOutcome,
 };
+use crate::core::outcome::UUIDOutcome;
 use crate::recurrence::{self, RecSpec};
 use crate::todo::{self, TagError};
 
@@ -64,6 +65,22 @@ impl Store {
                 }
             }
             Err(e) => CompleteOutcome::Error(StoreError::Parse(e)),
+        }
+    }
+
+    pub fn gen_uuid(&mut self, abs: usize) -> UUIDOutcome {
+        match self.reconcile() {
+            Reconcile::Unchanged => {}
+            other => return UUIDOutcome::Aborted(other),
+        }
+        if abs >= self.tasks.len() {
+            return UUIDOutcome::OutOfRange;
+        }
+        self.push_history();
+
+        match self.tasks[abs].gen_uuid() {
+            Ok(uuid) => UUIDOutcome::Added { abs, uuid: uuid },
+            Err(_) => todo!(),
         }
     }
 

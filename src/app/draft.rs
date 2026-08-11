@@ -317,6 +317,11 @@ impl App {
         self.draft.clear();
     }
 
+    pub fn draft_sub(&mut self, uuid: String) {
+        self.draft.clear();
+        self.draft.text = format!("partof:{uuid}")
+    }
+
     /// Seed the edit dialog and open it in Normal mode (`e`), so vim users can
     /// navigate before changing anything.
     pub fn draft_set(&mut self, s: String) {

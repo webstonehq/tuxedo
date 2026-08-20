@@ -4,7 +4,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::App;
+use crate::app::{App, FilterTarget};
 use crate::theme::Theme;
 use crate::todo::Task;
 use crate::ui::task_row::{due_label, due_token_style, is_url_token, url_token_style};
@@ -12,23 +12,32 @@ use crate::ui::task_row::{due_label, due_token_style, is_url_token, url_token_st
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     super::fill_bg(frame, area, Style::default().bg(theme.panel));
+    app.detail_rect.set(area);
 
     let task = app.cur_task();
     // Wrap to the actual pane width minus 1-char left padding and 1-char
     // safety margin on the right. Floor at 16 so a tiny pane still wraps.
     let wrap_w = (area.width as usize).saturating_sub(2).max(16);
-    let lines = build_lines(theme, task, app.today(), wrap_w);
+    let (lines, token_index) = build_lines(theme, task, app.today(), wrap_w);
+    app.detail_token_index.replace(token_index);
     let para = Paragraph::new(lines).style(Style::default().bg(theme.panel).fg(theme.fg));
     frame.render_widget(para, area);
 }
+
+/// `(line, col_start, col_end, target)` per `+project`/`@context` token,
+/// alongside the lines built. Kept as a return value (not written straight
+/// into `App`) so this stays a pure function the way it was before mouse
+/// support existed.
+type TokenIndex = Vec<(usize, u16, u16, FilterTarget)>;
 
 fn build_lines<'a>(
     theme: &Theme,
     task: Option<&'a Task>,
     today: &'a str,
     wrap_w: usize,
-) -> Vec<Line<'a>> {
+) -> (Vec<Line<'a>>, TokenIndex) {
     let mut rows: Vec<Line> = Vec::new();
+    let mut tokens: TokenIndex = Vec::new();
     rows.push(line_panel(
         theme,
         vec![Span::styled(
@@ -42,7 +51,7 @@ fn build_lines<'a>(
             theme,
             vec![Span::styled(" (no task)", Style::default().fg(theme.dim))],
         ));
-        return rows;
+        return (rows, tokens);
     };
 
     let priority_value = if let Some(p) = t.priority {
@@ -83,33 +92,25 @@ fn build_lines<'a>(
             ],
         ));
     }
-    rows.push(line_panel(
+    rows.push(token_line(
+        &mut tokens,
+        rows.len(),
         theme,
-        vec![
-            Span::styled(" projects  ", Style::default().fg(theme.dim)),
-            Span::styled(
-                t.projects
-                    .iter()
-                    .map(|p| format!("+{p}"))
-                    .collect::<Vec<_>>()
-                    .join(" "),
-                Style::default().fg(theme.project),
-            ),
-        ],
+        " projects  ",
+        &t.projects,
+        '+',
+        theme.project,
+        FilterTarget::Project,
     ));
-    rows.push(line_panel(
+    rows.push(token_line(
+        &mut tokens,
+        rows.len(),
         theme,
-        vec![
-            Span::styled(" contexts  ", Style::default().fg(theme.dim)),
-            Span::styled(
-                t.contexts
-                    .iter()
-                    .map(|c| format!("@{c}"))
-                    .collect::<Vec<_>>()
-                    .join(" "),
-                Style::default().fg(theme.context),
-            ),
-        ],
+        " contexts  ",
+        &t.contexts,
+        '@',
+        theme.context,
+        FilterTarget::Context,
     ));
 
     // Rendering notes line by line
@@ -167,7 +168,37 @@ fn build_lines<'a>(
         }
         rows.push(line_panel(theme, spans));
     }
-    rows
+    (rows, tokens)
+}
+
+
+#[allow(clippy::too_many_arguments)]
+fn token_line<'a>(
+    tokens: &mut TokenIndex,
+    line: usize,
+    theme: &Theme,
+    label: &'static str,
+    values: &'a [String],
+    sigil: char,
+    color: ratatui::style::Color,
+    target: impl Fn(String) -> FilterTarget,
+) -> Line<'a> {
+    let label_span = Span::styled(label, Style::default().fg(theme.dim));
+    let mut col: u16 = label_span.width() as u16;
+    let mut spans = vec![label_span];
+    for (i, value) in values.iter().enumerate() {
+        if i > 0 {
+            let sep = Span::raw(" ");
+            col += sep.width() as u16;
+            spans.push(sep);
+        }
+        let token = Span::styled(format!("{sigil}{value}"), Style::default().fg(color));
+        let width = token.width() as u16;
+        tokens.push((line, col, col + width, target(value.clone())));
+        col += width;
+        spans.push(token);
+    }
+    line_panel(theme, spans)
 }
 
 #[derive(Default)]

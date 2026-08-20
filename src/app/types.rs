@@ -66,6 +66,15 @@ impl View {
     }
 }
 
+/// A project or context a mouse click landed on, in the sidebar's filter
+/// list or the detail pane's `+project`/`@context` tokens. Both surfaces
+/// resolve a click to one of these and hand it to the same toggle logic.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FilterTarget {
+    Project(String),
+    Context(String),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sort {
     Priority,

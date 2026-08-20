@@ -6,7 +6,10 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use ratatui::DefaultTerminal;
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{
+    self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,
+    MouseEventKind,
+};
 
 use std::io::Write;
 
@@ -110,12 +113,19 @@ fn main() -> Result<()> {
     }
 
     let terminal = ratatui::init();
+    let default_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = crossterm::execute!(io::stdout(), event::DisableMouseCapture);
+        default_panic_hook(info);
+    }));
+    let _ = crossterm::execute!(io::stdout(), event::EnableMouseCapture);
     // Give the window/tab a consistent `tuxedo <path>` title across terminals
     // and operating systems, shortening long paths to fit a fixed budget.
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
     let title = ui::title::terminal_title(&path, home.as_deref(), ui::title::DEFAULT_BUDGET);
     let _ = crossterm::execute!(io::stdout(), crossterm::terminal::SetTitle(title));
     let result = run(terminal, &mut app_state, &keybinds, config_rx);
+    let _ = crossterm::execute!(io::stdout(), event::DisableMouseCapture);
     ratatui::restore();
     // Clear the title on exit so the shell retitles on its next prompt rather
     // than leaving `tuxedo …` behind.
@@ -237,6 +247,10 @@ fn run(
                 Event::Resize(_, _) => {
                     dirty = true;
                 }
+                Event::Mouse(mouse) => {
+                    handle_mouse(app, mouse);
+                    dirty = true;
+                }
                 _ => {}
             }
         } else if !app.check_external_changes() {
@@ -296,6 +310,9 @@ fn open_path_in_editor(path: &std::path::Path) -> Result<()> {
     let editor = std::env::var("VISUAL")
         .or_else(|_| std::env::var("EDITOR"))
         .unwrap_or_else(|_| "nvim".to_string());
+    // Mouse capture must drop before the editor takes the terminal, or its
+    // clicks arrive as raw escape codes instead of normal editor input.
+    let _ = crossterm::execute!(io::stdout(), event::DisableMouseCapture);
     ratatui::restore();
     let status = std::process::Command::new(&editor)
         .arg(path)
@@ -306,6 +323,7 @@ fn open_path_in_editor(path: &std::path::Path) -> Result<()> {
         io::stdout(),
         ratatui::crossterm::terminal::EnterAlternateScreen
     )?;
+    let _ = crossterm::execute!(io::stdout(), event::EnableMouseCapture);
     match status {
         Ok(_) => Ok(()),
         Err(e) => Err(e),
@@ -354,6 +372,33 @@ fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
         Mode::Welcome => handle_welcome(app, key),
         Mode::Normal | Mode::Visual => handle_normal(app, key, keybinds),
     }
+}
+
+/// Handles mouse input: clicking a task row moves the cursor there,
+/// clicking a project/context in the sidebar or a `+project`/`@context`
+/// token in the detail pane toggles that filter, and the scroll wheel
+/// moves the cursor up/down like `j`/`k`.
+/// Ignored outside Normal/Visual.
+fn handle_mouse(app: &mut App, mouse: MouseEvent) {
+    if !matches!(app.mode, Mode::Normal | Mode::Visual) {
+        return;
+    }
+    match mouse.kind {
+        MouseEventKind::Down(MouseButton::Left) => {
+            if let Some(target) = app
+                .filter_target_at(mouse.column, mouse.row)
+                .or_else(|| app.detail_target_at(mouse.column, mouse.row))
+            {
+                app.toggle_filter_target(target);
+            } else if let Some(i) = app.row_at(mouse.column, mouse.row) {
+                app.cursor = i;
+            }
+        }
+        MouseEventKind::ScrollDown => app.cursor = app.cursor.saturating_add(1),
+        MouseEventKind::ScrollUp => app.cursor = app.cursor.saturating_sub(1),
+        _ => {}
+    }
+    app.clamp_cursor();
 }
 
 /// First-run welcome prompt. `c` creates `./todo.txt` (the App's current
@@ -1414,7 +1459,7 @@ mod tests {
     use super::*;
     use chrono::NaiveDate;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-    use tuxedo::app::Sort;
+    use tuxedo::app::{Density, Sort};
     use tuxedo::config::Config;
 
     fn key(c: char) -> KeyEvent {
@@ -2313,5 +2358,268 @@ mod tests {
         app.set_search("abc".into());
         handle_search(&mut app, ctrl('u'));
         assert_eq!(app.draft.text(), "");
+    }
+
+    fn mouse(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
+        MouseEvent {
+            kind,
+            column,
+            row,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
+    fn render_for_mouse_test(app: &App) {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        let mut terminal = Terminal::new(TestBackend::new(40, 20)).expect("test backend");
+        terminal
+            .draw(|f| ui::draw(f, app))
+            .expect("render for mouse test");
+    }
+    fn build_app_for_mouse() -> App {
+        let mut app = build_app();
+        app.prefs.sort = Sort::File;
+        app.prefs.density = Density::Compact;
+        app.prefs.layout.left = false;
+        app.prefs.layout.right = false;
+        app.recompute_visible();
+        app
+    }
+
+    #[test]
+    fn click_on_task_row_moves_cursor_there() {
+        let mut app = build_app_for_mouse();
+        render_for_mouse_test(&app);
+        assert_eq!(app.cursor, 0);
+
+        handle_mouse(
+            &mut app,
+            mouse(MouseEventKind::Down(MouseButton::Left), 3, 4),
+        );
+
+        assert_eq!(app.cursor, 2);
+    }
+
+    #[test]
+    fn click_above_the_list_body_is_ignored() {
+        let mut app = build_app_for_mouse();
+        app.cursor = 1;
+        render_for_mouse_test(&app);
+
+        handle_mouse(
+            &mut app,
+            mouse(MouseEventKind::Down(MouseButton::Left), 3, 0),
+        );
+
+        assert_eq!(
+            app.cursor, 1,
+            "clicking the header must not move the cursor"
+        );
+    }
+
+    #[test]
+    fn click_is_ignored_outside_normal_and_visual_modes() {
+        let mut app = build_app_for_mouse();
+        render_for_mouse_test(&app);
+        app.mode = Mode::Insert;
+
+        handle_mouse(
+            &mut app,
+            mouse(MouseEventKind::Down(MouseButton::Left), 3, 4),
+        );
+
+        assert_eq!(
+            app.cursor, 0,
+            "a click behind an open overlay must not move the cursor underneath it"
+        );
+    }
+
+    #[test]
+    fn scroll_wheel_moves_cursor_like_j_and_k() {
+        let mut app = build_app_for_mouse();
+        render_for_mouse_test(&app);
+        assert_eq!(app.cursor, 0);
+
+        handle_mouse(&mut app, mouse(MouseEventKind::ScrollDown, 3, 4));
+        assert_eq!(app.cursor, 1);
+
+        handle_mouse(&mut app, mouse(MouseEventKind::ScrollDown, 3, 4));
+        assert_eq!(app.cursor, 2);
+
+        handle_mouse(&mut app, mouse(MouseEventKind::ScrollUp, 3, 4));
+        assert_eq!(app.cursor, 1);
+    }
+
+    #[test]
+    fn scroll_wheel_clamps_at_list_bounds() {
+        let mut app = build_app_for_mouse();
+        render_for_mouse_test(&app);
+
+        handle_mouse(&mut app, mouse(MouseEventKind::ScrollUp, 3, 4));
+        assert_eq!(app.cursor, 0, "must not go negative");
+
+        app.cursor = 2;
+        handle_mouse(&mut app, mouse(MouseEventKind::ScrollDown, 3, 4));
+        assert_eq!(app.cursor, 2, "must not scroll past the last task");
+    }
+
+    fn build_app_with_raw(raw: &str) -> App {
+        let path = std::env::temp_dir().join(format!(
+            "tuxedo-bindings-{}-{:?}.txt",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::write(&path, raw);
+        App::new(path, raw.into(), "2026-05-07".into(), Config::default())
+    }
+
+    fn build_app_for_filters_mouse() -> App {
+        let mut app = build_app_with_raw("buy milk +home\ncall bob +work @phone\n");
+        app.prefs.layout.left = true;
+        app.prefs.layout.right = false;
+        app
+    }
+
+    fn render_filters_test(app: &App) {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        let mut terminal = Terminal::new(TestBackend::new(60, 20)).expect("test backend");
+        terminal
+            .draw(|f| ui::draw(f, app))
+            .expect("render for filters mouse test");
+    }
+
+    #[test]
+    fn click_project_row_applies_filter_click_again_clears_it() {
+        let mut app = build_app_for_filters_mouse();
+        render_filters_test(&app);
+
+        // Sidebar rows: 0 filters, 1 blank, 2 projects, 3 home, 4 work,
+        // 5 blank, 6 contxt, 7 phone.
+        handle_mouse(
+            &mut app,
+            mouse(MouseEventKind::Down(MouseButton::Left), 5, 3),
+        );
+        assert_eq!(app.filter().project.as_deref(), Some("home"));
+
+        render_filters_test(&app);
+        handle_mouse(
+            &mut app,
+            mouse(MouseEventKind::Down(MouseButton::Left), 5, 3),
+        );
+        assert_eq!(
+            app.filter().project,
+            None,
+            "clicking the active project row again must clear the filter"
+        );
+    }
+
+    #[test]
+    fn click_context_row_applies_filter() {
+        let mut app = build_app_for_filters_mouse();
+        render_filters_test(&app);
+
+        handle_mouse(
+            &mut app,
+            mouse(MouseEventKind::Down(MouseButton::Left), 5, 7),
+        );
+        assert_eq!(app.filter().context.as_deref(), Some("phone"));
+    }
+
+    #[test]
+    fn click_sidebar_header_row_does_nothing() {
+        let mut app = build_app_for_filters_mouse();
+        render_filters_test(&app);
+
+        handle_mouse(
+            &mut app,
+            mouse(MouseEventKind::Down(MouseButton::Left), 5, 2),
+        );
+        assert_eq!(app.filter().project, None);
+        assert_eq!(app.filter().context, None);
+    }
+
+    fn build_app_for_detail_mouse() -> App {
+        let mut app = build_app_with_raw("call bob +work @phone\n");
+        app.prefs.layout.left = false;
+        app.prefs.layout.right = true;
+        app
+    }
+
+    fn render_detail_test(app: &App) {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        let mut terminal = Terminal::new(TestBackend::new(60, 20)).expect("test backend");
+        terminal
+            .draw(|f| ui::draw(f, app))
+            .expect("render for detail mouse test");
+    }
+
+    #[test]
+    fn click_project_token_in_detail_pane_applies_filter() {
+        let mut app = build_app_for_detail_mouse();
+        render_detail_test(&app);
+
+        let rect = app.detail_rect();
+        handle_mouse(
+            &mut app,
+            mouse(
+                MouseEventKind::Down(MouseButton::Left),
+                rect.x + 12,
+                rect.y + 4,
+            ),
+        );
+        assert_eq!(app.filter().project.as_deref(), Some("work"));
+    }
+
+    #[test]
+    fn click_context_token_in_detail_pane_applies_filter() {
+        let mut app = build_app_for_detail_mouse();
+        render_detail_test(&app);
+
+        let rect = app.detail_rect();
+        handle_mouse(
+            &mut app,
+            mouse(
+                MouseEventKind::Down(MouseButton::Left),
+                rect.x + 12,
+                rect.y + 5,
+            ),
+        );
+        assert_eq!(app.filter().context.as_deref(), Some("phone"));
+    }
+
+    #[test]
+    fn click_between_detail_tokens_does_nothing() {
+        let mut app = build_app_for_detail_mouse();
+        render_detail_test(&app);
+
+        let rect = app.detail_rect();
+        handle_mouse(
+            &mut app,
+            mouse(MouseEventKind::Down(MouseButton::Left), rect.x, rect.y + 4),
+        );
+        assert_eq!(app.filter().project, None);
+    }
+
+    #[test]
+    fn repro_stale_filters_rect_after_hiding_left_pane() {
+        let mut app = build_app_for_filters_mouse();
+        render_filters_test(&app);
+        assert_eq!(app.filter().project, None);
+
+        app.prefs.layout.left = false;
+        render_filters_test(&app);
+
+        handle_mouse(
+            &mut app,
+            mouse(MouseEventKind::Down(MouseButton::Left), 5, 3),
+        );
+        assert_eq!(
+            app.filter().project,
+            None,
+            "clicking where the sidebar used to be, after it was hidden, must not apply a stale filter"
+        );
     }
 }

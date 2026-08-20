@@ -1,8 +1,10 @@
 use core::fmt;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::mpsc::{Receiver, TryRecvError};
+
+use ratatui::layout::Rect;
 
 use crate::config::Config;
 use crate::core::Store;
@@ -46,8 +48,8 @@ pub use palette::CommandPaletteState;
 pub use prefs::{Layout, Prefs};
 pub use selection::Selection;
 pub use types::{
-    AUTOCOMPLETE_CAP, AddOutcome, Density, FLASH_TTL, Filter, LEADER_WINDOW, Mode, SavedFilter,
-    Sort, UNDO_LIMIT, View,
+    AUTOCOMPLETE_CAP, AddOutcome, Density, FLASH_TTL, Filter, FilterTarget, LEADER_WINDOW, Mode,
+    SavedFilter, Sort, UNDO_LIMIT, View,
 };
 pub use visibility::GroupKey;
 
@@ -144,6 +146,29 @@ pub struct App {
     /// view, keyed by `View::idx()`. Updated at render time via `Cell` so the
     /// renderer can keep the cursor row visible without taking `&mut self`.
     pub(crate) view_scroll: [Cell<u16>; 2],
+    /// Screen rect of the last-rendered task-list body for the view at
+    /// `View::idx()`. Set at render time via `Cell` (same pattern as
+    /// `view_scroll`) so a later mouse click can be tested against where
+    /// rows actually landed on screen.
+    pub(crate) view_body_rect: [Cell<Rect>; 2],
+    /// Sparse `(rendered line, cursor index)` pairs recorded for the last
+    /// render of each view, keyed by `View::idx()`. Only lines that are
+    /// task rows appear — blank/group-header lines are absent. Mouse click
+    /// handling looks up the clicked line here to find which task it hit.
+    pub(crate) view_row_index: [RefCell<Vec<(usize, usize)>>; 2],
+    /// Screen rect of the last-rendered left sidebar (filters list), for
+    /// mapping a click back to the project/context row it landed on.
+    pub(crate) filters_rect: Cell<Rect>,
+    /// Sparse `(rendered line, target)` pairs for the sidebar's filter rows
+    /// — only project/context row lines appear. The sidebar doesn't scroll,
+    /// so a line index is directly a row offset from `filters_rect.y`.
+    pub(crate) filters_row_index: RefCell<Vec<(usize, FilterTarget)>>,
+    /// Screen rect of the last-rendered detail pane (right sidebar).
+    pub(crate) detail_rect: Cell<Rect>,
+    /// `(line, col_start, col_end, target)` for each `+project`/`@context`
+    /// token in the detail pane's last render, so a click on the token text
+    /// (not just its row) can be resolved back to a filter target.
+    pub(crate) detail_token_index: RefCell<Vec<(usize, u16, u16, FilterTarget)>>,
     /// Handle to the in-TUI capture server. `None` until the first time
     /// the user presses `s` (or invokes "show capture QR" from the
     /// palette). Once bound, the entry stays for the rest of the
@@ -215,6 +240,12 @@ impl App {
             saved_pick_idx: 0,
             command_palette: CommandPaletteState::default(),
             view_scroll: [Cell::new(0), Cell::new(0)],
+            view_body_rect: [Cell::new(Rect::default()), Cell::new(Rect::default())],
+            view_row_index: [RefCell::new(Vec::new()), RefCell::new(Vec::new())],
+            filters_rect: Cell::new(Rect::default()),
+            filters_row_index: RefCell::new(Vec::new()),
+            detail_rect: Cell::new(Rect::default()),
+            detail_token_index: RefCell::new(Vec::new()),
             share: None,
             notes_dir: note_dir,
             pending_editor_path: None,
@@ -503,6 +534,90 @@ impl App {
     /// Active top-level view (List/Archive).
     pub fn view(&self) -> View {
         self.view
+    }
+
+    /// Map a terminal cell to the visible-list cursor index it landed on,
+    /// using the body rect and line map captured during the current view's
+    /// last render. `None` when the cell falls outside the list body or on a
+    /// blank/group-header line.
+    pub fn row_at(&self, col: u16, row: u16) -> Option<usize> {
+        let idx = self.view.idx();
+        let rect = self.view_body_rect[idx].get();
+        if col < rect.x || col >= rect.x + rect.width || row < rect.y || row >= rect.y + rect.height
+        {
+            return None;
+        }
+        let scroll = self.view_scroll[idx].get() as usize;
+        let line = scroll + (row - rect.y) as usize;
+        self.view_row_index[idx]
+            .borrow()
+            .iter()
+            .find(|&&(l, _)| l == line)
+            .map(|&(_, i)| i)
+    }
+
+    /// Map a terminal cell to the project/context row it landed on in the
+    /// left sidebar's filter list, using the rect and line map captured
+    /// during the sidebar's last render. `None` outside the sidebar body or
+    /// on a non-row line (section header, blank, hint).
+    pub fn filter_target_at(&self, col: u16, row: u16) -> Option<FilterTarget> {
+        let rect = self.filters_rect.get();
+        if col < rect.x || col >= rect.x + rect.width || row < rect.y || row >= rect.y + rect.height
+        {
+            return None;
+        }
+        // The sidebar renders as one unscrolled Paragraph, so the line index
+        // is just the row offset from the rect's top.
+        let line = (row - rect.y) as usize;
+        self.filters_row_index
+            .borrow()
+            .iter()
+            .find(|(l, _)| *l == line)
+            .map(|(_, target)| target.clone())
+    }
+
+    /// Map a terminal cell to the `+project`/`@context` token it landed on
+    /// in the detail pane, using the token map captured during the pane's
+    /// last render. `None` outside the pane or between/outside token spans.
+    pub fn detail_target_at(&self, col: u16, row: u16) -> Option<FilterTarget> {
+        let rect = self.detail_rect.get();
+        if col < rect.x || col >= rect.x + rect.width || row < rect.y || row >= rect.y + rect.height
+        {
+            return None;
+        }
+        let line = (row - rect.y) as usize;
+        let rel_col = col - rect.x;
+        self.detail_token_index
+            .borrow()
+            .iter()
+            .find(|(l, start, end, _)| *l == line && rel_col >= *start && rel_col < *end)
+            .map(|(_, _, _, target)| target.clone())
+    }
+
+    /// Screen rect of the last-rendered detail pane, if it was on screen.
+    pub fn detail_rect(&self) -> Rect {
+        self.detail_rect.get()
+    }
+
+    /// Apply `target`'s filter if it isn't already active, otherwise clear
+    /// it.The toggle behind both sidebar and detail-pane filter clicks.
+    pub fn toggle_filter_target(&mut self, target: FilterTarget) {
+        match target {
+            FilterTarget::Project(name) => {
+                if self.filter.project.as_deref() == Some(name.as_str()) {
+                    self.set_project_filter(None);
+                } else {
+                    self.set_project_filter(Some(name));
+                }
+            }
+            FilterTarget::Context(name) => {
+                if self.filter.context.as_deref() == Some(name.as_str()) {
+                    self.set_context_filter(None);
+                } else {
+                    self.set_context_filter(Some(name));
+                }
+            }
+        }
     }
 
     /// Switch top-level view. Recomputes the cache so the next frame reflects

@@ -4,18 +4,20 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, Filter, ordered_unique};
+use crate::app::{App, Filter, FilterTarget, ordered_unique};
 use crate::core::filter;
 use crate::theme::Theme;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     super::fill_bg(frame, area, Style::default().bg(theme.panel));
+    app.filters_rect.set(area);
 
     let projects = ordered_unique(app.tasks(), |t| &t.projects);
     let contexts = ordered_unique(app.tasks(), |t| &t.contexts);
 
     let mut lines: Vec<Line> = Vec::new();
+    let mut row_index: Vec<(usize, FilterTarget)> = Vec::new();
     lines.push(line_pad(
         theme,
         vec![Span::styled(
@@ -38,6 +40,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         for (name, count) in &projects {
             let active = app.filter.project.as_deref() == Some(name.as_str());
+            row_index.push((lines.len(), FilterTarget::Project(name.clone())));
             lines.push(filter_row(theme, "+", name, *count, active, theme.project));
         }
     }
@@ -56,6 +59,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         for (name, count) in &contexts {
             let active = app.filter.context.as_deref() == Some(name.as_str());
+            row_index.push((lines.len(), FilterTarget::Context(name.clone())));
             lines.push(filter_row(theme, "@", name, *count, active, theme.context));
         }
     }
@@ -89,6 +93,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             lines.push(filter_row(theme, "", &f.name, count, active, theme.accent));
         }
     }
+
+    app.filters_row_index.replace(row_index);
 
     let para = Paragraph::new(lines).style(Style::default().bg(theme.panel).fg(theme.fg));
     frame.render_widget(para, area);

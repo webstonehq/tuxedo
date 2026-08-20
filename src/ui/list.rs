@@ -35,7 +35,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         },
     );
 
+    app.view_body_rect[View::List.idx()].set(body_area);
+
     if app.tasks().is_empty() {
+        app.view_row_index[View::List.idx()].replace(Vec::new());
         crate::ui::empty::render(frame, body_area, app);
         return;
     }
@@ -52,6 +55,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let groups = app.visible_groups();
     let mut lines: Vec<Line> = Vec::new();
     let mut cursor_line: Option<usize> = None;
+    let mut row_index: Vec<(usize, usize)> = Vec::new();
 
     if visible.is_empty() {
         lines.push(Line::from(Span::styled(
@@ -91,6 +95,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             if i == app.cursor {
                 cursor_line = Some(lines.len());
             }
+            row_index.push((lines.len(), i));
             lines.push(task_row::build_line(task, opts, theme));
             if matches!(gk, GroupKey::None) && i != last {
                 for _ in 0..blank {
@@ -108,6 +113,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         lines.len(),
     );
     scroll_cell.set(scroll);
+    app.view_row_index[View::List.idx()].replace(row_index);
 
     let para = Paragraph::new(lines)
         .style(Style::default().bg(theme.bg).fg(theme.fg))

@@ -85,6 +85,12 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     if let Some(la) = left_area {
         filters::render(frame, la, app);
+    } else {
+        // Pane hidden this frame: so a click where the
+        // sidebar used to be falls through to the list body
+        // instead of resolving against stale rows.
+        app.filters_rect.set(Rect::default());
+        app.filters_row_index.replace(Vec::new());
     }
     match app.view() {
         View::List => list::render(frame, center_area, app),
@@ -92,6 +98,9 @@ pub fn draw(frame: &mut Frame, app: &App) {
     }
     if let Some(ra) = right_area {
         detail::render(frame, ra, app);
+    } else {
+        app.detail_rect.set(Rect::default());
+        app.detail_token_index.replace(Vec::new());
     }
 
     if app.prefs.layout.status_bar {

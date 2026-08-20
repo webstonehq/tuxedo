@@ -31,12 +31,15 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         },
     );
 
+    app.view_body_rect[View::Archive.idx()].set(body_area);
+
     let visible = app.visible_indices();
     let groups = app.visible_groups();
     let blank = super::density_blank_lines(app.prefs.density);
     let cursor_active = app.mode != Mode::Help && app.mode != Mode::Settings;
 
     if visible.is_empty() {
+        app.view_row_index[View::Archive.idx()].replace(Vec::new());
         let para = Paragraph::new(vec![Line::from(Span::styled(
             "   no completed tasks yet".to_string(),
             Style::default().fg(theme.dim),
@@ -57,6 +60,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let mut lines: Vec<Line> = Vec::new();
     let mut last_date: Option<&str> = None;
     let mut cursor_line: Option<usize> = None;
+    let mut row_index: Vec<(usize, usize)> = Vec::new();
 
     for (i, (&abs, gk)) in visible.iter().zip(groups.iter()).enumerate() {
         let date = match gk {
@@ -102,6 +106,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         if i == app.cursor {
             cursor_line = Some(lines.len());
         }
+        row_index.push((lines.len(), i));
         lines.push(task_row::build_line(task, opts, theme));
     }
 
@@ -113,6 +118,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         lines.len(),
     );
     scroll_cell.set(scroll);
+    app.view_row_index[View::Archive.idx()].replace(row_index);
 
     let para = Paragraph::new(lines)
         .style(Style::default().bg(theme.bg).fg(theme.fg))

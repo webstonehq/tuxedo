@@ -193,6 +193,14 @@ pub enum UndoOutcome {
     Error(StoreError),
 }
 
+#[derive(Debug)]
+pub enum RedoOutcome {
+    Redone,
+    Nothing,
+    Aborted(Reconcile),
+    Error(StoreError),
+}
+
 /// Result of draining a sibling `inbox.txt`. Replaces the drain flash strings
 /// the TUI used to emit inline; the caller renders this however it likes.
 #[derive(Debug, Default)]

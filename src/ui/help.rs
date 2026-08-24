@@ -34,7 +34,7 @@ const EDITING: Section = (
         ("c", "add/remove context"),
         ("+", "add project"),
         ("yy / yb", "copy line / body"),
-        ("u", "undo"),
+        ("u / Ctrl-r", "undo / redo"),
     ],
 );
 

@@ -93,6 +93,11 @@ pub const ENTRIES: &[PaletteEntry] = &[
         action: Action::Undo,
     },
     PaletteEntry {
+        label: "redo",
+        keys: "Ctrl-r",
+        action: Action::Redo,
+    },
+    PaletteEntry {
         label: "cursor down",
         keys: "j / ↓",
         action: Action::CursorDown,
@@ -536,6 +541,7 @@ mod tests {
             Action::OpenSettings,
             Action::OpenCommandPalette,
             Action::Undo,
+            Action::Redo,
             Action::ToggleVisual,
             Action::ToggleSelected,
             Action::GoList,

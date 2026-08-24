@@ -1016,6 +1016,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
             KeyCode::Char('d') => Some(Action::HalfPageDown),
             KeyCode::Char('u') => Some(Action::HalfPageUp),
             KeyCode::Char('p') => Some(Action::OpenCommandPalette),
+            KeyCode::Char('r') => Some(Action::Redo),
             _ => None,
         };
     }
@@ -1136,7 +1137,8 @@ fn apply_action(app: &mut App, action: Action) {
             | Action::CycleSort
             | Action::ToggleShowDone
             | Action::ToggleShowFuture
-            | Action::Undo => {
+            | Action::Undo
+            | Action::Redo => {
                 app.flash("read-only in archive");
                 return;
             }
@@ -1228,6 +1230,7 @@ fn apply_action(app: &mut App, action: Action) {
             app.draft_clear();
         }
         Action::Undo => app.undo(),
+        Action::Redo => app.redo(),
         Action::ToggleVisual => {
             app.mode = if app.mode == Mode::Visual {
                 Mode::Normal
@@ -1948,6 +1951,49 @@ mod tests {
         );
         assert!(app.selection.is_empty());
         assert_eq!(app.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn ctrl_r_resolves_to_redo_and_round_trips_a_delete() {
+        let mut app = build_app_with_archive("(A) first\n(A) second\n(A) third\n", None);
+        assert_eq!(resolve(&mut app, ctrl('r')), Some(Action::Redo));
+        // Plain 'r' stays Reschedule — the ctrl branch must not shadow it.
+        assert_eq!(resolve(&mut app, key('r')), Some(Action::Reschedule));
+
+        app.cursor = 1;
+        apply_action(&mut app, Action::Delete);
+        assert_eq!(task_lines(&app), ["(A) first", "(A) third"]);
+
+        apply_action(&mut app, Action::Undo);
+        assert_eq!(task_lines(&app), ["(A) first", "(A) second", "(A) third"]);
+
+        apply_action(&mut app, Action::Redo);
+        assert_eq!(task_lines(&app), ["(A) first", "(A) third"]);
+    }
+
+    #[test]
+    fn a_new_edit_after_undo_discards_the_redo_branch() {
+        let mut app = build_app_with_archive("(A) first\n(A) second\n", None);
+        app.cursor = 1;
+        apply_action(&mut app, Action::Delete);
+        apply_action(&mut app, Action::Undo);
+        assert_eq!(task_lines(&app), ["(A) first", "(A) second"]);
+
+        app.cursor = 0;
+        apply_action(&mut app, Action::Delete);
+        assert_eq!(task_lines(&app), ["(A) second"]);
+
+        // The redo branch died with the new delete; Redo is a silent no-op.
+        apply_action(&mut app, Action::Redo);
+        assert_eq!(task_lines(&app), ["(A) second"]);
+    }
+
+    #[test]
+    fn redo_is_read_only_in_archive_view() {
+        let mut app = build_app_with_archive("(A) first\n", Some("x 2026-05-01 done thing\n"));
+        apply_action(&mut app, Action::ToggleArchiveView);
+        apply_action(&mut app, Action::Redo);
+        assert_eq!(app.flash_active(), Some("read-only in archive"));
     }
 
     #[test]

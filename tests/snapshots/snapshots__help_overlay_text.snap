@@ -20,7 +20,7 @@ expression: buffer_to_text(&buf)
    @p│    c                 add/remove context        D                 cycle density         │     
      │    +                 add project               L                 toggle line numbers   │     
      │    yy / yb           copy line / body                                                  │     
-     │    u                 undo                    SYSTEM                                    │     
+     │    u / Ctrl-r        undo / redo             SYSTEM                                    │     
      │                                                : / Ctrl-P        command palette       │     
      │  RECURRENCE (rec:)                             s                 share capture QR      │     
      │    j / k / Tab       next / prev field         ? / ,             help / settings       │     

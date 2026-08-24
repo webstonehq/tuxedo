@@ -9,7 +9,7 @@ use crate::app::WeekStart;
 use crate::core::AddOutcome as CoreAdd;
 use crate::core::{
     ArchiveDeleteOutcome, ArchiveOutcome, CompleteOutcome, DeleteOutcome, EditOutcome, MoveOutcome,
-    PriorityOutcome, RenameOutcome, TagOutcome, UnarchiveOutcome, UndoOutcome,
+    PriorityOutcome, RedoOutcome, RenameOutcome, TagOutcome, UnarchiveOutcome, UndoOutcome,
 };
 use crate::nl;
 use crate::note;
@@ -381,6 +381,23 @@ impl App {
             UndoOutcome::Nothing => {}
             UndoOutcome::Aborted(r) => self.handle_reconcile_abort(r),
             UndoOutcome::Error(e) => self.flash(format!("write failed: {e}")),
+        }
+    }
+
+    pub fn redo(&mut self) {
+        match self.store.redo() {
+            RedoOutcome::Redone => {
+                self.selection.clear();
+                if self.mode == Mode::Visual {
+                    self.mode = Mode::Normal;
+                }
+                self.flash("redo");
+                self.recompute_visible();
+                self.clamp_cursor();
+            }
+            RedoOutcome::Nothing => {}
+            RedoOutcome::Aborted(r) => self.handle_reconcile_abort(r),
+            RedoOutcome::Error(e) => self.flash(format!("write failed: {e}")),
         }
     }
 

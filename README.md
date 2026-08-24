@@ -23,7 +23,7 @@ For a more in-depth walkthrough, please watch [this video](https://www.youtube.c
 - **TUI and CLI in one binary.** Run `tuxedo` for the interactive UI, or `tuxedo <command>` for a [todo.txt-cli](https://github.com/todotxt/todo.txt-cli)-compatible command line (`add`, `ls`, `do`, `pri`, `archive`, …) — scriptable, with `--json` output and `$TODO_DIR` / `$TODO_FILE` / `$DONE_FILE` support.
 - **Natural-language add.** Type prose into the add prompt — `Pay rent monthly on the first, show 3 days before due, project home` — and tuxedo rewrites it to canonical todo.txt for you to review and save. Local, offline, no AI service.
 - **Phone capture.** Press `s` for a QR pointing at a tiny PWA on your machine's LAN — type tasks from your phone and they appear in the list. Captures land in a sibling `inbox.txt` first, so any tool that can append a line (shell, iOS Shortcuts, cron) is also a capture source.
-- **Vim keys, no surprises.** `j` / `k` to move, `dd` to delete, `gg` / `G` to jump, `u` to undo (50 levels), chord prompts (`gg`, `dd`, `fp`, `fc`) with a 600 ms window.
+- **Vim keys, no surprises.** `j` / `k` to move, `dd` to delete, `gg` / `G` to jump, `u` to undo and `Ctrl-R` to redo (50 levels), chord prompts (`gg`, `dd`, `fp`, `fc`) with a 600 ms window.
 - **Command palette.** `:` or `Ctrl-P` opens a fuzzy palette over every action — type a few letters, hit Enter. Same matcher as `/` search, ranked so start-of-label hits beat word-boundary hits beat mid-word hits.
 - **Atomic, sync-friendly writes.** Every change goes through write-temp-then-rename. If another process — Dropbox, an editor, a script — modifies the file, tuxedo reloads on the next keypress (or within ~250 ms while idle) and flashes a notice.
 - **Sibling-file archive.** `A` moves completed tasks to `done.txt` next to your file, atomically.
@@ -294,6 +294,7 @@ begin_prompt_context = "c"
 copy_line            = "yy"
 copy_body            = "yb"
 undo                 = "u"
+redo                 = "Ctrl-r"
 # begin_prompt_project defaults to "+", which can't be written here (the
 # parser reads "+" as a modifier separator). Pick another key to move it, e.g.
 # begin_prompt_project = "P"
@@ -386,6 +387,7 @@ chord here is ignored rather than bound to a key that could never fire.
 | `yy` | copy current line to clipboard |
 | `yb` | copy current body only (no priority, dates, projects, contexts, `key:value`) |
 | `u` | undo (50 levels) |
+| `Ctrl-R` | redo (50 levels) — cleared by any new edit or an external change to the file |
 
 Movement preserves the active sort: priority mode requires matching priority and due date, due mode requires matching due date, and file mode allows unrestricted movement.
 Visual selections move in one undoable operation and must be fully visible within one sort tie.

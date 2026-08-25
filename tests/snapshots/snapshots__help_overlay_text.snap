@@ -11,21 +11,21 @@ expression: buffer_to_text(&buf)
    +h│                                                S                 cycle sort            │     
    +l│  EDITING                                       v                 visual / multi-select │     
    +p│    n                 new task                  l                 list view             │     
-   +t│    e / i             edit (normal / insert)    a                 archive view          │     
+   +t│    e / i             edit (normal / insert)    a / t             archive / trash view  │     
      │    r                 reschedule task           A                 archive completed     │rd   
- CONT│    x                 toggle complete           H                 show done in list     │     
-   @e│    dd                delete task               F                 show future in list   │     
-   @h│    p                 cycle priority A→B→C→·    [ / ]             toggle filter / detail│     
-   @l│    J / K             move task down / up       T                 theme picker          │     
-   @p│    c                 add/remove context        D                 cycle density         │     
-     │    +                 add project               L                 toggle line numbers   │     
-     │    yy / yb           copy line / body                                                  │     
-     │    u / Ctrl-r        undo / redo             SYSTEM                                    │     
-     │                                                : / Ctrl-P        command palette       │     
-     │  RECURRENCE (rec:)                             s                 share capture QR      │     
-     │    j / k / Tab       next / prev field         ? / ,             help / settings       │     
-     │    h / l / + / -     change value              q / Ctrl-c        quit                  │     
-     │    Enter / Esc       save / cancel                                                     │     
+ CONT│    x                 toggle complete           E                 empty trash           │     
+   @e│    dd                delete (to trash)         H                 show done in list     │     
+   @h│    p                 cycle priority A→B→C→·    F                 show future in list   │     
+   @l│    J / K             move task down / up       [ / ]             toggle filter / detail│     
+   @p│    c                 add/remove context        T                 theme picker          │     
+     │    +                 add project               D                 cycle density         │     
+     │    yy / yb           copy line / body          L                 toggle line numbers   │     
+     │    u / Ctrl-r        undo / redo                                                       │     
+     │                                              SYSTEM                                    │     
+     │  RECURRENCE (rec:)                             : / Ctrl-P        command palette       │     
+     │    j / k / Tab       next / prev field         s                 share capture QR      │     
+     │    h / l / + / -     change value              ? / ,             help / settings       │     
+     │    Enter / Esc       save / cancel             q / Ctrl-c        quit                  │     
      │────────────────────────────────────────────────────────────────────────────────────────│     
      │  FORMAT                                                                                │     
      │    (A)               priority A-Z              due:YYYY-MM-DD    due date (+1w = range)│     

@@ -21,6 +21,10 @@ use tuxedo::ui::hyperlinks;
 use tuxedo::{clipboard, todo, ui, update};
 
 const EVENT_POLL: Duration = Duration::from_millis(250);
+/// How long the undo/redo history must be quiet before it's written to disk.
+/// `next_timeout` caps at `EVENT_POLL`, so an idle tick always arrives to fire
+/// this; a burst of edits costs one write rather than one per keystroke.
+const HISTORY_DEBOUNCE: Duration = Duration::from_secs(1);
 
 fn main() -> Result<()> {
     let argv: Vec<String> = std::env::args().skip(1).collect();
@@ -87,7 +91,11 @@ fn main() -> Result<()> {
         }
     };
     let done = cli::done_path(&path);
-    let mut app_state = App::new_with_done(path.clone(), done, body, today, cfg);
+    let trash = cli::trash_path(&path);
+    let mut app_state = App::new_with_sides(path.clone(), done, trash, body, today, cfg);
+    // Cross-session undo/redo is a TUI affordance; the one-shot CLI never
+    // writes a history file.
+    app_state.enable_history_persistence();
     app_state.config_path = Config::path();
     app_state.mode = start_mode;
     // Start the config hot-reload watcher.
@@ -172,6 +180,7 @@ fn print_usage() {
     println!("  TODO_DIR     directory holding todo.txt / done.txt");
     println!("  TODO_FILE    path to the todo file (default $TODO_DIR/todo.txt)");
     println!("  DONE_FILE    path to the archive file (default sibling done.txt)");
+    println!("  TRASH_FILE   path to the trash file (default sibling trash.txt)");
 }
 
 fn run(
@@ -193,6 +202,13 @@ fn run(
         if app.poll_archive() {
             dirty = true;
         }
+        // Pick up external edits to trash.txt.
+        if app.poll_trash() {
+            dirty = true;
+        }
+        // Debounced write of the undo/redo history. Failures are silent by
+        // design — history is a convenience and must never block an edit.
+        app.flush_history_if_due(HISTORY_DEBOUNCE);
         // Pick up the update-check result so the status-bar indicator can
         // appear without waiting for a keystroke.
         if app.poll_update_check() {
@@ -252,6 +268,8 @@ fn run(
             dirty = true;
         }
     }
+    // Clean exit: flush whatever the debounce hasn't written yet.
+    app.flush_history();
     Ok(())
 }
 
@@ -374,8 +392,9 @@ fn handle_welcome(app: &mut App, key: KeyEvent) {
         KeyCode::Char('s') => match cli::sample_path() {
             Ok(sample) => {
                 let done = cli::done_path(&sample);
+                let trash = cli::trash_path(&sample);
                 let body = std::fs::read_to_string(&sample).unwrap_or_default();
-                app.open_file(sample, done, body);
+                app.open_file(sample, done, trash, body);
                 app.mode = Mode::Normal;
             }
             Err(e) => app.flash(format!("could not open sample: {e}")),
@@ -1031,6 +1050,8 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('n') => Action::BeginAdd,
         KeyCode::Char('r') => Action::Reschedule,
         KeyCode::Char('a') => Action::ToggleArchiveView,
+        KeyCode::Char('t') => Action::ToggleTrashView,
+        KeyCode::Char('E') => Action::EmptyTrash,
         KeyCode::Char('l') => Action::GoList,
         KeyCode::Char('e') => Action::BeginEdit,
         KeyCode::Char('i') => Action::BeginEditInsert,
@@ -1138,8 +1159,58 @@ fn apply_action(app: &mut App, action: Action) {
             | Action::ToggleShowDone
             | Action::ToggleShowFuture
             | Action::Undo
-            | Action::Redo => {
+            | Action::Redo
+            | Action::TrashRestore
+            | Action::EmptyTrash => {
                 app.flash("read-only in archive");
+                return;
+            }
+            _ => {}
+        }
+    }
+    // Trash view is read-only with three exceptions: `x` restores the row at
+    // the cursor, `dd` is the second delete that removes it for good, and `E`
+    // empties the whole trash.
+    if app.view() == View::Trash {
+        match action {
+            Action::ToggleComplete | Action::TrashRestore => {
+                if let Some(idx) = app.cur_abs() {
+                    app.trash_restore(idx);
+                }
+                return;
+            }
+            Action::Delete => {
+                if let Some(idx) = app.cur_abs() {
+                    app.trash_delete(idx);
+                }
+                return;
+            }
+            Action::EmptyTrash => {
+                app.empty_trash();
+                return;
+            }
+            Action::BeginAdd
+            | Action::BeginEdit
+            | Action::BeginEditInsert
+            | Action::CyclePriority
+            | Action::MoveTaskDown
+            | Action::MoveTaskUp
+            | Action::ToggleVisual
+            | Action::ToggleSelected
+            | Action::BeginSearch
+            | Action::BeginPromptProject
+            | Action::BeginPromptContext
+            | Action::PickProject
+            | Action::PickContext
+            | Action::PickSavedFilter
+            | Action::SaveCurrentFilter
+            | Action::CycleSort
+            | Action::ToggleShowDone
+            | Action::ToggleShowFuture
+            | Action::ArchiveCompleted
+            | Action::Undo
+            | Action::Redo => {
+                app.flash("read-only in trash");
                 return;
             }
             _ => {}
@@ -1263,6 +1334,17 @@ fn apply_action(app: &mut App, action: Action) {
                 app.flash("no completed tasks to archive");
             }
         }
+        Action::ToggleTrashView => {
+            let next = if app.view() == View::Trash {
+                View::List
+            } else {
+                View::Trash
+            };
+            app.set_view(next);
+        }
+        // Only meaningful inside the Trash view, which is handled by the guard
+        // above; reaching here means the user is somewhere else.
+        Action::TrashRestore | Action::EmptyTrash => app.flash("not in trash"),
         Action::ArmF => app.chord.arm('f'),
         Action::PickProject => app.enter_pick_project(),
         Action::PickContext => app.enter_pick_context(),
@@ -1993,6 +2075,94 @@ mod tests {
         let mut app = build_app_with_archive("(A) first\n", Some("x 2026-05-01 done thing\n"));
         apply_action(&mut app, Action::ToggleArchiveView);
         apply_action(&mut app, Action::Redo);
+        assert_eq!(app.flash_active(), Some("read-only in archive"));
+    }
+
+    fn trash_lines(app: &App) -> Vec<&str> {
+        app.trash().tasks().iter().map(|t| t.raw.as_str()).collect()
+    }
+
+    #[test]
+    fn t_resolves_to_toggle_trash_view_and_e_to_empty() {
+        let mut app = build_app_with_archive("(A) one\n", None);
+        assert_eq!(resolve(&mut app, key('t')), Some(Action::ToggleTrashView));
+        assert_eq!(resolve(&mut app, key('E')), Some(Action::EmptyTrash));
+        // `T` stays the theme picker — `t` must not shadow it.
+        assert_eq!(resolve(&mut app, key('T')), Some(Action::OpenThemePicker));
+
+        apply_action(&mut app, Action::ToggleTrashView);
+        assert_eq!(app.view(), View::Trash);
+        apply_action(&mut app, Action::ToggleTrashView);
+        assert_eq!(app.view(), View::List, "t toggles back to the list");
+    }
+
+    #[test]
+    fn delete_sends_to_trash_and_second_delete_is_permanent() {
+        let mut app = build_app_with_archive("(A) one\n(B) two\n", None);
+        app.cursor = 1;
+        apply_action(&mut app, Action::Delete);
+        assert_eq!(task_lines(&app), ["(A) one"]);
+        assert_eq!(trash_lines(&app), ["(B) two"]);
+
+        apply_action(&mut app, Action::ToggleTrashView);
+        app.cursor = 0;
+        apply_action(&mut app, Action::Delete);
+        assert!(trash_lines(&app).is_empty(), "second delete is permanent");
+        assert_eq!(app.flash_active(), Some("deleted permanently"));
+    }
+
+    #[test]
+    fn x_in_trash_restores_to_the_live_list() {
+        let mut app = build_app_with_archive("(A) one\n(B) two\n", None);
+        app.cursor = 1;
+        apply_action(&mut app, Action::Delete);
+        apply_action(&mut app, Action::ToggleTrashView);
+        app.cursor = 0;
+        apply_action(&mut app, Action::ToggleComplete);
+        assert!(trash_lines(&app).is_empty());
+        assert_eq!(task_lines(&app), ["(A) one", "(B) two"]);
+    }
+
+    #[test]
+    fn empty_trash_clears_every_row() {
+        let mut app = build_app_with_archive("a\nb\nc\n", None);
+        app.cursor = 2;
+        apply_action(&mut app, Action::Delete);
+        app.cursor = 1;
+        apply_action(&mut app, Action::Delete);
+        apply_action(&mut app, Action::ToggleTrashView);
+        assert_eq!(trash_lines(&app).len(), 2);
+        apply_action(&mut app, Action::EmptyTrash);
+        assert!(trash_lines(&app).is_empty());
+    }
+
+    #[test]
+    fn edit_actions_are_read_only_in_trash() {
+        let mut app = build_app_with_archive("(A) one\n", None);
+        app.cursor = 0;
+        apply_action(&mut app, Action::Delete);
+        apply_action(&mut app, Action::ToggleTrashView);
+        for action in [
+            Action::BeginAdd,
+            Action::BeginEdit,
+            Action::CyclePriority,
+            Action::Undo,
+            Action::Redo,
+        ] {
+            apply_action(&mut app, action);
+            assert_eq!(
+                app.flash_active(),
+                Some("read-only in trash"),
+                "{action:?} must be refused in the trash view"
+            );
+        }
+    }
+
+    #[test]
+    fn trash_actions_are_refused_in_the_archive_view() {
+        let mut app = build_app_with_archive("(A) one\n", Some("x 2026-05-01 2026-04-01 old\n"));
+        apply_action(&mut app, Action::ToggleArchiveView);
+        apply_action(&mut app, Action::EmptyTrash);
         assert_eq!(app.flash_active(), Some("read-only in archive"));
     }
 

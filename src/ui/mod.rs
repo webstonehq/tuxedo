@@ -22,6 +22,7 @@ pub mod status;
 pub mod task_row;
 pub mod theme_picker;
 pub mod title;
+pub mod trash;
 pub mod welcome;
 
 // Pane and overlay sizing. Promoted out of inline literals so the three
@@ -89,6 +90,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     match app.view() {
         View::List => list::render(frame, center_area, app),
         View::Archive => archive::render(frame, center_area, app),
+        View::Trash => trash::render(frame, center_area, app),
     }
     if let Some(ra) = right_area {
         detail::render(frame, ra, app);

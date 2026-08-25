@@ -3,9 +3,10 @@ use super::outcome::{
     AddOutcome, BulkCompleteOutcome, BulkDeleteOutcome, CompleteOutcome, DeleteOutcome,
     EditOutcome, MoveOutcome, PriorityOutcome, Reconcile, StoreError, TagOutcome,
 };
+use super::sidefile::Refresh;
 use crate::core::outcome::RenameOutcome;
 use crate::recurrence::{self, RecSpec};
-use crate::todo::{self, TagError};
+use crate::todo::{self, TagError, Task};
 
 impl Store {
     pub fn toggle_complete(&mut self, abs: usize) -> CompleteOutcome {
@@ -120,12 +121,14 @@ impl Store {
             return MoveOutcome::Unchanged;
         }
         let previous = self.tasks.clone();
+        let snapshot = self.snapshot();
         for &(abs, target) in swaps {
             self.tasks.swap(abs, target);
         }
         match self.persist() {
             Ok(()) => {
-                self.history.push(previous);
+                self.history.push(snapshot);
+                self.mark_history_dirty();
                 MoveOutcome::Moved
             }
             Err(e) => {
@@ -135,6 +138,8 @@ impl Store {
         }
     }
 
+    /// Move the task at `abs` into `trash.txt`. It takes a second delete, from
+    /// the Trash view, to remove it for good.
     pub fn delete(&mut self, abs: usize) -> DeleteOutcome {
         match self.reconcile() {
             Reconcile::Unchanged => {}
@@ -143,11 +148,31 @@ impl Store {
         if abs >= self.tasks.len() {
             return DeleteOutcome::OutOfRange;
         }
+        match self.trash.refresh_for_mutation() {
+            Refresh::Ready => {}
+            Refresh::Reloaded => {
+                self.note_side_changed();
+                return DeleteOutcome::TrashReloaded;
+            }
+            Refresh::Error(e) => return DeleteOutcome::Error(StoreError::TrashIo(e)),
+        }
+        // Snapshot before either write so one undo puts both files back.
         self.push_history();
+        let removed = self.tasks[abs].clone();
+        // trash.txt first: a failed todo write must not lose the task.
+        let previous_trash = match self.push_to_trash(&[removed]) {
+            Ok(body) => body,
+            Err(e) => return DeleteOutcome::Error(e),
+        };
+        let restore = self.tasks.clone();
         self.tasks.remove(abs);
         match self.persist() {
             Ok(()) => DeleteOutcome::Deleted { abs },
-            Err(e) => DeleteOutcome::Error(e),
+            Err(e) => {
+                self.tasks = restore;
+                self.trash.rollback(&previous_trash);
+                DeleteOutcome::Error(e)
+            }
         }
     }
 
@@ -503,14 +528,38 @@ impl Store {
             return BulkDeleteOutcome::Nothing;
         }
         indices.sort_by(|a, b| b.cmp(a));
+        match self.trash.refresh_for_mutation() {
+            Refresh::Ready => {}
+            Refresh::Reloaded => {
+                self.note_side_changed();
+                return BulkDeleteOutcome::TrashReloaded;
+            }
+            Refresh::Error(e) => return BulkDeleteOutcome::Error(StoreError::TrashIo(e)),
+        }
         self.push_history();
         let deleted = indices.len();
+        // `indices` is descending, so collect in ascending order to keep the
+        // trashed lines in the same relative order they had in the list.
+        let removed: Vec<Task> = indices
+            .iter()
+            .rev()
+            .map(|&i| self.tasks[i].clone())
+            .collect();
+        let previous_trash = match self.push_to_trash(&removed) {
+            Ok(body) => body,
+            Err(e) => return BulkDeleteOutcome::Error(e),
+        };
+        let restore = self.tasks.clone();
         for abs in indices {
             self.tasks.remove(abs);
         }
         match self.persist() {
             Ok(()) => BulkDeleteOutcome::Done { deleted },
-            Err(e) => BulkDeleteOutcome::Error(e),
+            Err(e) => {
+                self.tasks = restore;
+                self.trash.rollback(&previous_trash);
+                BulkDeleteOutcome::Error(e)
+            }
         }
     }
 }

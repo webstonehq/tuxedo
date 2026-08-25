@@ -32,6 +32,11 @@ pub enum Action {
     ToggleSelected,
     GoList,
     ToggleArchiveView,
+    ToggleTrashView,
+    /// `x` in the Trash view — put a deleted task back in the live list.
+    TrashRestore,
+    /// `E` in the Trash view — delete everything in the trash.
+    EmptyTrash,
     ArchiveCompleted,
     ArmF,
     PickProject,
@@ -94,6 +99,9 @@ impl Action {
             "toggle_selected" => Some(Self::ToggleSelected),
             "go_list" | "list" => Some(Self::GoList),
             "toggle_archive_view" | "archive_view" => Some(Self::ToggleArchiveView),
+            "toggle_trash_view" | "trash_view" => Some(Self::ToggleTrashView),
+            "trash_restore" | "restore" => Some(Self::TrashRestore),
+            "empty_trash" => Some(Self::EmptyTrash),
             "archive_completed" => Some(Self::ArchiveCompleted),
             "arm_f" => Some(Self::ArmF),
             "pick_project" => Some(Self::PickProject),

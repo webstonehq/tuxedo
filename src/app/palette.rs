@@ -98,6 +98,21 @@ pub const ENTRIES: &[PaletteEntry] = &[
         action: Action::Redo,
     },
     PaletteEntry {
+        label: "trash tab",
+        keys: "t",
+        action: Action::ToggleTrashView,
+    },
+    PaletteEntry {
+        label: "restore from trash",
+        keys: "x",
+        action: Action::TrashRestore,
+    },
+    PaletteEntry {
+        label: "empty trash",
+        keys: "E",
+        action: Action::EmptyTrash,
+    },
+    PaletteEntry {
         label: "cursor down",
         keys: "j / ↓",
         action: Action::CursorDown,
@@ -542,6 +557,9 @@ mod tests {
             Action::OpenCommandPalette,
             Action::Undo,
             Action::Redo,
+            Action::ToggleTrashView,
+            Action::TrashRestore,
+            Action::EmptyTrash,
             Action::ToggleVisual,
             Action::ToggleSelected,
             Action::GoList,

@@ -9,7 +9,8 @@ use crate::app::WeekStart;
 use crate::core::AddOutcome as CoreAdd;
 use crate::core::{
     ArchiveDeleteOutcome, ArchiveOutcome, CompleteOutcome, DeleteOutcome, EditOutcome, MoveOutcome,
-    PriorityOutcome, RedoOutcome, RenameOutcome, TagOutcome, UnarchiveOutcome, UndoOutcome,
+    PriorityOutcome, RedoOutcome, RenameOutcome, TagOutcome, TrashDeleteOutcome, TrashEmptyOutcome,
+    TrashRestoreOutcome, UnarchiveOutcome, UndoOutcome,
 };
 use crate::nl;
 use crate::note;
@@ -164,6 +165,11 @@ impl App {
             }
             DeleteOutcome::Aborted(r) => self.handle_reconcile_abort(r),
             DeleteOutcome::OutOfRange => {}
+            DeleteOutcome::TrashReloaded => {
+                self.flash("trash.txt changed on disk; reloaded");
+                self.recompute_visible();
+                self.clamp_cursor();
+            }
             DeleteOutcome::Error(e) => self.flash(format!("write failed: {e}")),
         }
     }
@@ -401,6 +407,58 @@ impl App {
         }
     }
 
+    pub fn trash_restore(&mut self, trash_idx: usize) {
+        match self.store.trash_restore(trash_idx) {
+            TrashRestoreOutcome::Restored => {
+                self.flash("restored");
+                self.recompute_visible();
+                self.clamp_cursor();
+            }
+            TrashRestoreOutcome::OutOfRange => {}
+            TrashRestoreOutcome::TrashReloaded => {
+                self.flash("trash.txt changed on disk; reloaded");
+                self.recompute_visible();
+                self.clamp_cursor();
+            }
+            TrashRestoreOutcome::Aborted(r) => self.handle_reconcile_abort(r),
+            TrashRestoreOutcome::Error(e) => self.flash(format!("restore failed: {e}")),
+        }
+    }
+
+    pub fn trash_delete(&mut self, trash_idx: usize) {
+        match self.store.trash_delete(trash_idx) {
+            TrashDeleteOutcome::Deleted => {
+                self.flash("deleted permanently");
+                self.recompute_visible();
+                self.clamp_cursor();
+            }
+            TrashDeleteOutcome::OutOfRange => {}
+            TrashDeleteOutcome::TrashReloaded => {
+                self.flash("trash.txt changed on disk; reloaded");
+                self.recompute_visible();
+                self.clamp_cursor();
+            }
+            TrashDeleteOutcome::Error(e) => self.flash(format!("delete failed: {e}")),
+        }
+    }
+
+    pub fn empty_trash(&mut self) {
+        match self.store.trash_empty() {
+            TrashEmptyOutcome::Emptied { emptied } => {
+                self.flash(format!("emptied trash ({emptied})"));
+                self.recompute_visible();
+                self.clamp_cursor();
+            }
+            TrashEmptyOutcome::Nothing => self.flash("trash is already empty"),
+            TrashEmptyOutcome::TrashReloaded => {
+                self.flash("trash.txt changed on disk; reloaded");
+                self.recompute_visible();
+                self.clamp_cursor();
+            }
+            TrashEmptyOutcome::Error(e) => self.flash(format!("empty failed: {e}")),
+        }
+    }
+
     pub fn archive_completed(&mut self) {
         match self.store.archive_completed() {
             ArchiveOutcome::Archived { count } => {
@@ -476,8 +534,9 @@ mod tests {
         app.cursor = 2;
         let new_path = test_path();
         let done = new_path.parent().expect("temp parent").join("done.txt");
+        let trash = new_path.parent().expect("temp parent").join("trash.txt");
 
-        app.open_file(new_path.clone(), done, "fresh task\n".into());
+        app.open_file(new_path.clone(), done, trash, "fresh task\n".into());
 
         assert_eq!(
             app.file_path, new_path,

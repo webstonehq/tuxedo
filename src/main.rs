@@ -97,6 +97,9 @@ fn main() -> Result<()> {
     // writes a history file.
     app_state.enable_history_persistence();
     app_state.config_path = Config::path();
+    // Derive the which-key menus once the bindings are known, so a chord
+    // rebound in `keybinds.toml` is advertised under its real key.
+    app_state.set_whichkey(tuxedo::whichkey::Registry::from_keybinds(&keybinds));
     app_state.mode = start_mode;
     // Start the config hot-reload watcher.
     let config_rx = app_state
@@ -1019,6 +1022,24 @@ fn handle_prompt(app: &mut App, key: KeyEvent) {
 /// Mutates the chord state because chord progress is part of interpreting
 /// the key, not a separate concern.
 fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> Option<Action> {
+    let before = app.chord.pending();
+    let action = resolve_normal_key_inner(app, key, keybinds);
+    // A key that neither completed the pending chord nor armed a new one is
+    // unrelated to it (`f` then `j`), so the leader is dropped rather than
+    // left to catch the *next* keystroke. Matters most with the which-key
+    // menu enabled, where an armed leader otherwise waits — and keeps its
+    // menu on screen — indefinitely.
+    if before.is_some() && app.chord.pending() == before {
+        app.chord.clear();
+    }
+    action
+}
+
+fn resolve_normal_key_inner(
+    app: &mut App,
+    key: KeyEvent,
+    keybinds: &KeyBindings,
+) -> Option<Action> {
     match keybinds.resolve_normal(key, &mut app.chord) {
         Some(ResolvedKey::Action(action)) => return Some(action),
         Some(ResolvedKey::Pending) => return None,
@@ -1448,6 +1469,13 @@ fn apply_action(app: &mut App, action: Action) {
 }
 
 fn handle_normal(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    // Esc dismisses an open which-key menu and nothing else: the leader was
+    // a false start, so unwinding filters/selection on top of it would be a
+    // surprise.
+    if key.code == KeyCode::Esc && app.whichkey_menu().is_some() {
+        app.chord.clear();
+        return;
+    }
     if let Some(action) = resolve_normal_key(app, key, keybinds) {
         apply_action(app, action);
     }
@@ -1797,6 +1825,76 @@ mod tests {
         apply_action(&mut app, Action::ArmF);
         // 'p' after armed 'f' picks project, not cycles priority.
         assert_eq!(resolve(&mut app, key('p')), Some(Action::PickProject));
+    }
+
+    #[test]
+    fn unrelated_key_dismisses_an_armed_leader() {
+        let mut app = build_app();
+        assert_eq!(resolve(&mut app, key('f')), Some(Action::ArmF));
+        apply_action(&mut app, Action::ArmF);
+        // 'j' is not an `f` continuation: it moves the cursor and drops the
+        // leader, so the *next* 'p' cycles priority rather than completing a
+        // stale `fp`.
+        assert_eq!(resolve(&mut app, key('j')), Some(Action::CursorDown));
+        assert!(app.chord.active().is_none());
+        assert_eq!(resolve(&mut app, key('p')), Some(Action::CyclePriority));
+    }
+
+    #[test]
+    fn unmapped_key_dismisses_an_armed_leader() {
+        let mut app = build_app();
+        assert_eq!(resolve(&mut app, key('g')), None);
+        assert_eq!(app.chord.active(), Some('g'));
+        // 'z' is bound to nothing at all — it still clears the leader.
+        assert_eq!(resolve(&mut app, key('z')), None);
+        assert!(app.chord.active().is_none());
+    }
+
+    #[test]
+    fn esc_dismisses_the_which_key_menu_without_unwinding_filters() {
+        let mut app = build_app();
+        app.chord.set_which_key(Some(Duration::ZERO));
+        app.set_project_filter(Some("tuxedo".to_string()));
+        app.chord.arm('f');
+        assert!(app.whichkey_menu().is_some());
+
+        handle_normal(
+            &mut app,
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            &KeyBindings::default(),
+        );
+        assert!(app.whichkey_menu().is_none(), "menu dismissed");
+        assert_eq!(
+            app.filter().project.as_deref(),
+            Some("tuxedo"),
+            "the filter Esc would normally clear is left alone"
+        );
+
+        // With no menu open, Esc resumes its usual job.
+        handle_normal(
+            &mut app,
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            &KeyBindings::default(),
+        );
+        assert!(app.filter().project.is_none());
+    }
+
+    #[test]
+    fn which_key_menu_lists_the_leaders_continuations() {
+        let mut app = build_app();
+        app.chord.set_which_key(Some(Duration::ZERO));
+        // Nothing armed: no menu.
+        assert!(app.whichkey_menu().is_none());
+
+        app.chord.arm('y');
+        let (leader, entries) = app.whichkey_menu().expect("y menu");
+        assert_eq!(leader, 'y');
+        let keys: Vec<&str> = entries.iter().map(|e| e.keys.as_str()).collect();
+        assert_eq!(keys, vec!["b", "y"]);
+
+        // Completing the chord takes the menu down with it.
+        assert_eq!(resolve(&mut app, key('b')), Some(Action::CopyBody));
+        assert!(app.whichkey_menu().is_none());
     }
 
     #[test]

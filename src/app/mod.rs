@@ -106,6 +106,10 @@ pub struct App {
     pub selection: Selection,
     flash_state: Flash,
     pub chord: Chord,
+    /// Which-key menus, derived from the palette catalog plus any chords in
+    /// `keybinds.toml`. Built-ins only until the binary calls
+    /// [`App::set_whichkey`] with the loaded bindings.
+    pub whichkey: crate::whichkey::Registry,
     pub file_path: PathBuf,
     /// Resolved path of the on-disk config file. Set by the binary after
     /// construction so the settings overlay can render a stable, real path
@@ -232,6 +236,7 @@ impl App {
             selection: Selection::default(),
             flash_state: Flash::default(),
             chord: Chord::default(),
+            whichkey: crate::whichkey::Registry::builtin(),
             file_path,
             config_path: None,
             should_quit: false,
@@ -250,8 +255,24 @@ impl App {
             theme_pick_orig: 0,
             week_start: WeekStart::Sunday,
         };
+        app.chord.set_which_key(app.prefs.which_key);
         app.recompute_visible();
         app
+    }
+
+    /// Adopt the which-key menus derived from the user's `keybinds.toml`.
+    /// Called by the binary once, after the bindings are loaded.
+    pub fn set_whichkey(&mut self, registry: crate::whichkey::Registry) {
+        self.whichkey = registry;
+    }
+
+    /// Rows the which-key menu should show right now: `None` unless a leader
+    /// is armed, the menu is enabled, its reveal delay has elapsed, and that
+    /// leader actually has continuations to list.
+    pub fn whichkey_menu(&self) -> Option<(char, &[crate::whichkey::MenuEntry])> {
+        let leader = self.chord.menu_leader()?;
+        let entries = self.whichkey.menu(leader)?;
+        Some((leader, entries))
     }
 
     /// Rebind the App to a different on-disk file at runtime, replacing the
@@ -704,6 +725,7 @@ impl App {
             })
             .collect();
         self.week_start = new_cfg.week_start.unwrap_or(WeekStart::Sunday);
+        self.chord.set_which_key(self.prefs.which_key);
         self.recompute_visible();
     }
 

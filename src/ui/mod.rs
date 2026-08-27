@@ -24,6 +24,7 @@ pub mod theme_picker;
 pub mod title;
 pub mod trash;
 pub mod welcome;
+pub mod whichkey;
 
 // Pane and overlay sizing. Promoted out of inline literals so the three
 // `MIN_BODY_W` references below stay in sync, and so tweaking a sidebar
@@ -176,6 +177,17 @@ pub fn draw(frame: &mut Frame, app: &App) {
             welcome::render(frame, r, app);
         }
         _ => {}
+    }
+
+    // The which-key menu rides on top of the list, but never over another
+    // overlay: those own the keyboard, so no chord leader can be armed
+    // underneath them.
+    if matches!(app.mode, Mode::Normal | Mode::Visual)
+        && let Some((leader, entries)) = app.whichkey_menu()
+    {
+        let r = whichkey::area_for(body_area, entries);
+        frame.render_widget(Clear, r);
+        whichkey::render(frame, r, app, leader, entries);
     }
     // OSC 8 hyperlinks are applied post-draw by the caller (see
     // `hyperlinks::collect` + `emit_overlay`). Doing it inside the buffer

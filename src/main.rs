@@ -1535,6 +1535,28 @@ mod tests {
     }
 
     #[test]
+    fn cycle_prefs_persist_to_config_path() {
+        let path = mktempcfg("prefs-save");
+        let _ = std::fs::remove_file(&path);
+
+        let mut app = build_app();
+        app.config_path = Some(path.clone());
+
+        app.cycle_density();
+        app.cycle_sort();
+        // cycle_theme() also exercised for parity — no dedicated App-level
+        // wrapper test exists for it today either.
+        app.cycle_theme();
+
+        let saved = Config::load_from(&path);
+        assert_eq!(saved.density, Some(app.prefs.density));
+        assert_eq!(saved.sort, Some(app.prefs.sort));
+        assert_eq!(saved.theme.as_deref(), Some(app.theme().name));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
     fn pick_theme_t_cycles_like_j_and_esc_still_cancels() {
         let mut app = build_app();
         app.enter_pick_theme();

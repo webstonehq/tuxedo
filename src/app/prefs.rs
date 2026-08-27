@@ -1,4 +1,5 @@
 use std::io;
+use std::path::Path;
 
 use super::types::{Density, Sort};
 use crate::app::WeekStart;
@@ -141,16 +142,16 @@ impl Prefs {
         format!("week_start: {}", self.week_start)
     }
 
-    /// Persist to the XDG config path. Returns the IO error so the caller
-    /// can flash it (writing to stderr from inside the alt-screen would
-    /// corrupt the TUI). Saving is best-effort — callers that don't care
-    /// about reporting can `let _ = prefs.save();`.
+    /// Persist to an explicit config path. Returns the IO error so the
+    /// caller can flash it (writing to stderr from inside the alt-screen
+    /// would corrupt the TUI). Saving is best-effort — callers that don't
+    /// care about reporting can `let _ = prefs.save_to(path);`.
     ///
     /// Loads the on-disk config first so non-pref fields (like
     /// `share_token` / `share_port`, owned by the capture server) are
     /// preserved across pref toggles.
-    pub fn save(&self) -> io::Result<()> {
-        let mut cfg = Config::load();
+    pub fn save_to(&self, path: &Path) -> io::Result<()> {
+        let mut cfg = Config::load_from(path);
         cfg.theme = Some(self.theme().name.to_string());
         cfg.density = Some(self.density);
         cfg.sort = Some(self.sort);
@@ -161,6 +162,13 @@ impl Prefs {
         cfg.show_done = Some(self.show_done);
         cfg.show_future = Some(self.show_future);
         cfg.hidden_keys = self.hidden_keys.clone();
-        cfg.save()
+        cfg.save_to(path)
+    }
+
+    /// Persist to the XDG config path. See [`Prefs::save_to`].
+    pub fn save(&self) -> io::Result<()> {
+        let path = Config::path()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no config dir"))?;
+        self.save_to(&path)
     }
 }

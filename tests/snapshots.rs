@@ -493,6 +493,7 @@ fn list_scrolls_to_keep_cursor_visible_when_below_fold() {
         "2026-05-06".to_string(),
         Config::default(),
     );
+    app.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
     app.prefs.density = Density::Compact;
     app.prefs.layout.left = false;
     app.prefs.layout.right = false;

@@ -1411,6 +1411,8 @@ fn copy_payload(app: &App, body_only: bool) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
     use chrono::NaiveDate;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -1435,6 +1437,14 @@ mod tests {
 
     fn task_lines(app: &App) -> Vec<&str> {
         app.tasks().iter().map(|task| task.raw.as_str()).collect()
+    }
+
+    fn mktempcfg(basename: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "tuxedo-{basename}-{}-{:?}.txt",
+            std::process::id(),
+            std::thread::current().id()
+        ))
     }
 
     fn welcome_app(name: &str) -> (App, std::path::PathBuf) {
@@ -1577,26 +1587,23 @@ mod tests {
     }
 
     fn build_app() -> App {
-        let path = std::env::temp_dir().join(format!(
-            "tuxedo-bindings-{}-{:?}.txt",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let path = mktempcfg("bindings");
         let _ = std::fs::write(&path, "a\nb\nc\n");
-        App::new(
+        let mut app = App::new(
             path,
             "a\nb\nc\n".into(),
             "2026-05-07".into(),
             Config::default(),
-        )
+        );
+        // Give saves a scratch destination so tests that exercise a
+        // save_prefs-triggering action (e.g. via handle_settings) never
+        // fall through to the real XDG config path.
+        app.config_path = Some(mktempcfg("config"));
+        app
     }
 
     fn build_app_with_due() -> App {
-        let path = std::env::temp_dir().join(format!(
-            "tuxedo-bindings-{}-{:?}.txt",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let path = mktempcfg("bindings");
         let _ = std::fs::write(&path, "Buy milk due:2026-06-30\n");
         App::new(
             path,

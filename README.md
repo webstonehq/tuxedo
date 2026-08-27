@@ -682,8 +682,8 @@ Planned and in-flight work lives in [`todo.txt`](./todo.txt) — eat your own do
 ## Contributing
 
 Issues and pull requests are welcome. For larger changes, please open an
-issue first to discuss the approach. Run `mise run fmt clippy test` (or the
-plain cargo equivalents) before submitting.
+issue first to discuss the approach. Run `mise run preflight` (or the
+plain cargo equivalents described in [Development](#development)) before submitting.
 
 ## License
 

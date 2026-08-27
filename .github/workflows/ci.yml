@@ -28,8 +28,8 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: cargo fmt
-        run: mise run fmt
+      - name: cargo fmt --check
+        run: mise run fmt_check
 
       - name: cargo clippy
         run: mise run clippy

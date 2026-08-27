@@ -14,6 +14,7 @@
 //! during local iteration.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -297,6 +298,38 @@ fn help_overlay() {
     let mut app = make_app();
     app.mode = Mode::Help;
     snapshot_app("help_overlay", &app);
+}
+
+/// The which-key menu, revealed by an armed `f` leader. The reveal delay is
+/// zeroed so the panel is on screen for the very first frame rather than the
+/// test having to sleep through it.
+#[test]
+fn whichkey_menu_for_f_leader() {
+    let mut app = make_app();
+    app.chord.set_which_key(Some(Duration::ZERO));
+    app.chord.arm('f');
+    assert!(app.whichkey_menu().is_some(), "menu should be revealed");
+    snapshot_app("whichkey_menu_for_f_leader", &app);
+}
+
+/// A leader with no continuations draws no panel at all: the body renders
+/// byte-identically to the plain list. Only the status bar differs, since it
+/// still shows the `z…` chord indicator.
+#[test]
+fn whichkey_menu_absent_for_unbound_leader() {
+    let mut app = make_app();
+    app.chord.set_which_key(Some(Duration::ZERO));
+    app.chord.arm('z');
+    assert!(app.whichkey_menu().is_none());
+    let plain = make_app();
+    let body = |app: &App| {
+        buffer_to_text(&render(app))
+            .lines()
+            .take(usize::from(ROWS) - 1)
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert_eq!(body(&app), body(&plain));
 }
 
 #[test]

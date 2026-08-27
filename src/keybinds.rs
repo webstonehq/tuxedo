@@ -131,6 +131,33 @@ impl KeyBindings {
         None
     }
 
+    /// Every configured two-key chord as `(leader, second-key label, action)`.
+    /// Feeds the which-key menu so a rebound chord is advertised under the
+    /// key the user actually presses.
+    pub fn chords(&self) -> Vec<(char, String, Action)> {
+        self.normal
+            .iter()
+            .filter_map(|binding| {
+                let second = binding.second.as_ref()?;
+                let leader = binding.first.leader_char()?;
+                Some((leader, second.label(), binding.action))
+            })
+            .collect()
+    }
+
+    /// Actions the user has bound to a key of their own, chord or not. The
+    /// which-key menu uses this to drop built-in rows for actions that have
+    /// been moved elsewhere.
+    pub fn bound_actions(&self) -> Vec<Action> {
+        let mut out: Vec<Action> = Vec::new();
+        for binding in &self.normal {
+            if !out.contains(&binding.action) {
+                out.push(binding.action);
+            }
+        }
+        out
+    }
+
     pub fn path() -> Option<PathBuf> {
         let base = crate::xdg::config_home()?;
         Some(Self::path_in(&base))
@@ -200,6 +227,27 @@ impl KeyPress {
     fn matches(&self, key: KeyEvent) -> bool {
         let code = normalized_code(key.code, key.modifiers);
         self.code == code && self.modifiers == normalized_modifiers(code, key.modifiers)
+    }
+
+    /// Display form for the menu: `"p"`, `"Ctrl-n"`, `"Enter"`.
+    fn label(&self) -> String {
+        let mut out = String::new();
+        if self.modifiers.contains(KeyModifiers::CONTROL) {
+            out.push_str("Ctrl-");
+        }
+        if self.modifiers.contains(KeyModifiers::ALT) {
+            out.push_str("Alt-");
+        }
+        if self.modifiers.contains(KeyModifiers::SHIFT) {
+            out.push_str("Shift-");
+        }
+        match self.code {
+            KeyCode::Char(' ') => out.push_str("Space"),
+            KeyCode::Char(c) => out.push(c),
+            KeyCode::F(n) => out.push_str(&format!("F{n}")),
+            other => out.push_str(&format!("{other}")),
+        }
+        out
     }
 
     fn leader_char(&self) -> Option<char> {

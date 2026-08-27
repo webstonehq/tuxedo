@@ -279,6 +279,13 @@ pub const ENTRIES: &[PaletteEntry] = &[
     },
 ];
 
+/// Human-readable label for `action`, or `None` for an action the palette
+/// deliberately omits (`ArmF`, which is only a chord leader). Shared with the
+/// which-key menu so both surfaces describe an action the same way.
+pub fn label_for(action: Action) -> Option<&'static str> {
+    ENTRIES.iter().find(|e| e.action == action).map(|e| e.label)
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct CommandPaletteState {
     /// Highlighted row in the *filtered* list. Reset to 0 whenever the user

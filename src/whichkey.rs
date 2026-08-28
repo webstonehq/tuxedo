@@ -52,7 +52,14 @@ impl Registry {
     /// back if the new binding is itself a chord (a rebind to a single key
     /// simply leaves the menus).
     pub fn from_keybinds(keybinds: &KeyBindings) -> Self {
-        let mut registry = Self::builtin();
+        // `replace_defaults` in `[normal]` means none of the built-in chords
+        // fire any more, so advertising them would be a lie: start empty and
+        // list only what the config binds.
+        let mut registry = if keybinds.replaces_defaults::<Action>() {
+            Self::default()
+        } else {
+            Self::builtin()
+        };
         let rebound = keybinds.bound_actions();
         for entries in registry.groups.values_mut() {
             entries.retain(|entry| !rebound.iter().any(|a| Some(*a) == action_for(entry)));
@@ -184,6 +191,17 @@ mod tests {
         let gg: Vec<&MenuEntry> = g.iter().filter(|e| e.keys == "g").collect();
         assert_eq!(gg.len(), 1, "one row per key");
         assert!(gg[0].label.contains("sort"));
+    }
+
+    #[test]
+    fn replace_defaults_empties_the_builtin_menus() {
+        let kb = KeyBindings::parse("[normal]\nreplace_defaults = true\ndelete = \"zd\"\n");
+        let reg = Registry::from_keybinds(&kb);
+        // The built-in `dd` is gone; only the configured `zd` is listed.
+        assert!(reg.menu('d').is_none());
+        assert!(reg.menu('g').is_none());
+        let z = reg.menu('z').expect("z menu");
+        assert_eq!(z.len(), 1);
     }
 
     #[test]

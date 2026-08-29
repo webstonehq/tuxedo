@@ -14,9 +14,11 @@ use std::path::{Path, PathBuf};
 
 use crate::app::WeekStart;
 use crate::app::{Density, Sort};
+use crate::hooks::HookConfig;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Config {
+    pub hooks: HookConfig,
     pub theme: Option<String>,
     pub density: Option<Density>,
     pub sort: Option<Sort>,
@@ -143,8 +145,13 @@ fn parse(s: &str) -> Config {
             continue;
         };
         let k = k.trim();
-        let v = unquote(v.trim());
+        let raw_value = v.trim();
+        let v = unquote(raw_value);
         match k {
+            "hook.after_create" => c.hooks.after_create = parse_hook_path(raw_value),
+            "hook.after_update" => c.hooks.after_update = parse_hook_path(raw_value),
+            "hook.after_complete" => c.hooks.after_complete = parse_hook_path(raw_value),
+            "hook.after_archive" => c.hooks.after_archive = parse_hook_path(raw_value),
             "theme" => c.theme = Some(v.to_string()),
             "density" => c.density = v.parse().ok(),
             "sort" => c.sort = v.parse().ok(),
@@ -199,6 +206,18 @@ fn parse(s: &str) -> Config {
 fn serialize(c: &Config) -> String {
     let mut out = String::from("# tuxedo config\n");
     // writeln! against a String is infallible; the unwrap can never fire.
+    if let Some(v) = &c.hooks.after_create {
+        let _ = writeln!(out, "hook.after_create = {}", quote_hook_path(v));
+    }
+    if let Some(v) = &c.hooks.after_update {
+        let _ = writeln!(out, "hook.after_update = {}", quote_hook_path(v));
+    }
+    if let Some(v) = &c.hooks.after_complete {
+        let _ = writeln!(out, "hook.after_complete = {}", quote_hook_path(v));
+    }
+    if let Some(v) = &c.hooks.after_archive {
+        let _ = writeln!(out, "hook.after_archive = {}", quote_hook_path(v));
+    }
     if let Some(v) = &c.theme {
         let _ = writeln!(out, "theme = {v}");
     }
@@ -259,6 +278,40 @@ fn unquote(s: &str) -> &str {
     }
 }
 
+fn parse_hook_path(s: &str) -> Option<PathBuf> {
+    let unquoted = unquote(s);
+    if unquoted.trim().is_empty() {
+        return None;
+    }
+    let mut path = String::with_capacity(unquoted.len());
+    let mut escaped = false;
+    for c in unquoted.chars() {
+        if escaped {
+            match c {
+                '\\' | '"' => path.push(c),
+                _ => {
+                    path.push('\\');
+                    path.push(c);
+                }
+            }
+            escaped = false;
+        } else if c == '\\' {
+            escaped = true;
+        } else {
+            path.push(c);
+        }
+    }
+    if escaped {
+        path.push('\\');
+    }
+    Some(PathBuf::from(path))
+}
+
+fn quote_hook_path(path: &Path) -> String {
+    let path = path.to_string_lossy();
+    format!("\"{}\"", path.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
 fn parse_bool(s: &str) -> Option<bool> {
     match s {
         "true" | "on" | "yes" | "1" => Some(true),
@@ -274,6 +327,12 @@ mod tests {
     #[test]
     fn round_trips() {
         let c = Config {
+            hooks: HookConfig {
+                after_create: Some("/opt/tuxedo/hooks/create".into()),
+                after_update: Some("/opt/tuxedo/hooks/update".into()),
+                after_complete: Some("/opt/tuxedo/hooks/complete".into()),
+                after_archive: Some("/opt/tuxedo/hooks/archive".into()),
+            },
             theme: Some("Nord".into()),
             density: Some(Density::Cozy),
             sort: Some(Sort::Due),
@@ -434,6 +493,10 @@ mod tests {
         assert!(path.ends_with("tuxedo/config.toml"));
 
         let written = Config {
+            hooks: HookConfig {
+                after_create: Some("/tmp/tuxedo-hook".into()),
+                ..HookConfig::default()
+            },
             theme: Some("Dawn".into()),
             density: Some(Density::Compact),
             sort: Some(Sort::File),
@@ -456,5 +519,36 @@ mod tests {
         let loaded = Config::load_from(&path);
         assert_eq!(loaded, written);
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn hook_keys_parse_empty_quoted_and_duplicate_values() {
+        let c = parse(
+            "hook.after_create = /first\n\
+             hook.after_create = \"/second script\"\n\
+             hook.after_update = \"\"\n\
+             hook.after_complete =    \n\
+             hook.after_archive = /archive\n",
+        );
+        assert_eq!(
+            c.hooks.after_create,
+            Some(PathBuf::from("/second script")),
+            "last exact key wins"
+        );
+        assert_eq!(c.hooks.after_update, None);
+        assert_eq!(c.hooks.after_complete, None);
+        assert_eq!(c.hooks.after_archive, Some(PathBuf::from("/archive")));
+    }
+
+    #[test]
+    fn hook_paths_with_quotes_and_backslashes_round_trip() {
+        let c = Config {
+            hooks: HookConfig {
+                after_create: Some(PathBuf::from("/hooks/a\\b\"c")),
+                ..HookConfig::default()
+            },
+            ..Config::default()
+        };
+        assert_eq!(parse(&serialize(&c)).hooks, c.hooks);
     }
 }

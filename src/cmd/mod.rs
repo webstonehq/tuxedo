@@ -7,9 +7,11 @@ mod json;
 use anyhow::{Context, Result};
 
 use crate::app::Filter;
+use crate::config::Config;
 use crate::core::filter as corefilter;
 use crate::core::{
-    AddOutcome, ArchiveOutcome, CompleteOutcome, DeleteOutcome, EditOutcome, PriorityOutcome, Store,
+    AddOutcome, ArchiveOutcome, BulkCompleteOutcome, BulkPriorityOutcome, DeleteOutcome,
+    EditOutcome, PriorityOutcome, Store,
 };
 use crate::todo::Task;
 
@@ -93,11 +95,14 @@ pub fn run(argv: &[String]) -> Result<Option<i32>> {
     };
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let mut store = Store::open_sync_with_done(path, done, body, today);
+    if is_mutating_command(&cmd) {
+        store.set_hooks(Config::load().hooks);
+    }
 
     let json = args.json;
     let force = args.force;
     let pos = &args.free;
-    let code = match cmd.as_str() {
+    let mut code = match cmd.as_str() {
         "add" | "a" => cmd_add(&mut store, pos, json),
         "append" | "app" => cmd_text_op(&mut store, pos, json, TextOp::Append),
         "prepend" | "prep" => cmd_text_op(&mut store, pos, json, TextOp::Prepend),
@@ -117,7 +122,38 @@ pub fn run(argv: &[String]) -> Result<Option<i32>> {
             2
         }
     };
+    for report in store.take_hook_reports() {
+        if report.failed() {
+            eprintln!("tuxedo: {}", report.diagnostic());
+            if code == 0 {
+                code = 1;
+            }
+        }
+    }
     Ok(Some(code))
+}
+
+fn is_mutating_command(cmd: &str) -> bool {
+    matches!(
+        cmd,
+        "add"
+            | "a"
+            | "append"
+            | "app"
+            | "prepend"
+            | "prep"
+            | "replace"
+            | "pri"
+            | "p"
+            | "depri"
+            | "dp"
+            | "done"
+            | "do"
+            | "complete"
+            | "del"
+            | "rm"
+            | "archive"
+    )
 }
 
 // ----- helpers -----------------------------------------------------------
@@ -291,6 +327,17 @@ fn cmd_pri(store: &mut Store, pos: &[String], json: bool) -> i32 {
             }
             0
         }
+        PriorityOutcome::Unchanged => {
+            let n = abs + 1;
+            let task = &store.tasks()[abs];
+            if json {
+                json_task("pri", n, task);
+            } else {
+                println!("{n} {}", task.raw);
+                println!("{prefix}: {n} prioritized ({c}).");
+            }
+            0
+        }
         PriorityOutcome::OutOfRange => err(format!("no task {}", abs + 1)),
         PriorityOutcome::Aborted(_) => err("file changed on disk; nothing changed"),
         PriorityOutcome::Error(e) => store_error(json, "pri", e),
@@ -301,7 +348,6 @@ fn cmd_depri(store: &mut Store, pos: &[String], json: bool) -> i32 {
     if pos.is_empty() {
         return usage("depri N...");
     }
-    let prefix = file_prefix(store);
     let len = store.tasks().len();
     let mut indices = Vec::new();
     for s in pos {
@@ -310,25 +356,39 @@ fn cmd_depri(store: &mut Store, pos: &[String], json: bool) -> i32 {
             Err(e) => return err(e),
         }
     }
-    let mut code = 0;
-    for abs in indices {
-        match store.set_priority_at(abs, None) {
-            PriorityOutcome::Changed { abs, .. } => {
-                let n = abs + 1;
-                let t = &store.tasks()[abs];
-                if json {
-                    json_task("depri", n, t);
-                } else {
-                    println!("{n} {}", t.raw);
-                    println!("{prefix}: {n} deprioritized.");
+    match store.clear_priorities(&indices) {
+        BulkPriorityOutcome::Done { changed } => {
+            let prefix = file_prefix(store);
+            if json {
+                for &abs in &changed {
+                    if let Some(task) = store.tasks().get(abs) {
+                        json_task("depri", abs + 1, task);
+                    }
+                }
+            } else {
+                for abs in changed {
+                    if let Some(task) = store.tasks().get(abs) {
+                        let n = abs + 1;
+                        println!("{n} {}", task.raw);
+                        println!("{prefix}: {n} deprioritized.");
+                    }
                 }
             }
-            PriorityOutcome::OutOfRange => code = err(format!("no task {}", abs + 1)),
-            PriorityOutcome::Aborted(_) => code = err("file changed on disk; nothing changed"),
-            PriorityOutcome::Error(e) => code = store_error(json, "depri", e),
+            0
         }
+        BulkPriorityOutcome::NothingToChange => {
+            if json {
+                for abs in indices {
+                    if let Some(task) = store.tasks().get(abs) {
+                        json_task("depri", abs + 1, task);
+                    }
+                }
+            }
+            0
+        }
+        BulkPriorityOutcome::Aborted(_) => err("file changed on disk; nothing changed"),
+        BulkPriorityOutcome::Error(e) => store_error(json, "depri", e),
     }
-    code
 }
 
 fn cmd_done(store: &mut Store, pos: &[String], json: bool) -> i32 {
@@ -343,55 +403,48 @@ fn cmd_done(store: &mut Store, pos: &[String], json: bool) -> i32 {
             Err(e) => return err(e),
         }
     }
-    // Process highest-first so a recurrence successor inserted after a row
-    // doesn't shift the indices of rows we haven't completed yet.
     indices.sort_unstable();
     indices.dedup();
-    indices.reverse();
-
     let prefix = file_prefix(store);
-    // (number, completed task, optional (next number, spawned task))
-    type Completed = (usize, Task, Option<(usize, Task)>);
-    let mut completed: Vec<Completed> = Vec::new();
     let mut code = 0;
+    let mut to_complete = Vec::new();
     for abs in indices {
         if store.tasks()[abs].done {
             code = err(format!("task {} already done", abs + 1));
-            continue;
-        }
-        match store.toggle_complete(abs) {
-            CompleteOutcome::Completed { abs } => {
-                completed.push((abs + 1, store.tasks()[abs].clone(), None));
-            }
-            CompleteOutcome::CompletedSpawned { abs, next } => {
-                completed.push((
-                    abs + 1,
-                    store.tasks()[abs].clone(),
-                    Some((next + 1, store.tasks()[next].clone())),
-                ));
-            }
-            CompleteOutcome::Uncompleted { .. } | CompleteOutcome::OutOfRange => {}
-            CompleteOutcome::Aborted(_) => code = err("file changed on disk; nothing done"),
-            CompleteOutcome::Error(e) => code = store_error(json, "done", e),
+        } else {
+            to_complete.push(abs);
         }
     }
-    completed.reverse(); // back to ascending for display
+    let details = match store.complete_many(&to_complete) {
+        BulkCompleteOutcome::Done { details, .. } => details,
+        BulkCompleteOutcome::NothingToComplete => Vec::new(),
+        BulkCompleteOutcome::Aborted(_) => {
+            code = err("file changed on disk; nothing done");
+            Vec::new()
+        }
+        BulkCompleteOutcome::Error(e) => {
+            code = store_error(json, "done", e);
+            Vec::new()
+        }
+    };
     if json {
-        let refs: Vec<(usize, &Task)> = completed.iter().map(|(n, t, _)| (*n, t)).collect();
+        let refs: Vec<(usize, &Task)> = details
+            .iter()
+            .map(|detail| (detail.abs + 1, &detail.task))
+            .collect();
         println!(
             "{{\"ok\":true,\"action\":\"done\",\"tasks\":{}}}",
             json::task_array(&refs)
         );
     } else {
-        for (n, t, next) in &completed {
-            // todo.sh format for the completion itself.
-            println!("{n} {}", t.raw);
+        for detail in details {
+            let n = detail.abs + 1;
+            println!("{n} {}", detail.task.raw);
             println!("{prefix}: {n} marked as done.");
-            // Recurrence is a tuxedo feature todo.sh lacks; surface the spawned
-            // next instance as a freshly-added task in the same idiom.
-            if let Some((nn, nt)) = next {
-                println!("{nn} {}", nt.raw);
-                println!("{prefix}: {nn} added.");
+            if let Some((next, task)) = detail.spawned {
+                let next = next + 1;
+                println!("{next} {}", task.raw);
+                println!("{prefix}: {next} added.");
             }
         }
     }

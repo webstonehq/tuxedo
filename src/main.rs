@@ -354,6 +354,7 @@ fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
         Mode::Welcome => handle_welcome(app, key),
         Mode::Normal | Mode::Visual => handle_normal(app, key, keybinds),
     }
+    app.apply_hook_reports();
 }
 
 /// First-run welcome prompt. `c` creates `./todo.txt` (the App's current

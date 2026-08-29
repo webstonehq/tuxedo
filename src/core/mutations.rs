@@ -60,9 +60,11 @@ impl Store {
                 if let Err(e) = self.persist() {
                     return CompleteOutcome::Error(e);
                 }
-                if !was_done {
-                    self.post_commit(HookEvent::Complete);
-                }
+                self.post_commit(if was_done {
+                    HookEvent::Uncomplete
+                } else {
+                    HookEvent::Complete
+                });
                 match (was_done, spawned) {
                     (true, _) => CompleteOutcome::Uncompleted { abs },
                     (false, Some(next)) => CompleteOutcome::CompletedSpawned { abs, next },
@@ -183,7 +185,7 @@ impl Store {
         }
         self.push_history();
         self.tasks.remove(abs);
-        match self.persist() {
+        match self.persist_with_hook(HookEvent::Delete) {
             Ok(()) => DeleteOutcome::Deleted { abs },
             Err(e) => DeleteOutcome::Error(e),
         }
@@ -568,7 +570,7 @@ impl Store {
         for abs in indices {
             self.tasks.remove(abs);
         }
-        match self.persist() {
+        match self.persist_with_hook(HookEvent::Delete) {
             Ok(()) => BulkDeleteOutcome::Done { deleted },
             Err(e) => BulkDeleteOutcome::Error(e),
         }
@@ -683,6 +685,39 @@ mod tests {
 
         store.delete(0);
         assert!(store.take_hook_reports().is_empty());
+    }
+
+    #[test]
+    fn generic_hook_takes_precedence_and_covers_all_live_mutations() {
+        let generic = std::path::PathBuf::from("/definitely/not/a/generic-hook");
+        let mut store = build_store("first\nsecond\n");
+        store.set_hooks(HookConfig {
+            after_mutation: Some(generic.clone()),
+            after_create: Some("/definitely/not/a/create-hook".into()),
+            ..HookConfig::default()
+        });
+
+        store.add_finalized("third");
+        let report = store.take_hook_reports().pop().expect("create report");
+        assert_eq!(report.event, HookEvent::Create);
+        assert_eq!(report.script, generic);
+
+        store.complete_many(&[0, 1]);
+        let report = store.take_hook_reports().pop().expect("complete report");
+        assert_eq!(report.event, HookEvent::Complete);
+
+        store.toggle_complete(0);
+        let report = store.take_hook_reports().pop().expect("uncomplete report");
+        assert_eq!(report.event, HookEvent::Uncomplete);
+
+        store.delete_many(&[0, 1]);
+        let reports = store.take_hook_reports();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].event, HookEvent::Delete);
+
+        store.undo();
+        let report = store.take_hook_reports().pop().expect("undo report");
+        assert_eq!(report.event, HookEvent::Undo);
     }
 
     #[test]

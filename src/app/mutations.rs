@@ -659,7 +659,7 @@ mod tests {
         let mut app = build_app("task\n");
         app.reload_config(Config {
             hooks: HookConfig {
-                after_update: Some("relative-hook".into()),
+                after_mutation: Some("relative-hook".into()),
                 ..HookConfig::default()
             },
             ..Config::default()

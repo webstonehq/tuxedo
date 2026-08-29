@@ -148,6 +148,7 @@ fn parse(s: &str) -> Config {
         let raw_value = v.trim();
         let v = unquote(raw_value);
         match k {
+            "hook.after_mutation" => c.hooks.after_mutation = parse_hook_path(raw_value),
             "hook.after_create" => c.hooks.after_create = parse_hook_path(raw_value),
             "hook.after_update" => c.hooks.after_update = parse_hook_path(raw_value),
             "hook.after_complete" => c.hooks.after_complete = parse_hook_path(raw_value),
@@ -206,6 +207,9 @@ fn parse(s: &str) -> Config {
 fn serialize(c: &Config) -> String {
     let mut out = String::from("# tuxedo config\n");
     // writeln! against a String is infallible; the unwrap can never fire.
+    if let Some(v) = &c.hooks.after_mutation {
+        let _ = writeln!(out, "hook.after_mutation = {}", quote_hook_path(v));
+    }
     if let Some(v) = &c.hooks.after_create {
         let _ = writeln!(out, "hook.after_create = {}", quote_hook_path(v));
     }
@@ -328,6 +332,7 @@ mod tests {
     fn round_trips() {
         let c = Config {
             hooks: HookConfig {
+                after_mutation: Some("/opt/tuxedo/hooks/mutation".into()),
                 after_create: Some("/opt/tuxedo/hooks/create".into()),
                 after_update: Some("/opt/tuxedo/hooks/update".into()),
                 after_complete: Some("/opt/tuxedo/hooks/complete".into()),
@@ -494,6 +499,7 @@ mod tests {
 
         let written = Config {
             hooks: HookConfig {
+                after_mutation: Some("/tmp/tuxedo-all-hook".into()),
                 after_create: Some("/tmp/tuxedo-hook".into()),
                 ..HookConfig::default()
             },
@@ -526,6 +532,7 @@ mod tests {
         let c = parse(
             "hook.after_create = /first\n\
              hook.after_create = \"/second script\"\n\
+             hook.after_mutation = /all\n\
              hook.after_update = \"\"\n\
              hook.after_complete =    \n\
              hook.after_archive = /archive\n",
@@ -538,6 +545,7 @@ mod tests {
         assert_eq!(c.hooks.after_update, None);
         assert_eq!(c.hooks.after_complete, None);
         assert_eq!(c.hooks.after_archive, Some(PathBuf::from("/archive")));
+        assert_eq!(c.hooks.after_mutation, Some(PathBuf::from("/all")));
     }
 
     #[test]

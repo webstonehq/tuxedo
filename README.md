@@ -612,11 +612,20 @@ press.
 
 ### Post-commit hooks
 
-Optional hooks run synchronously after a supported task mutation has been
-durably committed. Each value is one **absolute path to an executable file**.
+Optional hooks run synchronously after a task mutation has been durably
+committed. Each value is one **absolute path to an executable file**.
 Tuxedo executes the file directly, never through a shell: do not use `~`, a
 `PATH` lookup, or a command with arguments. Hooks are trusted local programs;
 only configure scripts you are willing to run after task changes.
+
+```toml
+hook.after_mutation = "/home/me/.config/tuxedo/hooks/todo-ledger-lint"
+```
+
+`after_mutation` runs once per successful task-file mutation and takes
+precedence over the event-specific settings below. Use it when one script,
+such as a linter, should run after every change. Leave it unset to configure
+individual events instead:
 
 ```toml
 hook.after_create = "/home/me/.config/tuxedo/hooks/todo-ledger-lint"
@@ -625,17 +634,21 @@ hook.after_complete = "/home/me/.config/tuxedo/hooks/todo-ledger-lint"
 hook.after_archive = "/home/me/.config/tuxedo/hooks/todo-ledger-lint"
 ```
 
-The events run once per successful operation:
+The event value identifies the committed operation:
 
 - `create`: an added task or a TUI inbox drain that merged one or more tasks.
 - `update`: an actual title, metadata, priority, tag, or order change.
 - `complete`: one or more incomplete tasks marked complete, including their
   recurring successors.
 - `archive`: one or more completed tasks moved to `done.txt`.
+- `delete`: a live task deletion, bulk deletion, or permanent archive deletion.
+- `uncomplete`: a completed live task marked incomplete.
+- `undo`: a successful undo operation.
+- `unarchive`: a task moved from `done.txt` back to the live file.
 
-Reads, no-ops, failed writes, deletes, uncomplete, undo, unarchive, and
-archive deletion do not run hooks. A relative configured path is not resolved
-or run; it is reported as a hook failure when its event occurs.
+Reads, no-ops, failed writes, out-of-range requests, and reconciled-away
+mutations do not run hooks. A relative configured path is not resolved or run;
+it is reported as a hook failure when its event occurs.
 
 Every hook starts in the parent directory of the live todo file with no task
 content in its arguments or environment. Tuxedo sets only these hook-specific

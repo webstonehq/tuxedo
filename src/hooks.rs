@@ -10,6 +10,10 @@ pub enum HookEvent {
     Update,
     Complete,
     Archive,
+    Delete,
+    Uncomplete,
+    Undo,
+    Unarchive,
 }
 
 impl HookEvent {
@@ -19,6 +23,10 @@ impl HookEvent {
             Self::Update => "update",
             Self::Complete => "complete",
             Self::Archive => "archive",
+            Self::Delete => "delete",
+            Self::Uncomplete => "uncomplete",
+            Self::Undo => "undo",
+            Self::Unarchive => "unarchive",
         }
     }
 }
@@ -26,6 +34,7 @@ impl HookEvent {
 /// Optional executable paths for each supported post-commit event.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct HookConfig {
+    pub after_mutation: Option<PathBuf>,
     pub after_create: Option<PathBuf>,
     pub after_update: Option<PathBuf>,
     pub after_complete: Option<PathBuf>,
@@ -34,12 +43,15 @@ pub struct HookConfig {
 
 impl HookConfig {
     pub fn script_for(&self, event: HookEvent) -> Option<&Path> {
-        match event {
+        self.after_mutation.as_deref().or(match event {
             HookEvent::Create => self.after_create.as_deref(),
             HookEvent::Update => self.after_update.as_deref(),
             HookEvent::Complete => self.after_complete.as_deref(),
             HookEvent::Archive => self.after_archive.as_deref(),
-        }
+            HookEvent::Delete | HookEvent::Uncomplete | HookEvent::Undo | HookEvent::Unarchive => {
+                None
+            }
+        })
     }
 }
 

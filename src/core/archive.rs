@@ -116,6 +116,7 @@ impl Store {
     }
 
     fn refresh_archive_for_mutation(&mut self) -> ArchiveRefresh {
+        self.resolve_archive_loader();
         let body = match self.read_archive_body() {
             Ok(b) => b,
             Err(e) => return ArchiveRefresh::Error(e),
@@ -123,10 +124,8 @@ impl Store {
         if body != self.archive.last_disk {
             self.archive.tasks = todo::parse_file(&body);
             self.archive.last_disk = body;
-            self.archive.loader = None;
             return ArchiveRefresh::Reloaded;
         }
-        self.archive.loader = None;
         ArchiveRefresh::Ready
     }
 
@@ -272,7 +271,7 @@ impl Store {
         self.archive.last_disk = archive_body;
         self.push_history();
         self.tasks.push(task);
-        if let Err(e) = self.persist() {
+        if let Err(e) = self.persist_with_hook(crate::hooks::HookEvent::Unarchive) {
             return UnarchiveOutcome::Error(e);
         }
         UnarchiveOutcome::Unarchived
@@ -304,6 +303,7 @@ impl Store {
         }
         self.archive.tasks = new_archive;
         self.archive.last_disk = archive_body;
+        self.post_commit(crate::hooks::HookEvent::Delete);
         ArchiveDeleteOutcome::Deleted
     }
 
@@ -404,6 +404,42 @@ mod tests {
         let reports = store.take_hook_reports();
         assert_eq!(reports.len(), 1);
         assert_eq!(reports[0].event, HookEvent::Archive);
+    }
+
+    #[test]
+    fn generic_hook_covers_unarchive_and_archive_delete() {
+        let dir = dir_for("generic-events");
+        let todo_path = dir.join("todo.txt");
+        let done_path = dir.join("done.txt");
+        let generic = std::path::PathBuf::from("/definitely/not/a/generic-hook");
+
+        std::fs::write(&todo_path, "").unwrap();
+        std::fs::write(&done_path, "x 2026-05-05 2026-05-01 archived\n").unwrap();
+        let mut store = Store::open_sync(todo_path.clone(), "".into(), "2026-05-06".into());
+        store.set_hooks(HookConfig {
+            after_mutation: Some(generic.clone()),
+            ..HookConfig::default()
+        });
+        assert!(matches!(store.unarchive(0), UnarchiveOutcome::Unarchived));
+        let report = store.take_hook_reports().pop().expect("unarchive report");
+        assert_eq!(report.event, HookEvent::Unarchive);
+        assert_eq!(report.script, generic);
+
+        std::fs::write(&todo_path, "").unwrap();
+        std::fs::write(&done_path, "x 2026-05-05 2026-05-01 archived\n").unwrap();
+        let mut store = Store::open_sync(todo_path, "".into(), "2026-05-06".into());
+        store.set_hooks(HookConfig {
+            after_mutation: Some("/definitely/not/a/generic-hook".into()),
+            ..HookConfig::default()
+        });
+        assert!(matches!(
+            store.archive_delete(0),
+            ArchiveDeleteOutcome::Deleted
+        ));
+        let reports = store.take_hook_reports();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].event, HookEvent::Delete);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn wait_archive_loaded(store: &mut Store) {

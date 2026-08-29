@@ -44,6 +44,11 @@ fn run_add(dir: &Path, todo: &Path) -> std::process::Output {
 #[test]
 fn successful_hook_preserves_json_success() {
     let (dir, todo) = fixture("exit 0");
+    std::fs::write(
+        dir.join("config/tuxedo/config.toml"),
+        format!("hook.after_mutation = \"{}\"\n", dir.join("hook").display()),
+    )
+    .expect("configure generic hook");
     let output = run_add(&dir, &todo);
     assert_eq!(output.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&output.stdout).contains("\"ok\":true"));

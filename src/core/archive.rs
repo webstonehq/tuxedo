@@ -393,8 +393,7 @@ mod tests {
     fn archive_emits_one_hook_after_both_files_commit() {
         let mut store = build_store("x 2026-05-05 2026-05-01 done\n");
         store.set_hooks(HookConfig {
-            after_archive: Some("/definitely/not/a/tuxedo-hook".into()),
-            ..HookConfig::default()
+            after_mutation: Some("/definitely/not/a/tuxedo-hook".into()),
         });
 
         assert!(matches!(
@@ -418,7 +417,6 @@ mod tests {
         let mut store = Store::open_sync(todo_path.clone(), "".into(), "2026-05-06".into());
         store.set_hooks(HookConfig {
             after_mutation: Some(generic.clone()),
-            ..HookConfig::default()
         });
         assert!(matches!(store.unarchive(0), UnarchiveOutcome::Unarchived));
         let report = store.take_hook_reports().pop().expect("unarchive report");
@@ -430,7 +428,6 @@ mod tests {
         let mut store = Store::open_sync(todo_path, "".into(), "2026-05-06".into());
         store.set_hooks(HookConfig {
             after_mutation: Some("/definitely/not/a/generic-hook".into()),
-            ..HookConfig::default()
         });
         assert!(matches!(
             store.archive_delete(0),
@@ -618,8 +615,7 @@ mod tests {
         std::fs::set_permissions(&script, permissions).unwrap();
         let mut store = Store::new(todo_path.clone(), "before\n".into(), "2026-05-06".into());
         store.set_hooks(HookConfig {
-            after_update: Some(script),
-            ..HookConfig::default()
+            after_mutation: Some(script),
         });
 
         store.append_at(0, "updated");
@@ -662,8 +658,7 @@ mod tests {
         std::fs::set_permissions(&script, permissions).unwrap();
         let mut store = Store::open_sync(todo_path, "before\n".into(), "2026-05-06".into());
         store.set_hooks(HookConfig {
-            after_update: Some(script),
-            ..HookConfig::default()
+            after_mutation: Some(script),
         });
 
         store.append_at(0, "updated");

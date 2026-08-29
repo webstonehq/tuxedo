@@ -153,7 +153,7 @@ impl Store {
     /// queue a report for the caller to render. Hook failures never affect the
     /// already-committed task mutation.
     pub(crate) fn post_commit(&mut self, event: HookEvent) {
-        let Some(script) = self.hooks.script_for(event).map(Path::to_path_buf) else {
+        let Some(script) = self.hooks.script().map(Path::to_path_buf) else {
             return;
         };
         let context = hook_context(&self.file_path, self.archive.path());

@@ -149,10 +149,6 @@ fn parse(s: &str) -> Config {
         let v = unquote(raw_value);
         match k {
             "hook.after_mutation" => c.hooks.after_mutation = parse_hook_path(raw_value),
-            "hook.after_create" => c.hooks.after_create = parse_hook_path(raw_value),
-            "hook.after_update" => c.hooks.after_update = parse_hook_path(raw_value),
-            "hook.after_complete" => c.hooks.after_complete = parse_hook_path(raw_value),
-            "hook.after_archive" => c.hooks.after_archive = parse_hook_path(raw_value),
             "theme" => c.theme = Some(v.to_string()),
             "density" => c.density = v.parse().ok(),
             "sort" => c.sort = v.parse().ok(),
@@ -209,18 +205,6 @@ fn serialize(c: &Config) -> String {
     // writeln! against a String is infallible; the unwrap can never fire.
     if let Some(v) = &c.hooks.after_mutation {
         let _ = writeln!(out, "hook.after_mutation = {}", quote_hook_path(v));
-    }
-    if let Some(v) = &c.hooks.after_create {
-        let _ = writeln!(out, "hook.after_create = {}", quote_hook_path(v));
-    }
-    if let Some(v) = &c.hooks.after_update {
-        let _ = writeln!(out, "hook.after_update = {}", quote_hook_path(v));
-    }
-    if let Some(v) = &c.hooks.after_complete {
-        let _ = writeln!(out, "hook.after_complete = {}", quote_hook_path(v));
-    }
-    if let Some(v) = &c.hooks.after_archive {
-        let _ = writeln!(out, "hook.after_archive = {}", quote_hook_path(v));
     }
     if let Some(v) = &c.theme {
         let _ = writeln!(out, "theme = {v}");
@@ -333,10 +317,6 @@ mod tests {
         let c = Config {
             hooks: HookConfig {
                 after_mutation: Some("/opt/tuxedo/hooks/mutation".into()),
-                after_create: Some("/opt/tuxedo/hooks/create".into()),
-                after_update: Some("/opt/tuxedo/hooks/update".into()),
-                after_complete: Some("/opt/tuxedo/hooks/complete".into()),
-                after_archive: Some("/opt/tuxedo/hooks/archive".into()),
             },
             theme: Some("Nord".into()),
             density: Some(Density::Cozy),
@@ -500,8 +480,6 @@ mod tests {
         let written = Config {
             hooks: HookConfig {
                 after_mutation: Some("/tmp/tuxedo-all-hook".into()),
-                after_create: Some("/tmp/tuxedo-hook".into()),
-                ..HookConfig::default()
             },
             theme: Some("Dawn".into()),
             density: Some(Density::Compact),
@@ -528,32 +506,23 @@ mod tests {
     }
 
     #[test]
-    fn hook_keys_parse_empty_quoted_and_duplicate_values() {
+    fn after_mutation_parses_empty_quoted_and_duplicate_values() {
         let c = parse(
-            "hook.after_create = /first\n\
-             hook.after_create = \"/second script\"\n\
-             hook.after_mutation = /all\n\
-             hook.after_update = \"\"\n\
-             hook.after_complete =    \n\
-             hook.after_archive = /archive\n",
+            "hook.after_mutation = /first\n\
+             hook.after_mutation = \"/second script\"\n",
         );
         assert_eq!(
-            c.hooks.after_create,
+            c.hooks.after_mutation,
             Some(PathBuf::from("/second script")),
             "last exact key wins"
         );
-        assert_eq!(c.hooks.after_update, None);
-        assert_eq!(c.hooks.after_complete, None);
-        assert_eq!(c.hooks.after_archive, Some(PathBuf::from("/archive")));
-        assert_eq!(c.hooks.after_mutation, Some(PathBuf::from("/all")));
     }
 
     #[test]
     fn hook_paths_with_quotes_and_backslashes_round_trip() {
         let c = Config {
             hooks: HookConfig {
-                after_create: Some(PathBuf::from("/hooks/a\\b\"c")),
-                ..HookConfig::default()
+                after_mutation: Some(PathBuf::from("/hooks/a\\b\"c")),
             },
             ..Config::default()
         };

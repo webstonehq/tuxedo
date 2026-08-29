@@ -25,7 +25,7 @@ fn fixture(script_body: &str) -> (PathBuf, PathBuf) {
     std::fs::create_dir_all(config.parent().expect("config parent")).expect("create config dir");
     std::fs::write(
         &config,
-        format!("hook.after_create = \"{}\"\n", script.display()),
+        format!("hook.after_mutation = \"{}\"\n", script.display()),
     )
     .expect("write config");
     (dir, todo)
@@ -44,11 +44,6 @@ fn run_add(dir: &Path, todo: &Path) -> std::process::Output {
 #[test]
 fn successful_hook_preserves_json_success() {
     let (dir, todo) = fixture("exit 0");
-    std::fs::write(
-        dir.join("config/tuxedo/config.toml"),
-        format!("hook.after_mutation = \"{}\"\n", dir.join("hook").display()),
-    )
-    .expect("configure generic hook");
     let output = run_add(&dir, &todo);
     assert_eq!(output.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&output.stdout).contains("\"ok\":true"));
@@ -77,7 +72,7 @@ fn spawn_failure_preserves_json_and_returns_one() {
     let config = dir.join("config/tuxedo/config.toml");
     std::fs::write(
         config,
-        "hook.after_create = \"/definitely/not/a/tuxedo-hook\"\n",
+        "hook.after_mutation = \"/definitely/not/a/tuxedo-hook\"\n",
     )
     .expect("replace config");
 

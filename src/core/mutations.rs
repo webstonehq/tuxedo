@@ -647,14 +647,11 @@ mod tests {
     use crate::hooks::{HookConfig, HookEvent, HookExecution};
 
     #[test]
-    fn configured_create_update_and_complete_hooks_emit_once() {
+    fn generic_hook_covers_create_update_and_complete() {
         let mut store = build_store("task\n");
         let missing = std::path::PathBuf::from("/definitely/not/a/tuxedo-hook");
         store.set_hooks(HookConfig {
-            after_create: Some(missing.clone()),
-            after_update: Some(missing.clone()),
-            after_complete: Some(missing),
-            ..HookConfig::default()
+            after_mutation: Some(missing),
         });
 
         store.add_finalized("created");
@@ -675,26 +672,18 @@ mod tests {
     }
 
     #[test]
-    fn excluded_mutations_do_not_emit_hooks() {
+    fn mutations_without_a_configured_hook_do_not_emit_reports() {
         let mut store = build_store("task\n");
-        store.set_hooks(HookConfig {
-            after_update: Some("/definitely/not/a/tuxedo-hook".into()),
-            after_complete: Some("/definitely/not/a/tuxedo-hook".into()),
-            ..HookConfig::default()
-        });
-
         store.delete(0);
         assert!(store.take_hook_reports().is_empty());
     }
 
     #[test]
-    fn generic_hook_takes_precedence_and_covers_all_live_mutations() {
+    fn generic_hook_covers_all_live_mutations() {
         let generic = std::path::PathBuf::from("/definitely/not/a/generic-hook");
         let mut store = build_store("first\nsecond\n");
         store.set_hooks(HookConfig {
             after_mutation: Some(generic.clone()),
-            after_create: Some("/definitely/not/a/create-hook".into()),
-            ..HookConfig::default()
         });
 
         store.add_finalized("third");

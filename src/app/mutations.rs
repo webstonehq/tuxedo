@@ -660,7 +660,6 @@ mod tests {
         app.reload_config(Config {
             hooks: HookConfig {
                 after_mutation: Some("relative-hook".into()),
-                ..HookConfig::default()
             },
             ..Config::default()
         });

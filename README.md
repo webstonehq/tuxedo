@@ -622,19 +622,8 @@ only configure scripts you are willing to run after task changes.
 hook.after_mutation = "/home/me/.config/tuxedo/hooks/todo-ledger-lint"
 ```
 
-`after_mutation` runs once per successful task-file mutation and takes
-precedence over the event-specific settings below. Use it when one script,
-such as a linter, should run after every change. Leave it unset to configure
-individual events instead:
-
-```toml
-hook.after_create = "/home/me/.config/tuxedo/hooks/todo-ledger-lint"
-hook.after_update = "/home/me/.config/tuxedo/hooks/todo-ledger-lint"
-hook.after_complete = "/home/me/.config/tuxedo/hooks/todo-ledger-lint"
-hook.after_archive = "/home/me/.config/tuxedo/hooks/todo-ledger-lint"
-```
-
-The event value identifies the committed operation:
+`after_mutation` runs once per successful task-file mutation. Its event value
+identifies the committed operation:
 
 - `create`: an added task or a TUI inbox drain that merged one or more tasks.
 - `update`: an actual title, metadata, priority, tag, or order change.
@@ -655,7 +644,7 @@ content in its arguments or environment. Tuxedo sets only these hook-specific
 variables:
 
 ```text
-TUXEDO_HOOK_EVENT=create|update|complete|archive
+TUXEDO_HOOK_EVENT=create|update|complete|archive|delete|uncomplete|undo|unarchive
 TUXEDO_ROOT=/absolute/parent/of/todo.txt
 TUXEDO_TODO_FILE=/absolute/path/to/todo.txt
 TUXEDO_DONE_FILE=/absolute/path/to/done.txt

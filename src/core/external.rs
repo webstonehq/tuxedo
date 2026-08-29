@@ -264,8 +264,7 @@ mod tests {
     fn drain_emits_one_create_hook_for_a_batch() {
         let (mut store, dir, _) = build_store_with_dir("existing\n");
         store.set_hooks(HookConfig {
-            after_create: Some("/definitely/not/a/tuxedo-hook".into()),
-            ..HookConfig::default()
+            after_mutation: Some("/definitely/not/a/tuxedo-hook".into()),
         });
         std::fs::write(dir.join("inbox.txt"), "one\ntwo\n").unwrap();
 

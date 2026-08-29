@@ -635,18 +635,9 @@ impl App {
         }
     }
 
-    /// Consume post-commit reports after the mutation's usual UI refresh. A
-    /// hook may have rewritten either task file, so discard index-based
-    /// selection and rebind the visible cache before displaying any warning.
-    pub fn apply_hook_reports(&mut self) -> bool {
+    /// Consume post-commit reports and display a hook failure warning.
+    pub fn apply_hook_reports(&mut self) {
         let reports = self.store.take_hook_reports();
-        if reports.is_empty() {
-            return false;
-        }
-        self.selection.clear();
-        self.selection.exit_edit();
-        self.recompute_visible();
-        self.clamp_cursor();
         let failures: Vec<String> = reports
             .iter()
             .filter(|report| report.failed())
@@ -657,7 +648,6 @@ impl App {
             1 => self.flash(failures.into_iter().next().expect("one failure")),
             count => self.flash(format!("{count} post-commit hooks failed")),
         }
-        true
     }
 
     /// Apply a freshly loaded [`Config`] at runtime — used by the hot-reload

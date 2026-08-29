@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::hooks::{self, HookConfig, HookContext, HookEvent, HookRefresh, HookReport};
+use crate::hooks::{self, HookConfig, HookContext, HookEvent, HookReport};
 use crate::todo::{self, Task};
 
 mod archive;
@@ -23,9 +23,8 @@ pub use archive::Archive;
 pub use history::History;
 pub use outcome::{
     AddOutcome, ArchiveDeleteOutcome, ArchiveOutcome, BulkCompleteOutcome, BulkDeleteOutcome,
-    BulkPriorityOutcome, CompleteOutcome, CompletionDetail, DeleteOutcome, DrainReport,
-    EditOutcome, MoveOutcome, PriorityOutcome, Reconcile, RenameOutcome, StoreError, TagOutcome,
-    UnarchiveOutcome, UndoOutcome,
+    CompleteOutcome, DeleteOutcome, DrainReport, EditOutcome, MoveOutcome, PriorityOutcome,
+    Reconcile, RenameOutcome, StoreError, TagOutcome, UnarchiveOutcome, UndoOutcome,
 };
 
 /// The durable task store. Owns the live task list, the sibling `done.txt`
@@ -149,39 +148,23 @@ impl Store {
         true
     }
 
-    /// Run the hook selected for a committed event, reload both task files, and
-    /// queue a report for the caller to render. Hook failures never affect the
-    /// already-committed task mutation.
+    /// Run the hook selected for a committed event and queue a report for the
+    /// caller to render. Hook failures never affect the already-committed task
+    /// mutation.
     pub(crate) fn post_commit(&mut self, event: HookEvent) {
-        let Some(script) = self.hooks.script().map(Path::to_path_buf) else {
+        let Some(script) = self.hooks.after_mutation.as_deref().map(Path::to_path_buf) else {
             return;
         };
         let context = hook_context(&self.file_path, self.archive.path());
-        let mut report = match context {
+        let report = match context {
             Some(context) => hooks::run(event, &script, &context),
             None => HookReport {
                 event,
                 script,
                 execution: crate::hooks::HookExecution::SpawnFailed,
-                refresh: HookRefresh::Succeeded,
             },
         };
-        if !self.refresh_after_hook() {
-            report.refresh = HookRefresh::Failed;
-        }
         self.hook_reports.push(report);
-    }
-
-    /// Refresh live and archive state after a hook has had a chance to rewrite
-    /// either file. `apply_external_state` clears history for a changed live
-    /// file; archive-only changes do so here.
-    fn refresh_after_hook(&mut self) -> bool {
-        let live = self.apply_external_state(std::fs::read_to_string(&self.file_path));
-        let archive = self.refresh_archive_after_hook();
-        if matches!(archive, Ok(true)) {
-            self.history.clear();
-        }
-        !matches!(live, outcome::Reconcile::ReadError) && archive.is_ok()
     }
 }
 

@@ -65,35 +65,3 @@ fn failed_hook_preserves_json_and_returns_one() {
     assert!(!String::from_utf8_lossy(&output.stdout).contains("child output"));
     let _ = std::fs::remove_dir_all(&dir);
 }
-
-#[test]
-fn spawn_failure_preserves_json_and_returns_one() {
-    let (dir, todo) = fixture("exit 0");
-    let config = dir.join("config/tuxedo/config.toml");
-    std::fs::write(
-        config,
-        "hook.after_mutation = \"/definitely/not/a/tuxedo-hook\"\n",
-    )
-    .expect("replace config");
-
-    let output = run_add(&dir, &todo);
-    assert_eq!(output.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&output.stdout).contains("\"ok\":true"));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("could not start"));
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn post_hook_refresh_failure_preserves_the_committed_json_result() {
-    let (dir, todo) = fixture("rm -f \"$TUXEDO_DONE_FILE\"\nmkdir \"$TUXEDO_DONE_FILE\"");
-    let output = run_add(&dir, &todo);
-    assert_eq!(output.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&output.stdout).contains("\"ok\":true"));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("post-hook synchronization failed"));
-    assert!(
-        std::fs::read_to_string(&todo)
-            .expect("committed todo remains readable")
-            .contains("hooked task")
-    );
-    let _ = std::fs::remove_dir_all(&dir);
-}

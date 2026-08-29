@@ -37,12 +37,6 @@ pub struct HookConfig {
     pub after_mutation: Option<PathBuf>,
 }
 
-impl HookConfig {
-    pub fn script(&self) -> Option<&Path> {
-        self.after_mutation.as_deref()
-    }
-}
-
 /// Paths exported to the hook process. All values must be absolute.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HookContext {
@@ -62,33 +56,25 @@ pub enum HookExecution {
     Signaled,
 }
 
-/// Follow-up disk synchronization result after running a hook.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HookRefresh {
-    Succeeded,
-    Failed,
-}
-
 /// A presentation-free result queued by [`crate::core::Store`] after a hook
-/// attempt and its required disk refresh.
+/// attempt.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HookReport {
     pub event: HookEvent,
     pub script: PathBuf,
     pub execution: HookExecution,
-    pub refresh: HookRefresh,
 }
 
 impl HookReport {
     pub fn failed(&self) -> bool {
-        self.execution != HookExecution::Succeeded || self.refresh != HookRefresh::Succeeded
+        self.execution != HookExecution::Succeeded
     }
 
     /// Stable, child-output-free diagnostic for TUI flashes and CLI stderr.
     pub fn diagnostic(&self) -> String {
         let event = self.event.as_str();
         let script = self.script.display();
-        let mut message = match self.execution {
+        match self.execution {
             HookExecution::Succeeded => String::new(),
             HookExecution::InvalidPath => {
                 format!("post-commit hook {event} failed: {script} is not an absolute path")
@@ -102,16 +88,7 @@ impl HookReport {
             HookExecution::Signaled => {
                 format!("post-commit hook {event} failed: {script} terminated by signal")
             }
-        };
-        if self.refresh == HookRefresh::Failed {
-            if !message.is_empty() {
-                message.push_str("; ");
-            }
-            message.push_str(&format!(
-                "post-commit hook {event} post-hook synchronization failed for {script}"
-            ));
         }
-        message
     }
 }
 
@@ -142,8 +119,6 @@ pub fn run(event: HookEvent, script: &Path, context: &HookContext) -> HookReport
         event,
         script: script.to_path_buf(),
         execution,
-        // Store fills this after reloading both task files.
-        refresh: HookRefresh::Succeeded,
     }
 }
 
@@ -162,19 +137,6 @@ mod tests {
         assert_eq!(report.execution, HookExecution::InvalidPath);
         assert!(report.failed());
         assert!(report.diagnostic().contains("not an absolute path"));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn nonzero_exit_is_reported_without_child_output() {
-        let context = HookContext {
-            root: PathBuf::from("/tmp"),
-            todo_file: PathBuf::from("/tmp/todo.txt"),
-            done_file: PathBuf::from("/tmp/done.txt"),
-        };
-        let report = run(HookEvent::Update, Path::new("/bin/false"), &context);
-        assert_eq!(report.execution, HookExecution::Exited(1));
-        assert!(report.diagnostic().contains("exited with status 1"));
     }
 
     #[cfg(unix)]

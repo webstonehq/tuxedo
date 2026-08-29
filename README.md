@@ -612,36 +612,16 @@ press.
 
 ### Post-commit hooks
 
-Optional hooks run synchronously after a task mutation has been durably
-committed. Each value is one **absolute path to an executable file**.
-Tuxedo executes the file directly, never through a shell: do not use `~`, a
-`PATH` lookup, or a command with arguments. Hooks are trusted local programs;
-only configure scripts you are willing to run after task changes.
+Set `hook.after_mutation` to an absolute executable path. Tuxedo runs it
+synchronously after every successful durable task-file mutation, directly and
+without a shell.
 
 ```toml
 hook.after_mutation = "/home/me/.config/tuxedo/hooks/todo-ledger-lint"
 ```
 
-`after_mutation` runs once per successful task-file mutation. Its event value
-identifies the committed operation:
-
-- `create`: an added task or a TUI inbox drain that merged one or more tasks.
-- `update`: an actual title, metadata, priority, tag, or order change.
-- `complete`: one or more incomplete tasks marked complete, including their
-  recurring successors.
-- `archive`: one or more completed tasks moved to `done.txt`.
-- `delete`: a live task deletion, bulk deletion, or permanent archive deletion.
-- `uncomplete`: a completed live task marked incomplete.
-- `undo`: a successful undo operation.
-- `unarchive`: a task moved from `done.txt` back to the live file.
-
-Reads, no-ops, failed writes, out-of-range requests, and reconciled-away
-mutations do not run hooks. A relative configured path is not resolved or run;
-it is reported as a hook failure when its event occurs.
-
-Every hook starts in the parent directory of the live todo file with no task
-content in its arguments or environment. Tuxedo sets only these hook-specific
-variables:
+The hook runs from the live todo file's parent directory with no task content
+in its arguments. It receives:
 
 ```text
 TUXEDO_HOOK_EVENT=create|update|complete|archive|delete|uncomplete|undo|unarchive
@@ -650,24 +630,9 @@ TUXEDO_TODO_FILE=/absolute/path/to/todo.txt
 TUXEDO_DONE_FILE=/absolute/path/to/done.txt
 ```
 
-Hook stdout and stderr are captured. A failing hook never rolls back the task
-change: the TUI shows a warning, while a one-shot CLI command writes a stable
-diagnostic to stderr and returns status `1` after otherwise preserving normal
-stdout and JSON output. Tuxedo reloads both task files after every hook attempt
-so script-driven rewrites become the next mutation's starting state.
-
-For `todo-ledger lint --force`, which uses status `1` for successful repairs,
-configure a wrapper that converts that status to hook success:
-
-```sh
-#!/bin/sh
-
-todo-ledger lint --force --root "$TUXEDO_ROOT"
-case "$?" in
-  0|1) exit 0 ;;
-  *) exit 2 ;;
-esac
-```
+Hook stdout and stderr are captured. A failing hook does not roll back the
+mutation: the TUI shows a warning, and a one-shot CLI command writes a
+diagnostic to stderr and exits with status `1`.
 
 Saved searches (created with `fs`) are written one per line as
 `filter.<name> = <query>`, where `<query>` is the `/`-search needle. They

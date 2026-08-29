@@ -116,7 +116,6 @@ impl Store {
     }
 
     fn refresh_archive_for_mutation(&mut self) -> ArchiveRefresh {
-        self.resolve_archive_loader();
         let body = match self.read_archive_body() {
             Ok(b) => b,
             Err(e) => return ArchiveRefresh::Error(e),
@@ -124,31 +123,11 @@ impl Store {
         if body != self.archive.last_disk {
             self.archive.tasks = todo::parse_file(&body);
             self.archive.last_disk = body;
+            self.archive.loader = None;
             return ArchiveRefresh::Reloaded;
         }
+        self.archive.loader = None;
         ArchiveRefresh::Ready
-    }
-
-    /// Wait for a startup archive load that could otherwise land after an
-    /// explicit synchronous replacement. The loaded result is intentionally
-    /// discarded because the caller is about to read the current disk state.
-    fn resolve_archive_loader(&mut self) {
-        if let Some(loader) = self.archive.loader.take() {
-            let _ = loader.recv();
-        }
-    }
-
-    /// Synchronize `done.txt` after a post-commit hook. Joining the startup
-    /// loader first prevents its stale result from replacing the hook's write.
-    pub(crate) fn refresh_archive_after_hook(&mut self) -> std::io::Result<bool> {
-        self.resolve_archive_loader();
-        let body = self.read_archive_body()?;
-        if body == self.archive.last_disk {
-            return Ok(false);
-        }
-        self.archive.tasks = todo::parse_file(&body);
-        self.archive.last_disk = body;
-        Ok(true)
     }
 
     /// Pump archive state. Returns true when the visible archive changed: the
@@ -228,7 +207,6 @@ impl Store {
         let count = to_move.len();
         self.tasks = remaining;
         self.last_disk = remaining_body;
-        self.resolve_archive_loader();
         self.archive.tasks = todo::parse_file(&combined);
         self.archive.last_disk = combined;
         self.archive.loader = None;
@@ -594,78 +572,5 @@ mod tests {
         let _ = std::fs::remove_dir_all(missing_parent.parent().unwrap());
         store.file_path = missing_parent;
         assert!(store.persist().is_err());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn hook_rewrites_are_reloaded_before_the_next_mutation() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let dir = dir_for("hook-refresh");
-        let todo_path = dir.join("todo.txt");
-        std::fs::write(&todo_path, "before\n").unwrap();
-        let script = dir.join("rewrite");
-        std::fs::write(
-            &script,
-            "#!/bin/sh\nprintf 'after hook\\n' > \"$TUXEDO_TODO_FILE\"\nprintf 'x 2026-05-06 2026-05-01 archived\\n' > \"$TUXEDO_DONE_FILE\"\n",
-        )
-        .unwrap();
-        let mut permissions = std::fs::metadata(&script).unwrap().permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(&script, permissions).unwrap();
-        let mut store = Store::new(todo_path.clone(), "before\n".into(), "2026-05-06".into());
-        store.set_hooks(HookConfig {
-            after_mutation: Some(script),
-        });
-
-        store.append_at(0, "updated");
-        assert_eq!(store.tasks()[0].raw, "after hook");
-        assert_eq!(
-            store.archive().tasks()[0].raw,
-            "x 2026-05-06 2026-05-01 archived"
-        );
-        assert!(store.history.is_empty());
-        let reports = store.take_hook_reports();
-        assert_eq!(reports.len(), 1);
-        assert_eq!(reports[0].event, HookEvent::Update);
-        assert!(!reports[0].failed());
-
-        // The hook's own write updated Store's snapshots, so this is not
-        // rejected as an unrelated external edit.
-        assert!(matches!(
-            store.append_at(0, "again"),
-            crate::core::EditOutcome::Saved { .. }
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn post_hook_archive_refresh_failure_is_reported() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let dir = dir_for("hook-refresh-failure");
-        let todo_path = dir.join("todo.txt");
-        std::fs::write(&todo_path, "before\n").unwrap();
-        let script = dir.join("break-done");
-        std::fs::write(
-            &script,
-            "#!/bin/sh\nrm -f \"$TUXEDO_DONE_FILE\"\nmkdir \"$TUXEDO_DONE_FILE\"\n",
-        )
-        .unwrap();
-        let mut permissions = std::fs::metadata(&script).unwrap().permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(&script, permissions).unwrap();
-        let mut store = Store::open_sync(todo_path, "before\n".into(), "2026-05-06".into());
-        store.set_hooks(HookConfig {
-            after_mutation: Some(script),
-        });
-
-        store.append_at(0, "updated");
-        let reports = store.take_hook_reports();
-        assert_eq!(reports.len(), 1);
-        assert!(reports[0].failed());
-        assert_eq!(reports[0].refresh, crate::hooks::HookRefresh::Failed);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

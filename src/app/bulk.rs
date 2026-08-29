@@ -12,9 +12,7 @@ impl App {
         }
         let indices: Vec<usize> = self.selection.iter().collect();
         match self.store.complete_many(&indices) {
-            BulkCompleteOutcome::Done {
-                completed, spawned, ..
-            } => {
+            BulkCompleteOutcome::Done { completed, spawned } => {
                 self.selection.clear();
                 self.mode = Mode::Normal;
                 self.flash(if spawned > 0 {

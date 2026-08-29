@@ -5,7 +5,7 @@
 //! render a message and, for the TUI, re-derive the cursor. The TUI maps these
 //! to flash strings; the CLI maps them to stdout/exit codes.
 
-use crate::todo::{ParseError, TagError, Task};
+use crate::todo::{ParseError, TagError};
 
 /// An I/O or parse failure from a [`Store`](super::Store) operation.
 #[derive(Debug)]
@@ -145,30 +145,8 @@ pub enum RenameOutcome {
 
 #[derive(Debug)]
 pub enum BulkCompleteOutcome {
-    Done {
-        completed: usize,
-        spawned: usize,
-        /// Snapshots from immediately before the post-hook refresh, allowing
-        /// the CLI to preserve its normal completion output if a hook rewrites
-        /// the task files.
-        details: Vec<CompletionDetail>,
-    },
+    Done { completed: usize, spawned: usize },
     NothingToComplete,
-    Aborted(Reconcile),
-    Error(StoreError),
-}
-
-#[derive(Debug)]
-pub struct CompletionDetail {
-    pub abs: usize,
-    pub task: Task,
-    pub spawned: Option<(usize, Task)>,
-}
-
-#[derive(Debug)]
-pub enum BulkPriorityOutcome {
-    Done { changed: Vec<usize> },
-    NothingToChange,
     Aborted(Reconcile),
     Error(StoreError),
 }

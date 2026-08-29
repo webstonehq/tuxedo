@@ -453,7 +453,6 @@ mod tests {
         test_support::{build_app, build_app_with_config, test_path},
     };
     use crate::config::Config;
-    use crate::hooks::HookConfig;
 
     #[test]
     fn open_file_rebinds_path_body_and_resets_cursor() {
@@ -652,24 +651,5 @@ mod tests {
         assert_eq!(app.week_start, WeekStart::Monday);
         app.toggle_week_start_date();
         assert_eq!(app.week_start, WeekStart::Sunday);
-    }
-
-    #[test]
-    fn config_reload_replaces_active_hook_settings() {
-        let mut app = build_app("task\n");
-        app.reload_config(Config {
-            hooks: HookConfig {
-                after_mutation: Some("relative-hook".into()),
-            },
-            ..Config::default()
-        });
-
-        app.cycle_priority(0);
-        assert!(app.apply_hook_reports());
-        assert!(
-            app.flash_active()
-                .expect("hook warning")
-                .contains("not an absolute path")
-        );
     }
 }

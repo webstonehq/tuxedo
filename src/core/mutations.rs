@@ -1,8 +1,7 @@
 use super::Store;
 use super::outcome::{
-    AddOutcome, BulkCompleteOutcome, BulkDeleteOutcome, BulkPriorityOutcome, CompleteOutcome,
-    CompletionDetail, DeleteOutcome, EditOutcome, MoveOutcome, PriorityOutcome, Reconcile,
-    StoreError, TagOutcome,
+    AddOutcome, BulkCompleteOutcome, BulkDeleteOutcome, CompleteOutcome, DeleteOutcome,
+    EditOutcome, MoveOutcome, PriorityOutcome, Reconcile, StoreError, TagOutcome,
 };
 use crate::core::outcome::RenameOutcome;
 use crate::hooks::HookEvent;
@@ -57,14 +56,14 @@ impl Store {
                     self.tasks.insert(abs + 1, parsed);
                     Some(abs + 1)
                 });
-                if let Err(e) = self.persist() {
-                    return CompleteOutcome::Error(e);
-                }
-                self.post_commit(if was_done {
+                let event = if was_done {
                     HookEvent::Uncomplete
                 } else {
                     HookEvent::Complete
-                });
+                };
+                if let Err(e) = self.persist_with_hook(event) {
+                    return CompleteOutcome::Error(e);
+                }
                 match (was_done, spawned) {
                     (true, _) => CompleteOutcome::Uncompleted { abs },
                     (false, Some(next)) => CompleteOutcome::CompletedSpawned { abs, next },
@@ -90,37 +89,6 @@ impl Store {
                 Err(e) => PriorityOutcome::Error(e),
             },
             Err(e) => PriorityOutcome::Error(StoreError::Parse(e)),
-        }
-    }
-
-    /// Clear priorities from several tasks in one durable write, so a
-    /// multi-target command can invoke its update hook once.
-    pub fn clear_priorities(&mut self, indices: &[usize]) -> BulkPriorityOutcome {
-        match self.reconcile() {
-            Reconcile::Unchanged => {}
-            other => return BulkPriorityOutcome::Aborted(other),
-        }
-        let mut changed = Vec::new();
-        for &abs in indices {
-            if abs < self.tasks.len()
-                && self.tasks[abs].priority.is_some()
-                && !changed.contains(&abs)
-            {
-                changed.push(abs);
-            }
-        }
-        if changed.is_empty() {
-            return BulkPriorityOutcome::NothingToChange;
-        }
-        self.push_history();
-        for &abs in &changed {
-            if let Err(e) = self.tasks[abs].set_priority(None) {
-                return BulkPriorityOutcome::Error(StoreError::Parse(e));
-            }
-        }
-        match self.persist_with_hook(HookEvent::Update) {
-            Ok(()) => BulkPriorityOutcome::Done { changed },
-            Err(e) => BulkPriorityOutcome::Error(e),
         }
     }
 
@@ -164,12 +132,13 @@ impl Store {
         for &(abs, target) in swaps {
             self.tasks.swap(abs, target);
         }
-        self.history.push(previous.clone());
         match self.persist_with_hook(HookEvent::Update) {
-            Ok(()) => MoveOutcome::Moved,
+            Ok(()) => {
+                self.history.push(previous);
+                MoveOutcome::Moved
+            }
             Err(e) => {
                 self.tasks = previous;
-                self.history.pop();
                 MoveOutcome::Error(e)
             }
         }
@@ -483,13 +452,11 @@ impl Store {
             Reconcile::Unchanged => {}
             other => return BulkCompleteOutcome::Aborted(other),
         }
-        let mut to_complete: Vec<usize> = indices
+        let to_complete: Vec<usize> = indices
             .iter()
             .copied()
             .filter(|&i| i < self.tasks.len() && !self.tasks[i].done)
             .collect();
-        to_complete.sort_unstable();
-        to_complete.dedup();
         if to_complete.is_empty() {
             return BulkCompleteOutcome::NothingToComplete;
         }
@@ -515,23 +482,6 @@ impl Store {
                 spawns.push((abs, next));
             }
         }
-        let mut details = Vec::with_capacity(to_complete.len());
-        for &abs in &to_complete {
-            let shift = spawns
-                .iter()
-                .filter(|(spawn_abs, _)| *spawn_abs < abs)
-                .count();
-            let completed_abs = abs + shift;
-            let spawned = spawns
-                .iter()
-                .find(|(spawn_abs, _)| *spawn_abs == abs)
-                .map(|(_, task)| (completed_abs + 1, task.clone()));
-            details.push(CompletionDetail {
-                abs: completed_abs,
-                task: self.tasks[abs].clone(),
-                spawned,
-            });
-        }
         // Pass 2: insert spawns at original_abs+1, descending, so later inserts
         // can't shift earlier indices.
         spawns.sort_by_key(|s| std::cmp::Reverse(s.0));
@@ -541,11 +491,7 @@ impl Store {
         }
         let completed = to_complete.len();
         match self.persist_with_hook(HookEvent::Complete) {
-            Ok(()) => BulkCompleteOutcome::Done {
-                completed,
-                spawned,
-                details,
-            },
+            Ok(()) => BulkCompleteOutcome::Done { completed, spawned },
             Err(e) => BulkCompleteOutcome::Error(e),
         }
     }
@@ -647,38 +593,6 @@ mod tests {
     use crate::hooks::{HookConfig, HookEvent, HookExecution};
 
     #[test]
-    fn generic_hook_covers_create_update_and_complete() {
-        let mut store = build_store("task\n");
-        let missing = std::path::PathBuf::from("/definitely/not/a/tuxedo-hook");
-        store.set_hooks(HookConfig {
-            after_mutation: Some(missing),
-        });
-
-        store.add_finalized("created");
-        let reports = store.take_hook_reports();
-        assert_eq!(reports.len(), 1);
-        assert_eq!(reports[0].event, HookEvent::Create);
-        assert_eq!(reports[0].execution, HookExecution::SpawnFailed);
-
-        store.append_at(0, "updated");
-        let reports = store.take_hook_reports();
-        assert_eq!(reports.len(), 1);
-        assert_eq!(reports[0].event, HookEvent::Update);
-
-        store.complete_many(&[0, 1]);
-        let reports = store.take_hook_reports();
-        assert_eq!(reports.len(), 1);
-        assert_eq!(reports[0].event, HookEvent::Complete);
-    }
-
-    #[test]
-    fn mutations_without_a_configured_hook_do_not_emit_reports() {
-        let mut store = build_store("task\n");
-        store.delete(0);
-        assert!(store.take_hook_reports().is_empty());
-    }
-
-    #[test]
     fn generic_hook_covers_all_live_mutations() {
         let generic = std::path::PathBuf::from("/definitely/not/a/generic-hook");
         let mut store = build_store("first\nsecond\n");
@@ -690,6 +604,11 @@ mod tests {
         let report = store.take_hook_reports().pop().expect("create report");
         assert_eq!(report.event, HookEvent::Create);
         assert_eq!(report.script, generic);
+        assert_eq!(report.execution, HookExecution::SpawnFailed);
+
+        store.append_at(0, "updated");
+        let report = store.take_hook_reports().pop().expect("update report");
+        assert_eq!(report.event, HookEvent::Update);
 
         store.complete_many(&[0, 1]);
         let report = store.take_hook_reports().pop().expect("complete report");
@@ -993,8 +912,7 @@ mod tests {
             out,
             BulkCompleteOutcome::Done {
                 completed: 2,
-                spawned: 2,
-                ..
+                spawned: 2
             }
         ));
         assert_eq!(store.tasks().len(), 6);
@@ -1003,18 +921,6 @@ mod tests {
         assert_eq!(store.tasks()[3].raw, "b");
         assert!(store.tasks()[4].done);
         assert_eq!(store.tasks()[5].due.as_deref(), Some("2026-05-16"));
-    }
-
-    #[test]
-    fn complete_many_details_use_zero_based_successor_indices() {
-        let mut store = build_store("a\nWater plants rec:1w\n");
-        let outcome = store.complete_many(&[1]);
-        let BulkCompleteOutcome::Done { details, .. } = outcome else {
-            panic!("completion should succeed");
-        };
-        assert_eq!(details.len(), 1);
-        assert_eq!(details[0].abs, 1);
-        assert_eq!(details[0].spawned.as_ref().map(|(abs, _)| *abs), Some(2));
     }
 
     #[test]

@@ -267,37 +267,12 @@ fn unquote(s: &str) -> &str {
 }
 
 fn parse_hook_path(s: &str) -> Option<PathBuf> {
-    let unquoted = unquote(s);
-    if unquoted.trim().is_empty() {
-        return None;
-    }
-    let mut path = String::with_capacity(unquoted.len());
-    let mut escaped = false;
-    for c in unquoted.chars() {
-        if escaped {
-            match c {
-                '\\' | '"' => path.push(c),
-                _ => {
-                    path.push('\\');
-                    path.push(c);
-                }
-            }
-            escaped = false;
-        } else if c == '\\' {
-            escaped = true;
-        } else {
-            path.push(c);
-        }
-    }
-    if escaped {
-        path.push('\\');
-    }
-    Some(PathBuf::from(path))
+    let path = unquote(s);
+    (!path.trim().is_empty()).then(|| PathBuf::from(path))
 }
 
 fn quote_hook_path(path: &Path) -> String {
-    let path = path.to_string_lossy();
-    format!("\"{}\"", path.replace('\\', "\\\\").replace('"', "\\\""))
+    format!("\"{}\"", path.display())
 }
 
 fn parse_bool(s: &str) -> Option<bool> {
@@ -506,26 +481,10 @@ mod tests {
     }
 
     #[test]
-    fn after_mutation_parses_empty_quoted_and_duplicate_values() {
-        let c = parse(
-            "hook.after_mutation = /first\n\
-             hook.after_mutation = \"/second script\"\n",
-        );
+    fn empty_hook_path_is_disabled() {
         assert_eq!(
-            c.hooks.after_mutation,
-            Some(PathBuf::from("/second script")),
-            "last exact key wins"
+            parse("hook.after_mutation = \"\"\n").hooks.after_mutation,
+            None
         );
-    }
-
-    #[test]
-    fn hook_paths_with_quotes_and_backslashes_round_trip() {
-        let c = Config {
-            hooks: HookConfig {
-                after_mutation: Some(PathBuf::from("/hooks/a\\b\"c")),
-            },
-            ..Config::default()
-        };
-        assert_eq!(parse(&serialize(&c)).hooks, c.hooks);
     }
 }

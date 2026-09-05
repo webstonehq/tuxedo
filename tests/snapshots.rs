@@ -459,6 +459,31 @@ fn welcome_overlay() {
     snapshot_app("welcome_overlay", &app);
 }
 
+#[test]
+fn welcome_overlay_hides_empty_state_card() {
+    // On a wide terminal the empty-state card is not fully covered by the
+    // welcome box, so it used to show through as a second stacked dialog.
+    let mut app = App::new(
+        PathBuf::from(FIXTURE_PATH),
+        String::new(),
+        "2026-05-06".to_string(),
+        Config::default(),
+    );
+    app.prefs.density = Density::Compact;
+    app.mode = Mode::Welcome;
+
+    let backend = TestBackend::new(160, 32);
+    let mut terminal = Terminal::new(backend).expect("terminal init");
+    terminal.draw(|f| ui::draw(f, &app)).expect("draw frame");
+    let text = buffer_to_text(terminal.backend().buffer());
+
+    assert!(text.contains("no todo.txt in this folder yet"));
+    assert!(
+        !text.contains("no tasks yet"),
+        "empty-state card rendered behind the welcome overlay:\n{text}"
+    );
+}
+
 /// Build a synthetic todo body with N rows so the list overflows any
 /// reasonable viewport. Each row gets a unique label we can search for in the
 /// rendered buffer.

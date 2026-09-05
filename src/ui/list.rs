@@ -36,7 +36,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     );
 
     if app.tasks().is_empty() {
-        crate::ui::empty::render(frame, body_area, app);
+        // The welcome overlay covers the same ground on first run; drawing the
+        // empty-state card underneath stacks two boxes on top of each other.
+        if app.mode != Mode::Welcome {
+            crate::ui::empty::render(frame, body_area, app);
+        }
         return;
     }
 

@@ -1,3 +1,5 @@
+#:schema https://mise.jdx.dev/schema/mise.json
+
 [settings]
 lockfile = true
 
@@ -12,7 +14,18 @@ run = "cargo clippy --all-targets --locked -- -D warnings"
 run = "cargo fmt --all"
 
 [tasks.fmt_check]
-run = "cargo fmt --all --check"
+run = { task = "fmt", args = ["--check"] }
+
+[tasks.tuxedo]
+run = "cargo run --bin tuxedo --"
+description = "Run the in-development tuxedo executable. `mise run tuxedo -- <args>` for CLI commands"
+
+[tasks.preflight]
+description = "Prepare and verify changes ready for PR submission"
+run = [ # Run fmt serially first so other tasks won't see files mid-write
+    { task = "fmt" },
+    { tasks = ["clippy", "test"] },
+]
 
 [tasks.test]
 run = "cargo test --locked"

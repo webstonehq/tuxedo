@@ -1092,6 +1092,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('L') => Action::ToggleLineNum,
         KeyCode::Char('H') => Action::ToggleShowDone,
         KeyCode::Char('F') => Action::ToggleShowFuture,
+        KeyCode::Char('I') => Action::ToggleAutocompleteArchive,
         KeyCode::Esc => Action::EscapeStack,
         KeyCode::Char('W') => Action::ChangeWeekStart,
         _ => return None,
@@ -1136,6 +1137,7 @@ fn apply_action(app: &mut App, action: Action) {
             | Action::CycleSort
             | Action::ToggleShowDone
             | Action::ToggleShowFuture
+            | Action::ToggleAutocompleteArchive
             | Action::Undo => {
                 app.flash("read-only in archive");
                 return;
@@ -1307,6 +1309,7 @@ fn apply_action(app: &mut App, action: Action) {
             app.recompute_visible();
             app.save_prefs();
         }
+        Action::ToggleAutocompleteArchive => app.toggle_autocomplete_archive(),
         Action::CopyLine => copy_current_task(app, false),
         Action::CopyBody => copy_current_task(app, true),
         Action::OpenNote => app.open_note_for_current(),

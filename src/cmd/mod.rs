@@ -86,13 +86,14 @@ pub fn run(argv: &[String]) -> Result<Option<i32>> {
     // todo.sh-style path resolution via $TODO_FILE / $TODO_DIR / $DONE_FILE.
     let path = crate::cli::resolve_path(None).context("resolving todo file")?;
     let done = crate::cli::done_path(&path);
+    let trash = crate::cli::trash_path(&path);
     let body = match std::fs::read_to_string(&path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
     };
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let mut store = Store::open_sync_with_done(path, done, body, today);
+    let mut store = Store::open_sync_with_sides(path, done, trash, body, today);
 
     let json = args.json;
     let force = args.force;
@@ -475,6 +476,9 @@ fn cmd_del(store: &mut Store, pos: &[String], json: bool, force: bool) -> i32 {
             DeleteOutcome::Deleted { .. } => removed.push((abs + 1, task)),
             DeleteOutcome::OutOfRange => code = err(format!("no task {}", abs + 1)),
             DeleteOutcome::Aborted(_) => code = err("file changed on disk; nothing deleted"),
+            DeleteOutcome::TrashReloaded => {
+                code = err("trash.txt changed on disk; nothing deleted")
+            }
             DeleteOutcome::Error(e) => code = store_error(json, "del", e),
         }
     }

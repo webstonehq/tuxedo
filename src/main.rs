@@ -10,17 +10,27 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 
 use std::io::Write;
 
-use tuxedo::action::{Action, RecAction};
-use tuxedo::app::{AddOutcome, App, CalendarTarget, DialogInputMode, Mode, OverlayKind, View};
+use tuxedo::action::{
+    Action, AutocompleteAction, CalendarAction, DialogAction, DialogInsertAction, GlobalAction,
+    HelpAction, PaletteAction, PickAction, PriorityAction, PromptAction, RecAction, SearchAction,
+    SettingsAction, SlashAction, ThemePickerAction, WelcomeAction,
+};
+use tuxedo::app::{
+    AddOutcome, App, CalendarTarget, Chord, DialogInputMode, Mode, OverlayKind, View,
+};
 use tuxedo::cli;
 use tuxedo::config::Config;
 use tuxedo::config_watcher;
-use tuxedo::keybinds::{KeyBindings, ResolvedKey};
+use tuxedo::keybinds::{KeyAction, KeyBindings, Outcome};
 use tuxedo::theme;
 use tuxedo::ui::hyperlinks;
 use tuxedo::{clipboard, todo, ui, update};
 
 const EVENT_POLL: Duration = Duration::from_millis(250);
+/// How long the undo/redo history must be quiet before it's written to disk.
+/// `next_timeout` caps at `EVENT_POLL`, so an idle tick always arrives to fire
+/// this; a burst of edits costs one write rather than one per keystroke.
+const HISTORY_DEBOUNCE: Duration = Duration::from_secs(1);
 
 fn main() -> Result<()> {
     let argv: Vec<String> = std::env::args().skip(1).collect();
@@ -87,8 +97,15 @@ fn main() -> Result<()> {
         }
     };
     let done = cli::done_path(&path);
-    let mut app_state = App::new_with_done(path.clone(), done, body, today, cfg);
+    let trash = cli::trash_path(&path);
+    let mut app_state = App::new_with_sides(path.clone(), done, trash, body, today, cfg);
+    // Cross-session undo/redo is a TUI affordance; the one-shot CLI never
+    // writes a history file.
+    app_state.enable_history_persistence();
     app_state.config_path = Config::path();
+    // Derive the which-key menus once the bindings are known, so a chord
+    // rebound in `keybinds.toml` is advertised under its real key.
+    app_state.set_whichkey(tuxedo::whichkey::Registry::from_keybinds(&keybinds));
     app_state.mode = start_mode;
     // Start the config hot-reload watcher.
     let config_rx = app_state
@@ -172,6 +189,7 @@ fn print_usage() {
     println!("  TODO_DIR     directory holding todo.txt / done.txt");
     println!("  TODO_FILE    path to the todo file (default $TODO_DIR/todo.txt)");
     println!("  DONE_FILE    path to the archive file (default sibling done.txt)");
+    println!("  TRASH_FILE   path to the trash file (default sibling trash.txt)");
 }
 
 fn run(
@@ -193,6 +211,13 @@ fn run(
         if app.poll_archive() {
             dirty = true;
         }
+        // Pick up external edits to trash.txt.
+        if app.poll_trash() {
+            dirty = true;
+        }
+        // Debounced write of the undo/redo history. Failures are silent by
+        // design — history is a convenience and must never block an edit.
+        app.flush_history_if_due(HISTORY_DEBOUNCE);
         // Pick up the update-check result so the status-bar indicator can
         // appear without waiting for a keystroke.
         if app.poll_update_check() {
@@ -252,6 +277,8 @@ fn run(
             dirty = true;
         }
     }
+    // Clean exit: flush whatever the debounce hasn't written yet.
+    app.flush_history();
     Ok(())
 }
 
@@ -325,9 +352,17 @@ fn next_timeout(app: &App) -> Duration {
     }
 }
 
-fn is_exit_key(key: KeyEvent) -> bool {
-    key.code == KeyCode::Char('q')
-        || (key.code == KeyCode::Char('c') && key.modifiers == KeyModifiers::CONTROL)
+fn is_exit_key(keybinds: &KeyBindings, key: KeyEvent) -> bool {
+    matches!(
+        keybinds.resolve(key, builtin_global),
+        Outcome::Run(GlobalAction::Quit)
+    )
+}
+
+fn builtin_global(key: KeyEvent) -> Option<GlobalAction> {
+    let quit = key.code == KeyCode::Char('q')
+        || (key.code == KeyCode::Char('c') && key.modifiers == KeyModifiers::CONTROL);
+    quit.then_some(GlobalAction::Quit)
 }
 
 fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
@@ -339,20 +374,46 @@ fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
     }
     match app.mode {
         Mode::Insert => handle_insert(app, key, keybinds),
-        Mode::Search => handle_search(app, key),
-        Mode::Help => handle_help(app, key),
-        Mode::Settings => handle_settings(app, key),
+        Mode::Search => handle_search(app, key, keybinds),
+        Mode::Help => handle_help(app, key, keybinds),
+        Mode::Settings => handle_settings(app, key, keybinds),
         Mode::PromptProject
         | Mode::PromptContext
         | Mode::PromptRenameProject
         | Mode::PromptRenameContext
-        | Mode::PromptSaveFilter => handle_prompt(app, key),
-        Mode::PickProject | Mode::PickContext | Mode::PickSavedFilter => handle_pick(app, key),
-        Mode::PickTheme => handle_pick_theme(app, key),
-        Mode::CommandPalette => handle_command_palette(app, key),
+        | Mode::PromptSaveFilter => handle_prompt(app, key, keybinds),
+        Mode::PickProject | Mode::PickContext | Mode::PickSavedFilter => {
+            handle_pick(app, key, keybinds)
+        }
+        Mode::PickTheme => handle_pick_theme(app, key, keybinds),
+        Mode::CommandPalette => handle_command_palette(app, key, keybinds),
         Mode::Share => handle_share(app, key),
-        Mode::Welcome => handle_welcome(app, key),
+        Mode::Welcome => handle_welcome(app, key, keybinds),
         Mode::Normal | Mode::Visual => handle_normal(app, key, keybinds),
+    }
+}
+
+/// Resolve `key` in `A`'s table and run the match, if any.
+///
+/// Every handler funnels through here so the precedence rules live in one
+/// place: a configured binding beats the built-in, `unbind` beats both, and
+/// a swallowed key (an armed chord leader, an unbound key) never reaches the
+/// handler's own fallback. Returns whether the key was claimed, which the
+/// text-field handlers use to decide whether to type it.
+fn dispatch<A: KeyAction>(
+    app: &mut App,
+    key: KeyEvent,
+    keybinds: &KeyBindings,
+    builtin: impl FnOnce(KeyEvent) -> Option<A>,
+    apply: impl FnOnce(&mut App, A),
+) -> bool {
+    match keybinds.resolve(key, builtin) {
+        Outcome::Run(action) => {
+            apply(app, action);
+            true
+        }
+        Outcome::Swallow => true,
+        Outcome::Fallthrough => false,
     }
 }
 
@@ -360,29 +421,43 @@ fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
 /// `file_path`) and edits it; `s` opens the bundled sample; `q`/`Esc` quits
 /// without creating anything. Any other key is ignored so a stray press
 /// doesn't silently pick an option.
-fn handle_welcome(app: &mut App, key: KeyEvent) {
-    if is_exit_key(key) {
+fn handle_welcome(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    if is_exit_key(keybinds, key) {
         app.should_quit = true;
         return;
     }
+    dispatch(
+        app,
+        key,
+        keybinds,
+        builtin_welcome,
+        |app, action| match action {
+            WelcomeAction::CreateFile => match cli::ensure_file(app.file_path.clone()) {
+                Ok(_) => app.mode = Mode::Normal,
+                Err(e) => app.flash(format!("could not create {}: {e}", app.file_path.display())),
+            },
+            WelcomeAction::OpenSample => match cli::sample_path() {
+                Ok(sample) => {
+                    let done = cli::done_path(&sample);
+                    let trash = cli::trash_path(&sample);
+                    let body = std::fs::read_to_string(&sample).unwrap_or_default();
+                    app.open_file(sample, done, trash, body);
+                    app.mode = Mode::Normal;
+                }
+                Err(e) => app.flash(format!("could not open sample: {e}")),
+            },
+            WelcomeAction::Quit => app.should_quit = true,
+        },
+    );
+}
 
-    match key.code {
-        KeyCode::Char('c') => match cli::ensure_file(app.file_path.clone()) {
-            Ok(_) => app.mode = Mode::Normal,
-            Err(e) => app.flash(format!("could not create {}: {e}", app.file_path.display())),
-        },
-        KeyCode::Char('s') => match cli::sample_path() {
-            Ok(sample) => {
-                let done = cli::done_path(&sample);
-                let body = std::fs::read_to_string(&sample).unwrap_or_default();
-                app.open_file(sample, done, body);
-                app.mode = Mode::Normal;
-            }
-            Err(e) => app.flash(format!("could not open sample: {e}")),
-        },
-        KeyCode::Esc => app.should_quit = true,
-        _ => {}
-    }
+fn builtin_welcome(key: KeyEvent) -> Option<WelcomeAction> {
+    Some(match key.code {
+        KeyCode::Char('c') => WelcomeAction::CreateFile,
+        KeyCode::Char('s') => WelcomeAction::OpenSample,
+        KeyCode::Esc => WelcomeAction::Quit,
+        _ => return None,
+    })
 }
 
 /// Share overlay: any key dismisses, returning to Normal. The server
@@ -549,9 +624,47 @@ fn apply_to_draft(app: &mut App, key: KeyEvent) -> DraftEffect {
     }
 }
 
-fn handle_insert_normal(app: &mut App, key: KeyEvent) {
-    match key.code {
-        KeyCode::Enter => {
+/// Built-in vim-normal keys for the dialog. `d` and `c` arm a leader and
+/// resolve to no action of their own; the pairing `w` completes them.
+fn builtin_dialog(key: KeyEvent, chord: &mut Chord) -> Option<DialogAction> {
+    Some(match key.code {
+        KeyCode::Enter => DialogAction::Accept,
+        KeyCode::Esc => DialogAction::Cancel,
+        KeyCode::Char('h') | KeyCode::Left => DialogAction::CursorLeft,
+        KeyCode::Char('l') | KeyCode::Right => DialogAction::CursorRight,
+        KeyCode::Char('w') if chord.consume('d') => DialogAction::DeleteWord,
+        KeyCode::Char('w') if chord.consume('c') => DialogAction::ChangeWord,
+        KeyCode::Char('w') => DialogAction::WordForward,
+        KeyCode::Char('b') => DialogAction::WordBackward,
+        KeyCode::Char('e') => DialogAction::WordEnd,
+        KeyCode::Char('d') => {
+            chord.arm('d');
+            return None;
+        }
+        KeyCode::Char('c') => {
+            chord.arm('c');
+            return None;
+        }
+        KeyCode::Char('x') => DialogAction::DeleteForward,
+        KeyCode::Char('i') => DialogAction::Insert,
+        KeyCode::Char('a') => DialogAction::Append,
+        KeyCode::Char('A') => DialogAction::AppendEnd,
+        _ => return None,
+    })
+}
+
+fn handle_insert_normal(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    // `[dialog]` is one of the two tables that supports chords (`dw`, `cw`),
+    // so the leader state is threaded through the resolver here.
+    let mut chord = app.chord;
+    let outcome = keybinds.resolve_chorded(key, &mut chord, builtin_dialog);
+    app.chord = chord;
+    let action = match outcome {
+        Outcome::Run(action) => action,
+        Outcome::Swallow | Outcome::Fallthrough => return,
+    };
+    match action {
+        DialogAction::Accept => {
             let outcome = if app.selection.editing().is_some() {
                 app.save_edit();
                 AddOutcome::Saved
@@ -564,40 +677,37 @@ fn handle_insert_normal(app: &mut App, key: KeyEvent) {
                 app.selection.exit_edit();
             }
         }
-        KeyCode::Esc => {
+        DialogAction::Cancel => {
             app.mode = Mode::Normal;
             app.draft_clear();
             app.selection.exit_edit();
         }
-        KeyCode::Char('h') | KeyCode::Left => app.draft_left(),
-        KeyCode::Char('l') | KeyCode::Right => app.draft_right(),
-        KeyCode::Char('w') if app.chord.consume('d') => app.draft_delete_word_forward(),
-        KeyCode::Char('w') if app.chord.consume('c') => {
+        DialogAction::CursorLeft => app.draft_left(),
+        DialogAction::CursorRight => app.draft_right(),
+        DialogAction::WordForward => app.draft_word_forward(),
+        DialogAction::WordBackward => app.draft_word_backward(),
+        DialogAction::WordEnd => app.draft_word_end(),
+        DialogAction::DeleteForward => app.draft_delete_forward(),
+        DialogAction::DeleteWord => app.draft_delete_word_forward(),
+        DialogAction::ChangeWord => {
             app.draft_delete_word_forward();
             app.draft.set_input_mode(DialogInputMode::Insert);
         }
-        KeyCode::Char('w') => app.draft_word_forward(),
-        KeyCode::Char('b') => app.draft_word_backward(),
-        KeyCode::Char('e') => app.draft_word_end(),
-        KeyCode::Char('d') => app.chord.arm('d'),
-        KeyCode::Char('c') => app.chord.arm('c'),
-        KeyCode::Char('x') => app.draft_delete_forward(),
-        KeyCode::Char('i') => app.draft.set_input_mode(DialogInputMode::Insert),
-        KeyCode::Char('a') => {
+        DialogAction::Insert => app.draft.set_input_mode(DialogInputMode::Insert),
+        DialogAction::Append => {
             app.draft_right();
             app.draft.set_input_mode(DialogInputMode::Insert);
         }
-        KeyCode::Char('A') => {
+        DialogAction::AppendEnd => {
             app.draft_end();
             app.draft.set_input_mode(DialogInputMode::Insert);
         }
-        _ => {}
     }
 }
 
 fn handle_insert(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
     if app.draft.input_mode() == DialogInputMode::Normal {
-        handle_insert_normal(app, key);
+        handle_insert_normal(app, key, keybinds);
         return;
     }
 
@@ -608,7 +718,7 @@ fn handle_insert(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
     let overlay = app.draft.overlay().map(|o| o.kind());
     match overlay {
         Some(OverlayKind::Calendar) => {
-            handle_insert_calendar(app, key);
+            handle_insert_calendar(app, key, keybinds);
             return;
         }
         Some(OverlayKind::RecurrenceBuilder) => {
@@ -616,11 +726,11 @@ fn handle_insert(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
             return;
         }
         Some(OverlayKind::PriorityChooser) => {
-            handle_insert_priority(app, key);
+            handle_insert_priority(app, key, keybinds);
             return;
         }
         Some(OverlayKind::SlashMenu) => {
-            if handle_insert_slash_menu(app, key) {
+            if handle_insert_slash_menu(app, key, keybinds) {
                 return;
             }
             // Fall through — let the key flow into the editor so filter chars
@@ -635,98 +745,103 @@ fn handle_insert(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
     }
 
     // Autocomplete bindings take precedence — only when the popup is visible.
-    // Tab accepts; Enter falls through to save so the popup never swallows the
+    // Enter is handled here rather than by the popup so it never swallows the
     // submit keystroke (e.g. when the typed token already matches an existing
     // project/context). Esc with the popup open dismisses the popup but leaves
-    // Insert mode intact; a second Esc enters Normal mode (handled below).
+    // Insert mode intact; a second Esc enters the dialog's normal mode.
     if app.autocomplete_visible() {
-        match key.code {
-            KeyCode::Tab | KeyCode::Enter => {
-                app.autocomplete_accept();
-                app.draft.suppress_autocomplete();
-                return;
-            }
-            _ => {
-                if handle_autocomplete_keys(app, key) {
-                    return;
-                }
-            }
+        if key.code == KeyCode::Enter {
+            app.autocomplete_accept();
+            app.draft.suppress_autocomplete();
+            return;
+        }
+        if handle_autocomplete_keys(app, key, keybinds) {
+            return;
         }
     }
 
-    match key.code {
-        KeyCode::Esc => {
-            app.draft.set_input_mode(DialogInputMode::Normal);
-        }
-        KeyCode::Enter => {
-            let outcome = if app.selection.editing().is_some() {
-                app.save_edit();
-                AddOutcome::Saved
-            } else {
-                app.add_from_draft()
-            };
-            // `Parsed` means the NL parser rewrote the draft into canonical
-            // todo.txt and is asking the user to confirm — stay in Insert so
-            // they can review/edit before a second Enter saves.
-            if !matches!(outcome, AddOutcome::Parsed) {
-                app.mode = Mode::Normal;
-                app.draft_clear();
-                app.selection.exit_edit();
-            }
-        }
-        _ => {
-            let before = app.draft.text().len();
-            let effect = apply_to_draft(app, key);
-            // `/` opens the slash menu; `:` after a recognised key
-            // (`due` / `t` / `rec`) opens the matching picker directly. Both
-            // detections run post-insert so they inspect what actually
-            // landed in the buffer.
-            if effect == DraftEffect::TextChanged && app.draft.text().len() > before {
-                match key.code {
-                    KeyCode::Char('/') => app.maybe_open_slash_menu(),
-                    KeyCode::Char(':') => app.maybe_open_kv_overlay(),
-                    _ => {}
+    if dispatch(
+        app,
+        key,
+        keybinds,
+        builtin_dialog_insert,
+        |app, action| match action {
+            DialogInsertAction::Normal => app.draft.set_input_mode(DialogInputMode::Normal),
+            DialogInsertAction::Accept => {
+                let outcome = if app.selection.editing().is_some() {
+                    app.save_edit();
+                    AddOutcome::Saved
+                } else {
+                    app.add_from_draft()
+                };
+                // `Parsed` means the NL parser rewrote the draft into canonical
+                // todo.txt and is asking the user to confirm — stay in Insert so
+                // they can review/edit before a second Enter saves.
+                if !matches!(outcome, AddOutcome::Parsed) {
+                    app.mode = Mode::Normal;
+                    app.draft_clear();
+                    app.selection.exit_edit();
                 }
             }
+        },
+    ) {
+        return;
+    }
+
+    let before = app.draft.text().len();
+    let effect = apply_to_draft(app, key);
+    // `/` opens the slash menu; `:` after a recognised key (`due` / `t` /
+    // `rec`) opens the matching picker directly. Both detections run
+    // post-insert so they inspect what actually landed in the buffer.
+    if effect == DraftEffect::TextChanged && app.draft.text().len() > before {
+        match key.code {
+            KeyCode::Char('/') => app.maybe_open_slash_menu(),
+            KeyCode::Char(':') => app.maybe_open_kv_overlay(),
+            _ => {}
         }
+    }
+}
+
+fn builtin_dialog_insert(key: KeyEvent) -> Option<DialogInsertAction> {
+    match key.code {
+        KeyCode::Enter => Some(DialogInsertAction::Accept),
+        KeyCode::Esc => Some(DialogInsertAction::Normal),
+        _ => None,
     }
 }
 
 /// Slash-menu key handler. Returns `true` when the key was consumed by the
 /// menu (navigation, accept, dismiss); `false` when the key should fall
 /// through to text editing so filter chars are typed into the buffer.
-fn handle_insert_slash_menu(app: &mut App, key: KeyEvent) -> bool {
-    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    match key.code {
-        KeyCode::Up => {
-            app.slash_step(false);
-            true
-        }
-        KeyCode::Down => {
-            app.slash_step(true);
-            true
-        }
-        KeyCode::Char('n') if ctrl => {
-            app.slash_step(true);
-            true
-        }
-        KeyCode::Char('p') if ctrl => {
-            app.slash_step(false);
-            true
-        }
-        KeyCode::Tab | KeyCode::Enter => {
-            app.slash_accept();
-            true
-        }
-        KeyCode::Esc => {
-            app.slash_cancel();
-            true
-        }
-        _ => false,
-    }
+fn handle_insert_slash_menu(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> bool {
+    dispatch(
+        app,
+        key,
+        keybinds,
+        builtin_slash,
+        |app, action| match action {
+            SlashAction::Next => app.slash_step(true),
+            SlashAction::Prev => app.slash_step(false),
+            SlashAction::Accept => app.slash_accept(),
+            SlashAction::Cancel => app.slash_cancel(),
+        },
+    )
 }
 
-fn handle_insert_calendar(app: &mut App, key: KeyEvent) {
+fn builtin_slash(key: KeyEvent) -> Option<SlashAction> {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    Some(match key.code {
+        KeyCode::Down => SlashAction::Next,
+        KeyCode::Up => SlashAction::Prev,
+        KeyCode::Char('n') if ctrl => SlashAction::Next,
+        KeyCode::Char('p') if ctrl => SlashAction::Prev,
+        KeyCode::Tab | KeyCode::Enter => SlashAction::Accept,
+        KeyCode::Esc => SlashAction::Cancel,
+        _ => return None,
+    })
+}
+
+fn handle_insert_calendar(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
     // In auto-trigger mode (anchor set): digit, dash, and backspace are
     // forwarded to the draft buffer so the user can type the date directly.
     // The calendar grid tracks the typed date as it becomes valid.
@@ -738,31 +853,52 @@ fn handle_insert_calendar(app: &mut App, key: KeyEvent) {
             return;
         }
     }
-    match key.code {
-        KeyCode::Char('h') | KeyCode::Left => app.calendar_move(-1, 0),
-        KeyCode::Char('l') | KeyCode::Right => app.calendar_move(1, 0),
-        KeyCode::Char('k') | KeyCode::Up => app.calendar_move(0, -1),
-        KeyCode::Char('j') | KeyCode::Down => app.calendar_move(0, 1),
-        KeyCode::Char('t') => app.calendar_set_relative(0),
-        KeyCode::Char('T') => app.calendar_set_relative(1),
-        KeyCode::Char('w') => app.calendar_set_relative(7),
-        KeyCode::Char('m') => app.calendar_add_months(1),
-        KeyCode::Char('M') => app.calendar_add_months(-1),
-        KeyCode::Char('x') => app.calendar_clear(),
-        KeyCode::Enter => app.calendar_accept(),
-        KeyCode::Esc => app.calendar_cancel(),
-        _ => {}
-    }
+    dispatch(
+        app,
+        key,
+        keybinds,
+        builtin_calendar,
+        |app, action| match action {
+            CalendarAction::MoveLeft => app.calendar_move(-1, 0),
+            CalendarAction::MoveRight => app.calendar_move(1, 0),
+            CalendarAction::MoveUp => app.calendar_move(0, -1),
+            CalendarAction::MoveDown => app.calendar_move(0, 1),
+            CalendarAction::Today => app.calendar_set_relative(0),
+            CalendarAction::Tomorrow => app.calendar_set_relative(1),
+            CalendarAction::WeekAhead => app.calendar_set_relative(7),
+            CalendarAction::MonthNext => app.calendar_add_months(1),
+            CalendarAction::MonthPrev => app.calendar_add_months(-1),
+            CalendarAction::Clear => app.calendar_clear(),
+            CalendarAction::Accept => app.calendar_accept(),
+            CalendarAction::Cancel => app.calendar_cancel(),
+        },
+    );
+}
+
+fn builtin_calendar(key: KeyEvent) -> Option<CalendarAction> {
+    Some(match key.code {
+        KeyCode::Char('h') | KeyCode::Left => CalendarAction::MoveLeft,
+        KeyCode::Char('l') | KeyCode::Right => CalendarAction::MoveRight,
+        KeyCode::Char('k') | KeyCode::Up => CalendarAction::MoveUp,
+        KeyCode::Char('j') | KeyCode::Down => CalendarAction::MoveDown,
+        KeyCode::Char('t') => CalendarAction::Today,
+        KeyCode::Char('T') => CalendarAction::Tomorrow,
+        KeyCode::Char('w') => CalendarAction::WeekAhead,
+        KeyCode::Char('m') => CalendarAction::MonthNext,
+        KeyCode::Char('M') => CalendarAction::MonthPrev,
+        KeyCode::Char('x') => CalendarAction::Clear,
+        KeyCode::Enter => CalendarAction::Accept,
+        KeyCode::Esc => CalendarAction::Cancel,
+        _ => return None,
+    })
 }
 
 fn handle_insert_rec_builder(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
-    // Custom `[recurrence]` bindings win over the built-ins, matching how
-    // `[normal]` is layered in `resolve_normal_key`.
-    if let Some(action) = keybinds.resolve_recurrence(key) {
-        apply_rec_action(app, action);
-        return;
-    }
-    let action = match key.code {
+    dispatch(app, key, keybinds, builtin_recurrence, apply_rec_action);
+}
+
+fn builtin_recurrence(key: KeyEvent) -> Option<RecAction> {
+    Some(match key.code {
         // Horizontal keys change the focused field's *value*: both the unit
         // and the mode render as horizontal segmented controls, so Left/Right
         // moving along them is the affordance the layout already suggests.
@@ -777,9 +913,8 @@ fn handle_insert_rec_builder(app: &mut App, key: KeyEvent, keybinds: &KeyBinding
         KeyCode::Char('-') | KeyCode::Char('_') => RecAction::ValuePrev,
         KeyCode::Enter => RecAction::Accept,
         KeyCode::Esc => RecAction::Cancel,
-        _ => return,
-    };
-    apply_rec_action(app, action);
+        _ => return None,
+    })
 }
 
 fn apply_rec_action(app: &mut App, action: RecAction) {
@@ -793,127 +928,211 @@ fn apply_rec_action(app: &mut App, action: RecAction) {
     }
 }
 
-fn handle_insert_priority(app: &mut App, key: KeyEvent) {
-    match key.code {
-        KeyCode::Char('j') | KeyCode::Down => app.priority_step(true),
-        KeyCode::Char('k') | KeyCode::Up => app.priority_step(false),
-        KeyCode::Enter => app.priority_accept(),
-        KeyCode::Esc => app.priority_cancel(),
-        _ => {}
-    }
+fn handle_insert_priority(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    dispatch(
+        app,
+        key,
+        keybinds,
+        builtin_priority,
+        |app, action| match action {
+            PriorityAction::Next => app.priority_step(true),
+            PriorityAction::Prev => app.priority_step(false),
+            PriorityAction::Accept => app.priority_accept(),
+            PriorityAction::Cancel => app.priority_cancel(),
+        },
+    );
 }
 
-fn handle_search(app: &mut App, key: KeyEvent) {
-    match key.code {
-        KeyCode::Esc => {
-            app.mode = Mode::Normal;
-            app.draft_clear();
-            app.clear_search();
-        }
-        KeyCode::Enter => {
-            app.mode = Mode::Normal;
-            app.cursor = 0;
-        }
-        _ => {
-            if apply_to_draft(app, key) == DraftEffect::TextChanged {
-                app.set_search(app.draft.text().to_string());
+fn builtin_priority(key: KeyEvent) -> Option<PriorityAction> {
+    Some(match key.code {
+        KeyCode::Char('j') | KeyCode::Down => PriorityAction::Next,
+        KeyCode::Char('k') | KeyCode::Up => PriorityAction::Prev,
+        KeyCode::Enter => PriorityAction::Accept,
+        KeyCode::Esc => PriorityAction::Cancel,
+        _ => return None,
+    })
+}
+
+fn handle_search(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    if dispatch(
+        app,
+        key,
+        keybinds,
+        builtin_search,
+        |app, action| match action {
+            SearchAction::Accept => {
+                app.mode = Mode::Normal;
+                app.cursor = 0;
             }
-        }
+            SearchAction::Cancel => {
+                app.mode = Mode::Normal;
+                app.draft_clear();
+                app.clear_search();
+            }
+        },
+    ) {
+        return;
+    }
+    if apply_to_draft(app, key) == DraftEffect::TextChanged {
+        app.set_search(app.draft.text().to_string());
     }
 }
 
-fn handle_help(app: &mut App, key: KeyEvent) {
-    if is_exit_key(key) || matches!(key.code, KeyCode::Esc | KeyCode::Char('?')) {
-        app.mode = Mode::Normal;
+fn builtin_search(key: KeyEvent) -> Option<SearchAction> {
+    match key.code {
+        KeyCode::Enter => Some(SearchAction::Accept),
+        KeyCode::Esc => Some(SearchAction::Cancel),
+        _ => None,
     }
 }
 
-fn handle_settings(app: &mut App, key: KeyEvent) {
-    if is_exit_key(key) {
+fn handle_help(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    if is_exit_key(keybinds, key) {
         app.mode = Mode::Normal;
         return;
     }
-
-    match key.code {
-        KeyCode::Esc | KeyCode::Char(',') => app.mode = Mode::Normal,
-        KeyCode::Char('T') => apply_action(app, Action::CycleTheme),
-        KeyCode::Char('D') => apply_action(app, Action::CycleDensity),
-        KeyCode::Char('L') => apply_action(app, Action::ToggleLineNum),
-        KeyCode::Char('[') => apply_action(app, Action::ToggleLeftPane),
-        KeyCode::Char(']') => apply_action(app, Action::ToggleRightPane),
-        KeyCode::Char('H') => apply_action(app, Action::ToggleShowDone),
-        KeyCode::Char('F') => apply_action(app, Action::ToggleShowFuture),
-        KeyCode::Char('S') => apply_action(app, Action::CycleSort),
-        _ => {}
-    }
-}
-
-fn handle_pick(app: &mut App, key: KeyEvent) {
-    match key.code {
-        KeyCode::Char('j') | KeyCode::Down => app.pick_step(true),
-        KeyCode::Char('k') | KeyCode::Up => app.pick_step(false),
-        KeyCode::Char('r') => match app.mode {
-            Mode::PickProject => app.begin_rename_project(),
-            Mode::PickContext => app.begin_rename_context(),
-            _ => {}
+    dispatch(
+        app,
+        key,
+        keybinds,
+        builtin_help,
+        |app, HelpAction::Close| {
+            app.mode = Mode::Normal;
         },
-        KeyCode::Enter => app.pick_accept(),
-        KeyCode::Esc => app.pick_cancel(),
-        _ => {}
-    }
+    );
 }
 
-fn handle_pick_theme(app: &mut App, key: KeyEvent) {
-    match key.code {
-        KeyCode::Char('j') | KeyCode::Down | KeyCode::Char('T') => app.pick_theme_step(true),
-        KeyCode::Char('k') | KeyCode::Up => app.pick_theme_step(false),
-        KeyCode::Enter => app.pick_theme_accept(),
-        KeyCode::Esc => app.pick_theme_cancel(),
-        _ => {}
-    }
+fn builtin_help(key: KeyEvent) -> Option<HelpAction> {
+    matches!(key.code, KeyCode::Esc | KeyCode::Char('?')).then_some(HelpAction::Close)
 }
 
-fn handle_command_palette(app: &mut App, key: KeyEvent) {
-    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    // List navigation. Plain j/k must type into the search box — the user
-    // might be searching for "jump" — so navigation goes via arrows or
-    // Ctrl-N/Ctrl-P (matches the autocomplete popup in handle_insert).
-    match key.code {
-        KeyCode::Esc => {
-            app.mode = app.command_palette.take_prior();
-            app.draft_clear();
-            return;
-        }
-        KeyCode::Enter => {
-            let chosen = app.command_palette.current_action();
-            // Restore the prior mode (Normal or Visual) *before* dispatching
-            // so visual-aware actions (ToggleComplete, Delete, ToggleSelected)
-            // see the selection. The dispatched action may then set its own
-            // mode (BeginAdd → Insert, etc.); we don't stomp it after.
-            app.mode = app.command_palette.take_prior();
-            app.draft_clear();
-            if let Some(action) = chosen {
-                apply_action(app, action);
+fn handle_settings(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    let claimed = dispatch(app, key, keybinds, builtin_settings, |app, action| {
+        // Every row but Close mirrors a `[normal]` action, so the overlay
+        // delegates rather than re-implementing the toggles.
+        let mirrored = match action {
+            SettingsAction::Close => {
+                app.mode = Mode::Normal;
+                return;
             }
-            return;
-        }
-        KeyCode::Down => {
-            app.command_palette.step(1);
-            return;
-        }
-        KeyCode::Up => {
-            app.command_palette.step(-1);
-            return;
-        }
-        KeyCode::Char('n') if ctrl => {
-            app.command_palette.step(1);
-            return;
-        }
-        KeyCode::Char('p') if ctrl => {
-            app.command_palette.step(-1);
-            return;
-        }
-        _ => {}
+            SettingsAction::CycleTheme => Action::CycleTheme,
+            SettingsAction::CycleDensity => Action::CycleDensity,
+            SettingsAction::ToggleLineNum => Action::ToggleLineNum,
+            SettingsAction::ToggleLeftPane => Action::ToggleLeftPane,
+            SettingsAction::ToggleRightPane => Action::ToggleRightPane,
+            SettingsAction::ToggleShowDone => Action::ToggleShowDone,
+            SettingsAction::ToggleShowFuture => Action::ToggleShowFuture,
+            SettingsAction::CycleSort => Action::CycleSort,
+        };
+        apply_action(app, mirrored);
+    });
+    // The quit key closes the overlay rather than the app — you are one
+    // screen deep, so it unwinds one screen.
+    if !claimed && is_exit_key(keybinds, key) {
+        app.mode = Mode::Normal;
+    }
+}
+
+fn builtin_settings(key: KeyEvent) -> Option<SettingsAction> {
+    Some(match key.code {
+        KeyCode::Esc | KeyCode::Char(',') => SettingsAction::Close,
+        KeyCode::Char('T') => SettingsAction::CycleTheme,
+        KeyCode::Char('D') => SettingsAction::CycleDensity,
+        KeyCode::Char('L') => SettingsAction::ToggleLineNum,
+        KeyCode::Char('[') => SettingsAction::ToggleLeftPane,
+        KeyCode::Char(']') => SettingsAction::ToggleRightPane,
+        KeyCode::Char('H') => SettingsAction::ToggleShowDone,
+        KeyCode::Char('F') => SettingsAction::ToggleShowFuture,
+        KeyCode::Char('S') => SettingsAction::CycleSort,
+        _ => return None,
+    })
+}
+
+fn handle_pick(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    dispatch(
+        app,
+        key,
+        keybinds,
+        builtin_pick,
+        |app, action| match action {
+            PickAction::Next => app.pick_step(true),
+            PickAction::Prev => app.pick_step(false),
+            PickAction::Rename => match app.mode {
+                Mode::PickProject => app.begin_rename_project(),
+                Mode::PickContext => app.begin_rename_context(),
+                _ => {}
+            },
+            PickAction::Accept => app.pick_accept(),
+            PickAction::Cancel => app.pick_cancel(),
+        },
+    );
+}
+
+fn builtin_pick(key: KeyEvent) -> Option<PickAction> {
+    Some(match key.code {
+        KeyCode::Char('j') | KeyCode::Down => PickAction::Next,
+        KeyCode::Char('k') | KeyCode::Up => PickAction::Prev,
+        KeyCode::Char('r') => PickAction::Rename,
+        KeyCode::Enter => PickAction::Accept,
+        KeyCode::Esc => PickAction::Cancel,
+        _ => return None,
+    })
+}
+
+fn handle_pick_theme(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    dispatch(
+        app,
+        key,
+        keybinds,
+        builtin_pick_theme,
+        |app, action| match action {
+            ThemePickerAction::Next => app.pick_theme_step(true),
+            ThemePickerAction::Prev => app.pick_theme_step(false),
+            ThemePickerAction::Accept => app.pick_theme_accept(),
+            ThemePickerAction::Cancel => app.pick_theme_cancel(),
+        },
+    );
+}
+
+fn builtin_pick_theme(key: KeyEvent) -> Option<ThemePickerAction> {
+    Some(match key.code {
+        // `T` steps forward too, so holding the open key cycles the preview.
+        KeyCode::Char('j') | KeyCode::Down | KeyCode::Char('T') => ThemePickerAction::Next,
+        KeyCode::Char('k') | KeyCode::Up => ThemePickerAction::Prev,
+        KeyCode::Enter => ThemePickerAction::Accept,
+        KeyCode::Esc => ThemePickerAction::Cancel,
+        _ => return None,
+    })
+}
+
+fn handle_command_palette(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    if dispatch(
+        app,
+        key,
+        keybinds,
+        builtin_palette,
+        |app, action| match action {
+            PaletteAction::Next => app.command_palette.step(1),
+            PaletteAction::Prev => app.command_palette.step(-1),
+            PaletteAction::Cancel => {
+                app.mode = app.command_palette.take_prior();
+                app.draft_clear();
+            }
+            PaletteAction::Accept => {
+                let chosen = app.command_palette.current_action();
+                // Restore the prior mode (Normal or Visual) *before* dispatching
+                // so visual-aware actions (ToggleComplete, Delete, ToggleSelected)
+                // see the selection. The dispatched action may then set its own
+                // mode (BeginAdd → Insert, etc.); we don't stomp it after.
+                app.mode = app.command_palette.take_prior();
+                app.draft_clear();
+                if let Some(action) = chosen {
+                    apply_action(app, action);
+                }
+            }
+        },
+    ) {
+        return;
     }
     if apply_to_draft(app, key) == DraftEffect::TextChanged {
         // `refresh` resets the cursor when the needle actually changes; a
@@ -922,70 +1141,81 @@ fn handle_command_palette(app: &mut App, key: KeyEvent) {
     }
 }
 
-fn handle_autocomplete_keys(app: &mut App, key: KeyEvent) -> bool {
+/// List navigation. Plain j/k must type into the search box — the user might
+/// be searching for "jump" — so navigation goes via arrows or Ctrl-N/Ctrl-P
+/// (matches the autocomplete popup in `handle_insert`).
+fn builtin_palette(key: KeyEvent) -> Option<PaletteAction> {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    match key.code {
-        KeyCode::Up => {
-            app.autocomplete_step(false);
-            true
-        }
-        KeyCode::Down => {
-            app.autocomplete_step(true);
-            true
-        }
-        KeyCode::Char('n') if ctrl => {
-            app.autocomplete_step(true);
-            true
-        }
-        KeyCode::Char('p') if ctrl => {
-            app.autocomplete_step(false);
-            true
-        }
-        KeyCode::Esc => {
-            app.draft.suppress_autocomplete();
-            true
-        }
-        _ => false,
-    }
+    Some(match key.code {
+        KeyCode::Down => PaletteAction::Next,
+        KeyCode::Up => PaletteAction::Prev,
+        KeyCode::Char('n') if ctrl => PaletteAction::Next,
+        KeyCode::Char('p') if ctrl => PaletteAction::Prev,
+        KeyCode::Enter => PaletteAction::Accept,
+        KeyCode::Esc => PaletteAction::Cancel,
+        _ => return None,
+    })
 }
 
-fn handle_prompt(app: &mut App, key: KeyEvent) {
-    if app.autocomplete_visible() {
-        match key.code {
-            KeyCode::Tab => {
-                app.autocomplete_accept();
-                return;
-            }
-            _ => {
-                if handle_autocomplete_keys(app, key) {
-                    return;
-                }
-            }
-        }
-    }
+fn handle_autocomplete_keys(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> bool {
+    dispatch(
+        app,
+        key,
+        keybinds,
+        builtin_autocomplete,
+        |app, action| match action {
+            AutocompleteAction::Next => app.autocomplete_step(true),
+            AutocompleteAction::Prev => app.autocomplete_step(false),
+            AutocompleteAction::Accept => app.autocomplete_accept(),
+            AutocompleteAction::Dismiss => app.draft.suppress_autocomplete(),
+        },
+    )
+}
 
+fn builtin_autocomplete(key: KeyEvent) -> Option<AutocompleteAction> {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    Some(match key.code {
+        KeyCode::Down => AutocompleteAction::Next,
+        KeyCode::Up => AutocompleteAction::Prev,
+        KeyCode::Char('n') if ctrl => AutocompleteAction::Next,
+        KeyCode::Char('p') if ctrl => AutocompleteAction::Prev,
+        KeyCode::Tab => AutocompleteAction::Accept,
+        KeyCode::Esc => AutocompleteAction::Dismiss,
+        _ => return None,
+    })
+}
+
+fn handle_prompt(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    if app.autocomplete_visible() && handle_autocomplete_keys(app, key, keybinds) {
+        return;
+    }
+    if dispatch(app, key, keybinds, builtin_prompt, |app, action| {
+        let prev_mode = app.mode;
+        let value = app.draft.text().to_string();
+        app.draft_clear();
+        app.mode = Mode::Normal;
+        if action == PromptAction::Cancel {
+            return;
+        }
+        match prev_mode {
+            Mode::PromptProject => app.add_project_to_current(&value),
+            Mode::PromptContext => app.toggle_context_on_current(&value),
+            Mode::PromptSaveFilter => app.save_current_filter_as(&value),
+            Mode::PromptRenameProject => app.rename_current_project_as(&value),
+            Mode::PromptRenameContext => app.rename_current_context_as(&value),
+            _ => {}
+        }
+    }) {
+        return;
+    }
+    apply_to_draft(app, key);
+}
+
+fn builtin_prompt(key: KeyEvent) -> Option<PromptAction> {
     match key.code {
-        KeyCode::Esc => {
-            app.mode = Mode::Normal;
-            app.draft_clear();
-        }
-        KeyCode::Enter => {
-            let prev_mode = app.mode;
-            let value = app.draft.text().to_string();
-            app.draft_clear();
-            app.mode = Mode::Normal;
-            match prev_mode {
-                Mode::PromptProject => app.add_project_to_current(&value),
-                Mode::PromptContext => app.toggle_context_on_current(&value),
-                Mode::PromptSaveFilter => app.save_current_filter_as(&value),
-                Mode::PromptRenameProject => app.rename_current_project_as(&value),
-                Mode::PromptRenameContext => app.rename_current_context_as(&value),
-                _ => {}
-            }
-        }
-        _ => {
-            apply_to_draft(app, key);
-        }
+        KeyCode::Enter => Some(PromptAction::Accept),
+        KeyCode::Esc => Some(PromptAction::Cancel),
+        _ => None,
     }
 }
 
@@ -1000,22 +1230,46 @@ fn handle_prompt(app: &mut App, key: KeyEvent) {
 /// Mutates the chord state because chord progress is part of interpreting
 /// the key, not a separate concern.
 fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> Option<Action> {
-    match keybinds.resolve_normal(key, &mut app.chord) {
-        Some(ResolvedKey::Action(action)) => return Some(action),
-        Some(ResolvedKey::Pending) => return None,
-        None => {}
+    let before = app.chord.pending();
+    let action = resolve_normal_key_inner(app, key, keybinds);
+    // A key that neither completed the pending chord nor armed a new one is
+    // unrelated to it (`f` then `j`), so the leader is dropped rather than
+    // left to catch the *next* keystroke. Matters most with the which-key
+    // menu enabled, where an armed leader otherwise waits — and keeps its
+    // menu on screen — indefinitely.
+    if before.is_some() && app.chord.pending() == before {
+        app.chord.clear();
     }
+    action
+}
 
-    if is_exit_key(key) {
-        return Some(Action::Quit);
+fn resolve_normal_key_inner(
+    app: &mut App,
+    key: KeyEvent,
+    keybinds: &KeyBindings,
+) -> Option<Action> {
+    let mut chord = app.chord;
+    let outcome =
+        keybinds.resolve_chorded(key, &mut chord, |key, chord| builtin_normal(chord, key));
+    app.chord = chord;
+    match outcome {
+        Outcome::Run(action) => Some(action),
+        Outcome::Swallow => None,
+        // The quit key lives in `[global]` so one binding covers every mode;
+        // it is checked last so a `[normal]` binding can claim `q` first.
+        Outcome::Fallthrough => is_exit_key(keybinds, key).then_some(Action::Quit),
     }
+}
 
-    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    if ctrl {
+/// Built-in normal-mode keys. Chord leaders (`g`, `d`, `y`, `f`) arm and
+/// resolve to no action of their own; the second press completes them.
+fn builtin_normal(chord: &mut Chord, key: KeyEvent) -> Option<Action> {
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
         return match key.code {
             KeyCode::Char('d') => Some(Action::HalfPageDown),
             KeyCode::Char('u') => Some(Action::HalfPageUp),
             KeyCode::Char('p') => Some(Action::OpenCommandPalette),
+            KeyCode::Char('r') => Some(Action::Redo),
             _ => None,
         };
     }
@@ -1026,10 +1280,12 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('K') => Action::MoveTaskUp,
         KeyCode::Char('G') => Action::CursorBottom,
         // First 'g' arms the chord; second 'g' fires CursorTop.
-        KeyCode::Char('g') if app.chord.toggle('g') => Action::CursorTop,
+        KeyCode::Char('g') if chord.toggle('g') => Action::CursorTop,
         KeyCode::Char('n') => Action::BeginAdd,
         KeyCode::Char('r') => Action::Reschedule,
         KeyCode::Char('a') => Action::ToggleArchiveView,
+        KeyCode::Char('t') => Action::ToggleTrashView,
+        KeyCode::Char('E') => Action::EmptyTrash,
         KeyCode::Char('l') => Action::GoList,
         KeyCode::Char('e') => Action::BeginEdit,
         KeyCode::Char('i') => Action::BeginEditInsert,
@@ -1037,22 +1293,22 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('O') => Action::CreateOrOpenNote,
         KeyCode::Char('x') => Action::ToggleComplete,
         // 'dd' chord. First press arms; second fires.
-        KeyCode::Char('d') if app.chord.toggle('d') => Action::Delete,
+        KeyCode::Char('d') if chord.toggle('d') => Action::Delete,
         // 'yy' chord copies the whole line; 'yb' (after 'y' is armed) copies
         // the body only. Plain 'y' just arms the leader.
-        KeyCode::Char('y') if app.chord.toggle('y') => Action::CopyLine,
-        KeyCode::Char('b') if app.chord.consume('y') => Action::CopyBody,
+        KeyCode::Char('y') if chord.toggle('y') => Action::CopyLine,
+        KeyCode::Char('b') if chord.consume('y') => Action::CopyBody,
         KeyCode::Char('p') => {
             // After 'f' arms, 'fp' opens the project picker. Otherwise plain
             // 'p' cycles priority.
-            if app.chord.consume('f') {
+            if chord.consume('f') {
                 Action::PickProject
             } else {
                 Action::CyclePriority
             }
         }
         KeyCode::Char('c') => {
-            if app.chord.consume('f') {
+            if chord.consume('f') {
                 Action::PickContext
             } else {
                 Action::BeginPromptContext
@@ -1067,9 +1323,9 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char(' ') => Action::ToggleSelected,
         KeyCode::Char('A') => Action::ArchiveCompleted,
         // First 'f' arms the leader; a second 'f' (`ff`) opens the saved-
-        // search picker. Mirrors the `fp`/`fc` pattern below.
+        // search picker. Mirrors the `fp`/`fc` pattern above.
         KeyCode::Char('f') => {
-            if app.chord.consume('f') {
+            if chord.consume('f') {
                 Action::PickSavedFilter
             } else {
                 Action::ArmF
@@ -1077,7 +1333,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         }
         KeyCode::Char('s') => {
             // `fs` saves the active search; plain 's' opens the share QR.
-            if app.chord.consume('f') {
+            if chord.consume('f') {
                 Action::SaveCurrentFilter
             } else {
                 Action::OpenShare
@@ -1136,8 +1392,59 @@ fn apply_action(app: &mut App, action: Action) {
             | Action::CycleSort
             | Action::ToggleShowDone
             | Action::ToggleShowFuture
-            | Action::Undo => {
+            | Action::Undo
+            | Action::Redo
+            | Action::TrashRestore
+            | Action::EmptyTrash => {
                 app.flash("read-only in archive");
+                return;
+            }
+            _ => {}
+        }
+    }
+    // Trash view is read-only with three exceptions: `x` restores the row at
+    // the cursor, `dd` is the second delete that removes it for good, and `E`
+    // empties the whole trash.
+    if app.view() == View::Trash {
+        match action {
+            Action::ToggleComplete | Action::TrashRestore => {
+                if let Some(idx) = app.cur_abs() {
+                    app.trash_restore(idx);
+                }
+                return;
+            }
+            Action::Delete => {
+                if let Some(idx) = app.cur_abs() {
+                    app.trash_delete(idx);
+                }
+                return;
+            }
+            Action::EmptyTrash => {
+                app.empty_trash();
+                return;
+            }
+            Action::BeginAdd
+            | Action::BeginEdit
+            | Action::BeginEditInsert
+            | Action::CyclePriority
+            | Action::MoveTaskDown
+            | Action::MoveTaskUp
+            | Action::ToggleVisual
+            | Action::ToggleSelected
+            | Action::BeginSearch
+            | Action::BeginPromptProject
+            | Action::BeginPromptContext
+            | Action::PickProject
+            | Action::PickContext
+            | Action::PickSavedFilter
+            | Action::SaveCurrentFilter
+            | Action::CycleSort
+            | Action::ToggleShowDone
+            | Action::ToggleShowFuture
+            | Action::ArchiveCompleted
+            | Action::Undo
+            | Action::Redo => {
+                app.flash("read-only in trash");
                 return;
             }
             _ => {}
@@ -1228,6 +1535,7 @@ fn apply_action(app: &mut App, action: Action) {
             app.draft_clear();
         }
         Action::Undo => app.undo(),
+        Action::Redo => app.redo(),
         Action::ToggleVisual => {
             app.mode = if app.mode == Mode::Visual {
                 Mode::Normal
@@ -1260,6 +1568,17 @@ fn apply_action(app: &mut App, action: Action) {
                 app.flash("no completed tasks to archive");
             }
         }
+        Action::ToggleTrashView => {
+            let next = if app.view() == View::Trash {
+                View::List
+            } else {
+                View::Trash
+            };
+            app.set_view(next);
+        }
+        // Only meaningful inside the Trash view, which is handled by the guard
+        // above; reaching here means the user is somewhere else.
+        Action::TrashRestore | Action::EmptyTrash => app.flash("not in trash"),
         Action::ArmF => app.chord.arm('f'),
         Action::PickProject => app.enter_pick_project(),
         Action::PickContext => app.enter_pick_context(),
@@ -1363,6 +1682,13 @@ fn apply_action(app: &mut App, action: Action) {
 }
 
 fn handle_normal(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
+    // Esc dismisses an open which-key menu and nothing else: the leader was
+    // a false start, so unwinding filters/selection on top of it would be a
+    // surprise.
+    if key.code == KeyCode::Esc && app.whichkey_menu().is_some() {
+        app.chord.clear();
+        return;
+    }
     if let Some(action) = resolve_normal_key(app, key, keybinds) {
         apply_action(app, action);
     }
@@ -1458,7 +1784,7 @@ mod tests {
     fn welcome_c_creates_cwd_file_and_enters_normal() {
         let (mut app, path) = welcome_app("c");
         assert!(!path.exists(), "precondition: file must not exist yet");
-        handle_welcome(&mut app, key('c'));
+        handle_welcome(&mut app, key('c'), &KeyBindings::default());
         assert!(path.exists(), "`c` must create the target file");
         assert_eq!(app.mode, Mode::Normal);
         assert_eq!(app.file_path, path, "`c` keeps the cwd target path");
@@ -1469,7 +1795,7 @@ mod tests {
     #[test]
     fn welcome_s_opens_sample_and_enters_normal() {
         let (mut app, path) = welcome_app("s");
-        handle_welcome(&mut app, key('s'));
+        handle_welcome(&mut app, key('s'), &KeyBindings::default());
         assert_eq!(app.mode, Mode::Normal);
         assert_ne!(app.file_path, path, "`s` rebinds away from the cwd target");
         assert!(
@@ -1484,12 +1810,16 @@ mod tests {
     #[test]
     fn welcome_q_and_esc_quit_without_creating_anything() {
         let (mut app, path) = welcome_app("q");
-        handle_welcome(&mut app, key('q'));
+        handle_welcome(&mut app, key('q'), &KeyBindings::default());
         assert!(app.should_quit, "`q` must quit");
         assert!(!path.exists(), "`q` must not create a file");
 
         let (mut app, path) = welcome_app("esc");
-        handle_welcome(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        handle_welcome(
+            &mut app,
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            &KeyBindings::default(),
+        );
         assert!(app.should_quit, "Esc must quit");
         assert!(!path.exists(), "Esc must not create a file");
     }
@@ -1500,7 +1830,7 @@ mod tests {
         app.mode = Mode::Settings;
 
         let theme_before = app.prefs.theme_idx();
-        handle_settings(&mut app, key('T'));
+        handle_settings(&mut app, key('T'), &KeyBindings::default());
         assert_ne!(
             app.prefs.theme_idx(),
             theme_before,
@@ -1513,14 +1843,14 @@ mod tests {
         );
 
         let show_done_before = app.prefs.show_done;
-        handle_settings(&mut app, key('H'));
+        handle_settings(&mut app, key('H'), &KeyBindings::default());
         assert_ne!(
             app.prefs.show_done, show_done_before,
             "`H` must toggle show-done, per the settings screen's own hint"
         );
         assert_eq!(app.mode, Mode::Settings);
 
-        handle_settings(&mut app, key('q'));
+        handle_settings(&mut app, key('q'), &KeyBindings::default());
         assert_eq!(app.mode, Mode::Normal, "`q` must still close the dialog");
     }
 
@@ -1531,7 +1861,7 @@ mod tests {
         assert_eq!(app.mode, Mode::PickTheme);
 
         let orig = app.prefs.theme_idx();
-        handle_pick_theme(&mut app, key('T'));
+        handle_pick_theme(&mut app, key('T'), &KeyBindings::default());
         assert_ne!(
             app.prefs.theme_idx(),
             orig,
@@ -1539,7 +1869,11 @@ mod tests {
         );
         assert_eq!(app.mode, Mode::PickTheme, "`T` must not close the dialog");
 
-        handle_pick_theme(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        handle_pick_theme(
+            &mut app,
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            &KeyBindings::default(),
+        );
         assert_eq!(app.mode, Mode::Normal);
         assert_eq!(
             app.prefs.theme_idx(),
@@ -1574,6 +1908,184 @@ mod tests {
             poll_config_reload(&mut app, &rx),
             "the queued signal must still be applied once the picker closes"
         );
+    }
+
+    /// Every context is rebindable through its real handler, not just
+    /// through the resolver: these drive `handle_*` the way the event loop
+    /// does, so a table that was never threaded through would fail here.
+    mod rebinding {
+        use super::*;
+
+        #[test]
+        fn calendar_keys_are_rebindable() {
+            let mut app = build_app_with_due();
+            apply_action(&mut app, Action::Reschedule);
+            assert!(app.calendar_state().is_some(), "calendar should be open");
+            let before = app.calendar_state().expect("open").focused;
+
+            // `n` means nothing to the built-in calendar; bound here it is
+            // the next day.
+            let binds = KeyBindings::parse("[calendar]\nnext_day = \"n\"\n");
+            handle_insert_calendar(&mut app, key('n'), &binds);
+            assert_eq!(
+                app.calendar_state().expect("still open").focused,
+                before.succ_opt().expect("next day")
+            );
+        }
+
+        #[test]
+        fn picker_keys_are_rebindable() {
+            let mut app = build_app_with_project();
+            apply_action(&mut app, Action::PickProject);
+            assert_eq!(app.mode, Mode::PickProject, "picker should be open");
+            let binds = KeyBindings::parse("[pick]\ncancel = \"z\"\n");
+            handle_pick(&mut app, key('z'), &binds);
+            assert_eq!(app.mode, Mode::Normal, "z should have cancelled the picker");
+        }
+
+        #[test]
+        fn settings_keys_are_rebindable() {
+            let mut app = build_app();
+            app.mode = Mode::Settings;
+            let before = app.prefs.theme_idx();
+            let binds = KeyBindings::parse("[settings]\ncycle_theme = \"z\"\n");
+            handle_settings(&mut app, key('z'), &binds);
+            assert_ne!(app.prefs.theme_idx(), before);
+        }
+
+        #[test]
+        fn dialog_keys_and_chords_are_rebindable() {
+            let mut app = build_app();
+            apply_action(&mut app, Action::BeginEdit);
+            app.draft_set_insert("hello world".into());
+            app.draft.set_input_mode(DialogInputMode::Normal);
+            // `dw` deletes forward, so start from the head of the line.
+            app.draft_home();
+
+            // Rebind the `dw` chord onto `zw`, then run it.
+            let binds = KeyBindings::parse("[dialog]\ndelete_word = \"zw\"\n");
+            handle_insert_normal(&mut app, key('z'), &binds);
+            assert_eq!(app.chord.active(), Some('z'), "leader armed");
+            handle_insert_normal(&mut app, key('w'), &binds);
+            assert_ne!(app.draft.text(), "hello world", "a word should be gone");
+        }
+
+        #[test]
+        fn welcome_keys_are_rebindable() {
+            let mut app = build_app();
+            app.mode = Mode::Welcome;
+            let binds = KeyBindings::parse("[welcome]\nquit = \"z\"\n");
+            handle_welcome(&mut app, key('z'), &binds);
+            assert!(app.should_quit);
+        }
+
+        #[test]
+        fn search_accept_is_rebindable_and_other_keys_still_type() {
+            let mut app = build_app();
+            apply_action(&mut app, Action::BeginSearch);
+            let binds = KeyBindings::parse("[search]\naccept = \"Ctrl-j\"\n");
+            // An ordinary letter still reaches the search buffer.
+            handle_search(&mut app, key('a'), &binds);
+            assert_eq!(app.draft.text(), "a");
+            handle_search(&mut app, ctrl('j'), &binds);
+            assert_eq!(app.mode, Mode::Normal);
+        }
+
+        #[test]
+        fn unbind_switches_off_a_normal_mode_key() {
+            let mut app = build_app();
+            let binds = KeyBindings::parse("[normal]\nunbind = [\"x\"]\n");
+            let done_before = app.tasks()[0].done;
+            handle_normal(&mut app, key('x'), &binds);
+            assert_eq!(app.tasks()[0].done, done_before, "x must do nothing");
+        }
+
+        #[test]
+        fn unbinding_quit_keeps_the_app_open() {
+            let mut app = build_app();
+            let binds = KeyBindings::parse("[global]\nunbind = [\"q\"]\n");
+            handle_normal(&mut app, key('q'), &binds);
+            assert!(!app.should_quit);
+        }
+
+        #[test]
+        fn replace_defaults_leaves_only_configured_keys() {
+            let mut app = build_app_with_project();
+            let binds = KeyBindings::parse("[pick]\nreplace_defaults = true\ncancel = \"z\"\n");
+            apply_action(&mut app, Action::PickProject);
+            assert_eq!(app.mode, Mode::PickProject, "picker should be open");
+            // Esc was the built-in cancel; it is gone now.
+            handle_pick(
+                &mut app,
+                KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+                &binds,
+            );
+            assert_eq!(app.mode, Mode::PickProject, "Esc no longer cancels");
+            handle_pick(&mut app, key('z'), &binds);
+            assert_eq!(app.mode, Mode::Normal);
+        }
+
+        #[test]
+        fn a_context_table_outranks_the_global_quit_key() {
+            let mut app = build_app();
+            app.mode = Mode::Help;
+            // `q` normally quits from anywhere; [help] claims it first.
+            let binds = KeyBindings::parse("[help]\nclose = \"q\"\n");
+            handle_help(&mut app, key('q'), &binds);
+            assert!(!app.should_quit, "q was claimed by [help]");
+            assert_eq!(app.mode, Mode::Normal, "and closed the overlay");
+        }
+
+        #[test]
+        fn the_quit_key_unwinds_one_screen_inside_an_overlay() {
+            let mut app = build_app();
+            app.mode = Mode::Settings;
+            handle_settings(&mut app, key('q'), &KeyBindings::default());
+            assert!(!app.should_quit);
+            assert_eq!(app.mode, Mode::Normal);
+        }
+
+        #[test]
+        fn every_table_name_is_unique() {
+            // Two vocabularies sharing a table name would silently cross-bind.
+            let names = [
+                Action::TABLE,
+                RecAction::TABLE,
+                GlobalAction::TABLE,
+                DialogAction::TABLE,
+                DialogInsertAction::TABLE,
+                CalendarAction::TABLE,
+                PriorityAction::TABLE,
+                SlashAction::TABLE,
+                AutocompleteAction::TABLE,
+                SearchAction::TABLE,
+                PromptAction::TABLE,
+                PickAction::TABLE,
+                ThemePickerAction::TABLE,
+                PaletteAction::TABLE,
+                HelpAction::TABLE,
+                SettingsAction::TABLE,
+                WelcomeAction::TABLE,
+            ];
+            let mut sorted = names.to_vec();
+            sorted.sort_unstable();
+            let before = sorted.len();
+            sorted.dedup();
+            assert_eq!(sorted.len(), before, "duplicate table name in {names:?}");
+        }
+    }
+
+    /// An app whose tasks carry a `+project`, so the project picker has
+    /// something to open with.
+    fn build_app_with_project() -> App {
+        let path = std::env::temp_dir().join(format!(
+            "tuxedo-pick-{}-{:?}.txt",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let body = "a +home\nb +work\n";
+        let _ = std::fs::write(&path, body);
+        App::new(path, body.into(), "2026-05-07".into(), Config::default())
     }
 
     fn build_app() -> App {
@@ -1712,6 +2224,76 @@ mod tests {
         apply_action(&mut app, Action::ArmF);
         // 'p' after armed 'f' picks project, not cycles priority.
         assert_eq!(resolve(&mut app, key('p')), Some(Action::PickProject));
+    }
+
+    #[test]
+    fn unrelated_key_dismisses_an_armed_leader() {
+        let mut app = build_app();
+        assert_eq!(resolve(&mut app, key('f')), Some(Action::ArmF));
+        apply_action(&mut app, Action::ArmF);
+        // 'j' is not an `f` continuation: it moves the cursor and drops the
+        // leader, so the *next* 'p' cycles priority rather than completing a
+        // stale `fp`.
+        assert_eq!(resolve(&mut app, key('j')), Some(Action::CursorDown));
+        assert!(app.chord.active().is_none());
+        assert_eq!(resolve(&mut app, key('p')), Some(Action::CyclePriority));
+    }
+
+    #[test]
+    fn unmapped_key_dismisses_an_armed_leader() {
+        let mut app = build_app();
+        assert_eq!(resolve(&mut app, key('g')), None);
+        assert_eq!(app.chord.active(), Some('g'));
+        // 'z' is bound to nothing at all — it still clears the leader.
+        assert_eq!(resolve(&mut app, key('z')), None);
+        assert!(app.chord.active().is_none());
+    }
+
+    #[test]
+    fn esc_dismisses_the_which_key_menu_without_unwinding_filters() {
+        let mut app = build_app();
+        app.chord.set_which_key(Some(Duration::ZERO));
+        app.set_project_filter(Some("tuxedo".to_string()));
+        app.chord.arm('f');
+        assert!(app.whichkey_menu().is_some());
+
+        handle_normal(
+            &mut app,
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            &KeyBindings::default(),
+        );
+        assert!(app.whichkey_menu().is_none(), "menu dismissed");
+        assert_eq!(
+            app.filter().project.as_deref(),
+            Some("tuxedo"),
+            "the filter Esc would normally clear is left alone"
+        );
+
+        // With no menu open, Esc resumes its usual job.
+        handle_normal(
+            &mut app,
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            &KeyBindings::default(),
+        );
+        assert!(app.filter().project.is_none());
+    }
+
+    #[test]
+    fn which_key_menu_lists_the_leaders_continuations() {
+        let mut app = build_app();
+        app.chord.set_which_key(Some(Duration::ZERO));
+        // Nothing armed: no menu.
+        assert!(app.whichkey_menu().is_none());
+
+        app.chord.arm('y');
+        let (leader, entries) = app.whichkey_menu().expect("y menu");
+        assert_eq!(leader, 'y');
+        let keys: Vec<&str> = entries.iter().map(|e| e.keys.as_str()).collect();
+        assert_eq!(keys, vec!["b", "y"]);
+
+        // Completing the chord takes the menu down with it.
+        assert_eq!(resolve(&mut app, key('b')), Some(Action::CopyBody));
+        assert!(app.whichkey_menu().is_none());
     }
 
     #[test]
@@ -1948,6 +2530,137 @@ mod tests {
         );
         assert!(app.selection.is_empty());
         assert_eq!(app.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn ctrl_r_resolves_to_redo_and_round_trips_a_delete() {
+        let mut app = build_app_with_archive("(A) first\n(A) second\n(A) third\n", None);
+        assert_eq!(resolve(&mut app, ctrl('r')), Some(Action::Redo));
+        // Plain 'r' stays Reschedule — the ctrl branch must not shadow it.
+        assert_eq!(resolve(&mut app, key('r')), Some(Action::Reschedule));
+
+        app.cursor = 1;
+        apply_action(&mut app, Action::Delete);
+        assert_eq!(task_lines(&app), ["(A) first", "(A) third"]);
+
+        apply_action(&mut app, Action::Undo);
+        assert_eq!(task_lines(&app), ["(A) first", "(A) second", "(A) third"]);
+
+        apply_action(&mut app, Action::Redo);
+        assert_eq!(task_lines(&app), ["(A) first", "(A) third"]);
+    }
+
+    #[test]
+    fn a_new_edit_after_undo_discards_the_redo_branch() {
+        let mut app = build_app_with_archive("(A) first\n(A) second\n", None);
+        app.cursor = 1;
+        apply_action(&mut app, Action::Delete);
+        apply_action(&mut app, Action::Undo);
+        assert_eq!(task_lines(&app), ["(A) first", "(A) second"]);
+
+        app.cursor = 0;
+        apply_action(&mut app, Action::Delete);
+        assert_eq!(task_lines(&app), ["(A) second"]);
+
+        // The redo branch died with the new delete; Redo is a silent no-op.
+        apply_action(&mut app, Action::Redo);
+        assert_eq!(task_lines(&app), ["(A) second"]);
+    }
+
+    #[test]
+    fn redo_is_read_only_in_archive_view() {
+        let mut app = build_app_with_archive("(A) first\n", Some("x 2026-05-01 done thing\n"));
+        apply_action(&mut app, Action::ToggleArchiveView);
+        apply_action(&mut app, Action::Redo);
+        assert_eq!(app.flash_active(), Some("read-only in archive"));
+    }
+
+    fn trash_lines(app: &App) -> Vec<&str> {
+        app.trash().tasks().iter().map(|t| t.raw.as_str()).collect()
+    }
+
+    #[test]
+    fn t_resolves_to_toggle_trash_view_and_e_to_empty() {
+        let mut app = build_app_with_archive("(A) one\n", None);
+        assert_eq!(resolve(&mut app, key('t')), Some(Action::ToggleTrashView));
+        assert_eq!(resolve(&mut app, key('E')), Some(Action::EmptyTrash));
+        // `T` stays the theme picker — `t` must not shadow it.
+        assert_eq!(resolve(&mut app, key('T')), Some(Action::OpenThemePicker));
+
+        apply_action(&mut app, Action::ToggleTrashView);
+        assert_eq!(app.view(), View::Trash);
+        apply_action(&mut app, Action::ToggleTrashView);
+        assert_eq!(app.view(), View::List, "t toggles back to the list");
+    }
+
+    #[test]
+    fn delete_sends_to_trash_and_second_delete_is_permanent() {
+        let mut app = build_app_with_archive("(A) one\n(B) two\n", None);
+        app.cursor = 1;
+        apply_action(&mut app, Action::Delete);
+        assert_eq!(task_lines(&app), ["(A) one"]);
+        assert_eq!(trash_lines(&app), ["(B) two"]);
+
+        apply_action(&mut app, Action::ToggleTrashView);
+        app.cursor = 0;
+        apply_action(&mut app, Action::Delete);
+        assert!(trash_lines(&app).is_empty(), "second delete is permanent");
+        assert_eq!(app.flash_active(), Some("deleted permanently"));
+    }
+
+    #[test]
+    fn x_in_trash_restores_to_the_live_list() {
+        let mut app = build_app_with_archive("(A) one\n(B) two\n", None);
+        app.cursor = 1;
+        apply_action(&mut app, Action::Delete);
+        apply_action(&mut app, Action::ToggleTrashView);
+        app.cursor = 0;
+        apply_action(&mut app, Action::ToggleComplete);
+        assert!(trash_lines(&app).is_empty());
+        assert_eq!(task_lines(&app), ["(A) one", "(B) two"]);
+    }
+
+    #[test]
+    fn empty_trash_clears_every_row() {
+        let mut app = build_app_with_archive("a\nb\nc\n", None);
+        app.cursor = 2;
+        apply_action(&mut app, Action::Delete);
+        app.cursor = 1;
+        apply_action(&mut app, Action::Delete);
+        apply_action(&mut app, Action::ToggleTrashView);
+        assert_eq!(trash_lines(&app).len(), 2);
+        apply_action(&mut app, Action::EmptyTrash);
+        assert!(trash_lines(&app).is_empty());
+    }
+
+    #[test]
+    fn edit_actions_are_read_only_in_trash() {
+        let mut app = build_app_with_archive("(A) one\n", None);
+        app.cursor = 0;
+        apply_action(&mut app, Action::Delete);
+        apply_action(&mut app, Action::ToggleTrashView);
+        for action in [
+            Action::BeginAdd,
+            Action::BeginEdit,
+            Action::CyclePriority,
+            Action::Undo,
+            Action::Redo,
+        ] {
+            apply_action(&mut app, action);
+            assert_eq!(
+                app.flash_active(),
+                Some("read-only in trash"),
+                "{action:?} must be refused in the trash view"
+            );
+        }
+    }
+
+    #[test]
+    fn trash_actions_are_refused_in_the_archive_view() {
+        let mut app = build_app_with_archive("(A) one\n", Some("x 2026-05-01 2026-04-01 old\n"));
+        apply_action(&mut app, Action::ToggleArchiveView);
+        apply_action(&mut app, Action::EmptyTrash);
+        assert_eq!(app.flash_active(), Some("read-only in archive"));
     }
 
     #[test]
@@ -2311,7 +3024,7 @@ mod tests {
             app.draft_insert_char(c);
         }
         app.set_search("abc".into());
-        handle_search(&mut app, ctrl('u'));
+        handle_search(&mut app, ctrl('u'), &KeyBindings::default());
         assert_eq!(app.draft.text(), "");
     }
 }

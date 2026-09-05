@@ -98,7 +98,7 @@ pub struct App {
     /// Per-view saved cursor, indexed by `View::idx()`. `set_view` snapshots
     /// the outgoing view's cursor here and restores the incoming view's, so
     /// each view remembers where the user last was.
-    pub(crate) view_cursor: [usize; 2],
+    pub(crate) view_cursor: [usize; 3],
     /// Crate-private: same reason as `view` — `visible_cache` would drift.
     /// Read via `filter()`; mutate via `set_search`/`set_project`/etc.
     pub(crate) filter: Filter,
@@ -106,6 +106,10 @@ pub struct App {
     pub selection: Selection,
     flash_state: Flash,
     pub chord: Chord,
+    /// Which-key menus, derived from the palette catalog plus any chords in
+    /// `keybinds.toml`. Built-ins only until the binary calls
+    /// [`App::set_whichkey`] with the loaded bindings.
+    pub whichkey: crate::whichkey::Registry,
     pub file_path: PathBuf,
     /// Resolved path of the on-disk config file. Set by the binary after
     /// construction so the settings overlay can render a stable, real path
@@ -143,7 +147,7 @@ pub struct App {
     /// Vertical scroll offset (rows from the top of the line list) for each
     /// view, keyed by `View::idx()`. Updated at render time via `Cell` so the
     /// renderer can keep the cursor row visible without taking `&mut self`.
-    pub(crate) view_scroll: [Cell<u16>; 2],
+    pub(crate) view_scroll: [Cell<u16>; 3],
     /// Handle to the in-TUI capture server. `None` until the first time
     /// the user presses `s` (or invokes "show capture QR" from the
     /// palette). Once bound, the entry stays for the rest of the
@@ -168,16 +172,45 @@ impl App {
         Self::from_store(store, file_path, cfg)
     }
 
-    /// Like [`App::new`] but with an explicit `done.txt` path (e.g. `DONE_FILE`).
-    pub fn new_with_done(
+    /// Like [`App::new`] but with explicit sibling paths (e.g. `DONE_FILE` /
+    /// `TRASH_FILE`).
+    pub fn new_with_sides(
         file_path: PathBuf,
         done_path: PathBuf,
+        trash_path: PathBuf,
         body: String,
         today: String,
         cfg: Config,
     ) -> Self {
-        let store = Store::new_with_done(file_path.clone(), done_path, body, today);
+        let store = Store::new_with_sides(file_path.clone(), done_path, trash_path, body, today);
         Self::from_store(store, file_path, cfg)
+    }
+
+    /// Enable cross-session undo/redo. See
+    /// [`Store::enable_history_persistence`].
+    pub fn enable_history_persistence(&mut self) {
+        self.store.enable_history_persistence();
+    }
+
+    /// Write the undo/redo history if it changed and has settled. Called from
+    /// the event loop; the debounce keeps a burst of edits to one write.
+    pub fn flush_history_if_due(&mut self, debounce: std::time::Duration) -> bool {
+        self.store.flush_history_if_due(debounce)
+    }
+
+    /// Write the history now, ignoring the debounce. Called on clean exit.
+    pub fn flush_history(&mut self) -> bool {
+        self.store.flush_history()
+    }
+
+    /// Path of the persisted history file, or `None` when persistence is off.
+    pub fn history_path(&self) -> Option<&std::path::Path> {
+        self.store.history_path()
+    }
+
+    /// Depth of the undo stack.
+    pub fn history_len(&self) -> usize {
+        self.store.history_len()
     }
 
     fn from_store(store: Store, file_path: PathBuf, cfg: Config) -> Self {
@@ -197,12 +230,13 @@ impl App {
             mode: Mode::Normal,
             prefs: Prefs::from_config(cfg),
             cursor: 0,
-            view_cursor: [0; 2],
+            view_cursor: [0; 3],
             filter: Filter::default(),
             draft: DraftState::default(),
             selection: Selection::default(),
             flash_state: Flash::default(),
             chord: Chord::default(),
+            whichkey: crate::whichkey::Registry::builtin(),
             file_path,
             config_path: None,
             should_quit: false,
@@ -214,15 +248,31 @@ impl App {
             saved_pick_restore: None,
             saved_pick_idx: 0,
             command_palette: CommandPaletteState::default(),
-            view_scroll: [Cell::new(0), Cell::new(0)],
+            view_scroll: [Cell::new(0), Cell::new(0), Cell::new(0)],
             share: None,
             notes_dir: note_dir,
             pending_editor_path: None,
             theme_pick_orig: 0,
             week_start: WeekStart::Sunday,
         };
+        app.chord.set_which_key(app.prefs.which_key);
         app.recompute_visible();
         app
+    }
+
+    /// Adopt the which-key menus derived from the user's `keybinds.toml`.
+    /// Called by the binary once, after the bindings are loaded.
+    pub fn set_whichkey(&mut self, registry: crate::whichkey::Registry) {
+        self.whichkey = registry;
+    }
+
+    /// Rows the which-key menu should show right now: `None` unless a leader
+    /// is armed, the menu is enabled, its reveal delay has elapsed, and that
+    /// leader actually has continuations to list.
+    pub fn whichkey_menu(&self) -> Option<(char, &[crate::whichkey::MenuEntry])> {
+        let leader = self.chord.menu_leader()?;
+        let entries = self.whichkey.menu(leader)?;
+        Some((leader, entries))
     }
 
     /// Rebind the App to a different on-disk file at runtime, replacing the
@@ -231,9 +281,19 @@ impl App {
     /// filters, theme, and config live on `App` and are left intact. Used by
     /// the first-run welcome prompt to swap from the placeholder file to the
     /// chosen one. Resets the cursor and recomputes the visible cache.
-    pub fn open_file(&mut self, file_path: PathBuf, done_path: PathBuf, body: String) {
+    pub fn open_file(
+        &mut self,
+        file_path: PathBuf,
+        done_path: PathBuf,
+        trash_path: PathBuf,
+        body: String,
+    ) {
         let today = self.store.today().to_string();
-        self.store = Store::new_with_done(file_path.clone(), done_path, body, today);
+        let persist = self.store.history_path().is_some();
+        self.store = Store::new_with_sides(file_path.clone(), done_path, trash_path, body, today);
+        if persist {
+            self.store.enable_history_persistence();
+        }
         self.file_path = file_path;
         self.cursor = 0;
         self.recompute_visible();
@@ -469,6 +529,7 @@ impl App {
         let i = self.cur_abs()?;
         match self.view {
             View::Archive => self.store.archive().tasks().get(i),
+            View::Trash => self.store.trash().tasks().get(i),
             _ => self.store.tasks().get(i),
         }
     }
@@ -485,11 +546,28 @@ impl App {
         changed
     }
 
+    /// Pump trash state (external `trash.txt` edits). Returns true when the
+    /// visible trash changed, so the caller redraws.
+    /// Read-only view of the trash list.
+    pub fn trash(&self) -> &crate::core::SideFile {
+        self.store.trash()
+    }
+
+    pub fn poll_trash(&mut self) -> bool {
+        let changed = self.store.poll_trash();
+        if changed && matches!(self.view, View::Trash) {
+            self.recompute_visible();
+            self.clamp_cursor();
+        }
+        changed
+    }
+
     /// Index of the task under the cursor *into `self.tasks`*. Returns `None`
     /// in Archive view because the cursor there points into `archive.tasks()`.
     /// Use this — not `cur_abs()` — for any write that mutates `self.tasks`.
     pub fn cur_task_index_in_tasks(&self) -> Option<usize> {
-        if matches!(self.view, View::Archive) {
+        // The Archive and Trash cursors index their own lists, not `tasks`.
+        if matches!(self.view, View::Archive | View::Trash) {
             return None;
         }
         self.cur_abs()
@@ -647,6 +725,7 @@ impl App {
             })
             .collect();
         self.week_start = new_cfg.week_start.unwrap_or(WeekStart::Sunday);
+        self.chord.set_which_key(self.prefs.which_key);
         self.recompute_visible();
     }
 

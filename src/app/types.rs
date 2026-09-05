@@ -53,6 +53,7 @@ pub enum Mode {
 pub enum View {
     List,
     Archive,
+    Trash,
 }
 
 impl View {
@@ -62,6 +63,7 @@ impl View {
         match self {
             View::List => 0,
             View::Archive => 1,
+            View::Trash => 2,
         }
     }
 }

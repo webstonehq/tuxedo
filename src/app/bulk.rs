@@ -52,6 +52,11 @@ impl App {
                 self.mode = Mode::Normal;
             }
             BulkDeleteOutcome::Aborted(r) => self.handle_reconcile_abort(r),
+            BulkDeleteOutcome::TrashReloaded => {
+                self.flash("trash.txt changed on disk; reloaded");
+                self.recompute_visible();
+                self.clamp_cursor();
+            }
             BulkDeleteOutcome::Error(e) => self.flash(format!("write failed: {e}")),
         }
     }

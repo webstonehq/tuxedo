@@ -610,6 +610,30 @@ as a secret — anyone who has the value and LAN reach can append to your
 inbox. Delete the key from `config.toml` to rotate it on the next `s`
 press.
 
+### Post-commit hooks
+
+Set `hook.after_mutation` to an absolute executable path. Tuxedo runs it
+synchronously after every successful durable task-file mutation, directly and
+without a shell.
+
+```toml
+hook.after_mutation = "/home/me/.config/tuxedo/hooks/todo-ledger-lint"
+```
+
+The hook runs from the live todo file's parent directory with no task content
+in its arguments. It receives:
+
+```text
+TUXEDO_HOOK_EVENT=create|update|complete|archive|delete|uncomplete|undo|unarchive
+TUXEDO_ROOT=/absolute/parent/of/todo.txt
+TUXEDO_TODO_FILE=/absolute/path/to/todo.txt
+TUXEDO_DONE_FILE=/absolute/path/to/done.txt
+```
+
+Hook stdout and stderr are captured. A failing hook does not roll back the
+mutation: the TUI shows a warning, and a one-shot CLI command writes a
+diagnostic to stderr and exits with status `1`.
+
 Saved searches (created with `fs`) are written one per line as
 `filter.<name> = <query>`, where `<query>` is the `/`-search needle. They
 round-trip as plain text, so you can add, rename, or delete them by editing

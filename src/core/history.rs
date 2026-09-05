@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use super::Store;
 use super::outcome::{Reconcile, UndoOutcome};
 use crate::app::UNDO_LIMIT;
+use crate::hooks::HookEvent;
 use crate::todo::Task;
 
 #[derive(Debug, Default, Clone)]
@@ -48,7 +49,7 @@ impl Store {
         match self.history.pop() {
             Some(prev) => {
                 let current = std::mem::replace(&mut self.tasks, prev);
-                match self.persist() {
+                match self.persist_with_hook(HookEvent::Undo) {
                     Ok(()) => UndoOutcome::Undone,
                     Err(e) => {
                         let prev = std::mem::replace(&mut self.tasks, current);

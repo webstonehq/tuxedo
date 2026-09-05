@@ -180,9 +180,10 @@ impl App {
         Self::from_store(store, file_path, cfg)
     }
 
-    fn from_store(store: Store, file_path: PathBuf, cfg: Config) -> Self {
+    fn from_store(mut store: Store, file_path: PathBuf, cfg: Config) -> Self {
         // Read saved filters before `cfg` is moved into `Prefs::from_config`.
         let note_dir = note::notes_dir_from_config(cfg.notes_dir.as_deref());
+        store.set_hooks(cfg.hooks.clone());
         let saved_filters = cfg
             .filters
             .iter()
@@ -233,7 +234,9 @@ impl App {
     /// chosen one. Resets the cursor and recomputes the visible cache.
     pub fn open_file(&mut self, file_path: PathBuf, done_path: PathBuf, body: String) {
         let today = self.store.today().to_string();
+        let hooks = self.store.hooks();
         self.store = Store::new_with_done(file_path.clone(), done_path, body, today);
+        self.store.set_hooks(hooks);
         self.file_path = file_path;
         self.cursor = 0;
         self.recompute_visible();
@@ -632,11 +635,27 @@ impl App {
         }
     }
 
+    /// Consume post-commit reports and display a hook failure warning.
+    pub fn apply_hook_reports(&mut self) {
+        let reports = self.store.take_hook_reports();
+        let failures: Vec<String> = reports
+            .iter()
+            .filter(|report| report.failed())
+            .map(|report| report.diagnostic())
+            .collect();
+        match failures.len() {
+            0 => {}
+            1 => self.flash(failures.into_iter().next().expect("one failure")),
+            count => self.flash(format!("{count} post-commit hooks failed")),
+        }
+    }
+
     /// Apply a freshly loaded [`Config`] at runtime — used by the hot-reload
     /// watcher. Rebuilds `prefs` and `saved_filters` from the new config
     /// values, then refreshes the visible task cache so theme/density/sort/
     /// layout changes take effect immediately.
     pub fn reload_config(&mut self, new_cfg: Config) {
+        self.store.set_hooks(new_cfg.hooks.clone());
         self.prefs = Prefs::from_config(new_cfg.clone());
         self.saved_filters = new_cfg
             .filters
@@ -660,6 +679,7 @@ impl App {
         }
         let report = self.store.drain_inbox();
         self.apply_drain(report);
+        self.apply_hook_reports();
         matches!(reconcile, Reconcile::Unchanged)
     }
 }

@@ -47,6 +47,7 @@ impl App {
     pub fn cycle_priority(&mut self, abs: usize) {
         match self.store.cycle_priority(abs) {
             PriorityOutcome::Changed { abs, .. } => self.after_mutation(abs),
+            PriorityOutcome::Unchanged => {}
             PriorityOutcome::Aborted(r) => self.handle_reconcile_abort(r),
             PriorityOutcome::OutOfRange => {}
             PriorityOutcome::Error(e) => self.flash(format!("priority failed: {e}")),

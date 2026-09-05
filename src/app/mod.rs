@@ -15,6 +15,7 @@ use crate::todo::Task;
 mod autocomplete;
 mod bulk;
 mod chord;
+mod count;
 mod draft;
 mod draft_overlay;
 mod flash;
@@ -35,6 +36,7 @@ pub use crate::core::History;
 pub use crate::core::filter::{ListDueBucket, ordered_unique};
 pub use autocomplete::{ActiveToken, AutocompleteTarget, TokenKind, active_token};
 pub use chord::Chord;
+pub use count::Count;
 pub use draft::{DialogInputMode, DraftCursor, DraftState};
 pub use draft_overlay::{
     BuilderField, CalendarState, CalendarTarget, DraftOverlay, OverlayKind, PriorityChooserState,
@@ -106,6 +108,7 @@ pub struct App {
     pub selection: Selection,
     flash_state: Flash,
     pub chord: Chord,
+    pub count: Count,
     pub file_path: PathBuf,
     /// Resolved path of the on-disk config file. Set by the binary after
     /// construction so the settings overlay can render a stable, real path
@@ -203,6 +206,7 @@ impl App {
             selection: Selection::default(),
             flash_state: Flash::default(),
             chord: Chord::default(),
+            count: Count::default(),
             file_path,
             config_path: None,
             should_quit: false,

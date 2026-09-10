@@ -229,6 +229,7 @@ fn run(
                     handle_key(app, key, keybinds);
                     if let Some(path) = app.take_pending_editor_path() {
                         open_path_in_editor(&path)?;
+                        terminal.clear()?;
                     }
                     dirty = true;
                 }

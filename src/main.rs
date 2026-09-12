@@ -1,6 +1,6 @@
 #![warn(clippy::unwrap_used)]
 
-use std::io;
+use std::io::{self, IsTerminal};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -30,10 +30,8 @@ fn main() -> Result<()> {
         std::process::exit(code);
     }
     let arg = argv.first().cloned();
-    // `start_mode` is `Welcome` only on a true first run (no target and no
-    // ./todo.txt); every other entry opens straight into Normal.
-    let (path, start_mode) = match arg.as_deref() {
-        Some("--help") | Some("-h") => {
+    match arg.as_deref() {
+        Some("help") | Some("--help") | Some("-h") => {
             print_usage();
             return Ok(());
         }
@@ -45,12 +43,22 @@ fn main() -> Result<()> {
             update::run()?;
             return Ok(());
         }
-        Some("--sample") => (cli::sample_path()?, Mode::Normal),
-        Some(s) if s.starts_with('-') => {
+        Some(s) if s.starts_with('-') && s != "--sample" => {
             eprintln!("tuxedo: unknown option: {s}");
             eprintln!("try `tuxedo --help`");
             std::process::exit(2);
         }
+        _ => {}
+    }
+    // Check before resolving the target: resolution can create a new file.
+    anyhow::ensure!(
+        io::stdin().is_terminal() && io::stdout().is_terminal(),
+        "the interactive UI requires a terminal; run tuxedo in a terminal or use `tuxedo --help` for command-line usage"
+    );
+    // `start_mode` is `Welcome` only on a true first run (no target and no
+    // ./todo.txt); every other entry opens straight into Normal.
+    let (path, start_mode) = match arg.as_deref() {
+        Some("--sample") => (cli::sample_path()?, Mode::Normal),
         _ => match cli::resolve_target(arg)? {
             cli::Target::File(p) => (p, Mode::Normal),
             // Open into the welcome prompt backed by an as-yet-uncreated
@@ -109,7 +117,12 @@ fn main() -> Result<()> {
         app_state.set_update_check(update::spawn_check());
     }
 
-    let terminal = ratatui::init();
+    let terminal = ratatui::try_init()
+        .inspect_err(|_| {
+            // Initialization may have enabled raw mode before a later step failed.
+            let _ = ratatui::try_restore();
+        })
+        .context("initializing terminal")?;
     // Give the window/tab a consistent `tuxedo <path>` title across terminals
     // and operating systems, shortening long paths to fit a fixed budget.
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
@@ -135,6 +148,7 @@ fn print_usage() {
     println!("usage: tuxedo [FILE]                 launch the TUI");
     println!("       tuxedo <command> [args]       run a one-shot command");
     println!("       tuxedo update");
+    println!("       tuxedo help");
     println!();
     println!("Without FILE or a command, opens ./todo.txt if present; otherwise");
     println!("prompts to create ./todo.txt here or open a sample todo.txt, in");

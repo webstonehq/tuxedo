@@ -793,7 +793,7 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     lines.push(header);
     // Weekday row. Each label occupies a 4-char column ("  X ") so it lines up
     // with the day numbers below, which render as ` {:>2} `.
-    let dow_header = if app.week_start == WeekStart::Sunday {
+    let dow_header = if app.prefs.week_start == WeekStart::Sunday {
         Span::styled(
             "  S   M   T   W   T   F   S ",
             Style::default().fg(theme.dim),
@@ -807,7 +807,7 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     let dow = Line::from(vec![Span::raw("  "), dow_header]).style(Style::default().bg(theme.panel));
     lines.push(dow);
     // Up to 6 week rows; `calendar_cells` stops before any all-blank trailing row.
-    for row in calendar_cells(first_of_month, app.week_start) {
+    for row in calendar_cells(first_of_month, app.prefs.week_start) {
         let mut spans: Vec<Span> = vec![Span::raw("  ")];
         for cell in row {
             match cell {

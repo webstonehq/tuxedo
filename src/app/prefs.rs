@@ -1,4 +1,5 @@
 use std::io;
+use std::time::Duration;
 
 use super::types::{Density, Sort};
 use crate::app::WeekStart;
@@ -43,6 +44,11 @@ pub struct Prefs {
     /// for `rec:` / `/rec`. Config-only (no in-app toggle); see
     /// `Config::recurrence_builder`.
     pub recurrence_builder: bool,
+    /// Whether an armed chord leader floats the which-key menu. `None`
+    /// disables it (and restores the plain 600 ms leader timeout); `Some`
+    /// carries the reveal delay. Config-only (no in-app toggle); see
+    /// `Config::which_key`.
+    pub which_key: Option<Duration>,
 }
 
 impl Prefs {
@@ -67,6 +73,10 @@ impl Prefs {
             hidden_keys: cfg.hidden_keys,
             week_start: cfg.week_start.unwrap_or(WeekStart::Sunday),
             recurrence_builder: cfg.recurrence_builder.unwrap_or(true),
+            which_key: cfg
+                .which_key
+                .unwrap_or(true)
+                .then(|| Duration::from_millis(cfg.which_key_delay_ms.unwrap_or(250))),
         }
     }
 

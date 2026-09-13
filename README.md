@@ -23,10 +23,10 @@ For a more in-depth walkthrough, please watch [this video](https://www.youtube.c
 - **TUI and CLI in one binary.** Run `tuxedo` for the interactive UI, or `tuxedo <command>` for a [todo.txt-cli](https://github.com/todotxt/todo.txt-cli)-compatible command line (`add`, `ls`, `do`, `pri`, `archive`, …) — scriptable, with `--json` output and `$TODO_DIR` / `$TODO_FILE` / `$DONE_FILE` support.
 - **Natural-language add.** Type prose into the add prompt — `Pay rent monthly on the first, show 3 days before due, project home` — and tuxedo rewrites it to canonical todo.txt for you to review and save. Local, offline, no AI service.
 - **Phone capture.** Press `s` for a QR pointing at a tiny PWA on your machine's LAN — type tasks from your phone and they appear in the list. Captures land in a sibling `inbox.txt` first, so any tool that can append a line (shell, iOS Shortcuts, cron) is also a capture source.
-- **Vim keys, no surprises.** `j` / `k` to move, `dd` to delete, `gg` / `G` to jump, `u` to undo (50 levels), chord prompts (`gg`, `dd`, `fp`, `fc`) with a 600 ms window.
+- **Vim keys, no surprises.** `j` / `k` to move, `dd` to delete, `gg` / `G` to jump, `u` to undo and `Ctrl-R` to redo (50 levels, and they survive a restart), chord prompts (`gg`, `dd`, `fp`, `fc`) with a 600 ms window.
 - **Command palette.** `:` or `Ctrl-P` opens a fuzzy palette over every action — type a few letters, hit Enter. Same matcher as `/` search, ranked so start-of-label hits beat word-boundary hits beat mid-word hits.
 - **Atomic, sync-friendly writes.** Every change goes through write-temp-then-rename. If another process — Dropbox, an editor, a script — modifies the file, tuxedo reloads on the next keypress (or within ~250 ms while idle) and flashes a notice.
-- **Sibling-file archive.** `A` moves completed tasks to `done.txt` next to your file, atomically.
+- **Sibling-file archive and trash.** `A` moves completed tasks to `done.txt` next to your file, atomically. `dd` moves a task to `trash.txt` instead of destroying it — `t` opens the Trash tab, where `x` restores and a second `dd` deletes for good.
 - **Filter, sort, multi-select.** Cycle by `+project` or `@context`, sort by priority / due / file order, and bulk-complete or bulk-delete in visual mode.
 - **Saved searches.** Name the active `/`-search with `fs`, then recall it any time by cycling saved filters with `ff`. Stored as plain `filter.<name>` lines in the config — hand-editable like everything else.
 - **Five themes, three densities.** Cycle with `T` and `D`. Choices persist across runs and hot-reload when you edit `config.toml` externally.
@@ -261,10 +261,18 @@ config-file flag; configure paths with the environment variables above.
 
 ## Keybindings
 
-Custom normal-mode keybindings can be added in
-`${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/keybinds.toml`:
+Every key in tuxedo is rebindable from
+`${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/keybinds.toml` — not just normal
+mode, but every overlay: the edit dialog, the calendar, the pickers, the
+command palette, the settings and help screens, and the first-run welcome.
 
-The block below lists every rebindable action with the key it ships with —
+Each keyboard context has its own `[table]`. A context owns the keyboard while
+it is open, so the same letter can mean different things in different tables
+without colliding: `q` quits from the list, but is free to mean something else
+inside a picker. [Every table is listed below](#every-table); lines that appear
+before any header belong to `[normal]`.
+
+The block below lists every rebindable normal-mode action with the key it ships with —
 copy it, then change the keys you care about and delete the rest (anything you
 leave out keeps its default). A value is a single key or an array of
 alternatives, e.g. `begin_add = ["N", "Ctrl-n"]`.
@@ -294,6 +302,10 @@ begin_prompt_context = "c"
 copy_line            = "yy"
 copy_body            = "yb"
 undo                 = "u"
+redo                 = "Ctrl-r"
+toggle_trash_view    = "t"
+trash_restore        = "x"
+empty_trash          = "E"
 # begin_prompt_project defaults to "+", which can't be written here (the
 # parser reads "+" as a modifier separator). Pick another key to move it, e.g.
 # begin_prompt_project = "P"
@@ -340,25 +352,205 @@ palette where possible: `toggle_complete`, `pick_project`,
 chords like `ZZ`, modifier forms like `Ctrl-n` / `Alt-x`, named keys like
 `Esc`, `Enter`, `Tab`, arrows, `Page-Up`, `Page-Down`, or `F1` through `F24`.
 
-### Recurrence builder keys
+### Removing a default
 
-The **↻ REPEAT** overlay owns the keyboard while it is open, so its motions
-live in their own `[recurrence]` table and can reuse letters that mean
-something else in normal mode:
+Bindings you add are consulted *before* the built-ins, but a built-in your
+config never mentions still fires. Two keys change that, and work in every
+table:
 
 ```toml
-[recurrence]
-focus_next = ["j", "Down", "Tab"]        # move between interval / unit / mode
-focus_prev = ["k", "Up", "Shift-Tab"]
-value_next = ["l", "Right", "+", "="]    # change the focused field's value
-value_prev = ["h", "Left", "-", "_"]
-accept     = "Enter"                     # write the rec: token
-cancel     = "Esc"
+[normal]
+unbind = ["x", "dd"]      # these keys now do nothing at all
+
+[calendar]
+replace_defaults = true   # ignore every built-in in this table
 ```
 
-`next_field` / `prev_field` / `increase` / `decrease` / `save` are accepted as
-aliases. Two-key chords are not — the overlay has no leader state to arm, so a
-chord here is ignored rather than bound to a key that could never fire.
+`unbind` takes a key, not an action name. Unbinding a chord (`"dd"`) blocks its
+leader outright, so `d` stops arming.
+
+`replace_defaults` drops the built-in *action* bindings for that table only.
+Contexts with a text field (`[search]`, `[prompt]`, `[dialog_insert]`) still
+type ordinary characters into the buffer, so no config can leave you unable to
+write.
+
+### Every table
+
+Two-key chords (`"gg"`, `"f p"`) work in `[normal]` and `[dialog]`. Every other
+context is single-press: it has no leader state to arm, so a chord there is
+ignored rather than bound to a key that could never fire.
+
+#### `[global]`
+
+Live in every mode and overlay. The context's own table is consulted first, so
+a table can claim the key for itself: bind `[help] close = "q"` and `q` closes
+the help overlay instead of quitting.
+
+In an overlay the quit key unwinds one screen rather than leaving the app —
+you are one screen deep, so `q` in settings or help returns you to the list.
+
+| Action | Default |
+| --- | --- |
+| `quit` | `q`, `Ctrl-c` |
+
+#### `[dialog]` — the edit dialog, vim-normal mode
+
+What `e` opens. Supports chords.
+
+| Action | Default | |
+| --- | --- | --- |
+| `cursor_left` / `cursor_right` | `h` / `l`, arrows | move one character |
+| `word_forward` / `word_backward` | `w` / `b` | move one word |
+| `word_end` | `e` | end of the current word |
+| `delete_forward` | `x` | delete the character under the cursor |
+| `delete_word` | `dw` | delete to the end of the word |
+| `change_word` | `cw` | delete the word and start typing |
+| `insert` / `append` | `i` / `a` | start typing at / after the cursor |
+| `append_end` | `A` | start typing at the end of the line |
+| `accept` | `Enter` | write the task |
+| `cancel` | `Esc` | discard the draft |
+
+Aliases: `left`, `right`, `word_next`, `word_prev`, `delete_char`, `save`.
+
+#### `[dialog_insert]` — the edit dialog, typing
+
+Only the two keys that leave or commit are bindable; everything else is text.
+
+| Action | Default | |
+| --- | --- | --- |
+| `accept` | `Enter` | write the task |
+| `normal` | `Esc` | return to the dialog's normal mode |
+
+#### `[calendar]` — the date picker
+
+Opened by `r`, or by typing `due:` / `t:` in the dialog.
+
+| Action | Default | |
+| --- | --- | --- |
+| `move_left` / `move_right` | `h` / `l`, arrows | previous / next day |
+| `move_up` / `move_down` | `k` / `j`, arrows | previous / next week |
+| `today` / `tomorrow` | `t` / `T` | jump to a relative day |
+| `week_ahead` | `w` | jump a week out |
+| `month_next` / `month_prev` | `m` / `M` | same date, next / previous month |
+| `clear` | `x` | clear the date and close |
+| `accept` / `cancel` | `Enter` / `Esc` | write / discard |
+
+Aliases: `prev_day`, `next_day`, `prev_week`, `next_week`, `in_a_week`, `save`.
+
+#### `[recurrence]` — the ↻ REPEAT overlay
+
+| Action | Default | |
+| --- | --- | --- |
+| `focus_next` / `focus_prev` | `j` / `k`, arrows, `Tab` | move between interval / unit / mode |
+| `value_next` / `value_prev` | `l` / `h`, arrows, `+` / `-` | change the focused field |
+| `accept` / `cancel` | `Enter` / `Esc` | write the `rec:` token / discard |
+
+Aliases: `next_field`, `prev_field`, `increase`, `decrease`, `save`.
+
+#### `[priority]` — the priority chooser
+
+| Action | Default |
+| --- | --- |
+| `next` / `prev` | `j` / `k`, arrows |
+| `accept` / `cancel` | `Enter` / `Esc` |
+
+#### `[slash]` — the `/` metadata menu in the dialog
+
+Keys not bound here type into the filter, narrowing the list as you write.
+
+| Action | Default |
+| --- | --- |
+| `next` / `prev` | arrows, `Ctrl-n` / `Ctrl-p` |
+| `accept` | `Tab`, `Enter` |
+| `cancel` | `Esc` |
+
+#### `[autocomplete]` — the `+project` / `@context` popup
+
+Shared by the dialog and the prompts, both of which can show it.
+
+| Action | Default |
+| --- | --- |
+| `next` / `prev` | arrows, `Ctrl-n` / `Ctrl-p` |
+| `accept` | `Tab` |
+| `dismiss` | `Esc` |
+
+#### `[search]` — the `/` search line
+
+Unbound keys are the search text.
+
+| Action | Default | |
+| --- | --- | --- |
+| `accept` | `Enter` | keep the search, return to the list |
+| `cancel` | `Esc` | clear the search |
+
+#### `[prompt]` — the single-field prompts
+
+Add project, add context, rename, and name a saved filter. Unbound keys are the
+prompt text.
+
+| Action | Default |
+| --- | --- |
+| `accept` | `Enter` |
+| `cancel` | `Esc` |
+
+#### `[pick]` — the `fp` / `fc` / `ff` cycle pickers
+
+| Action | Default | |
+| --- | --- | --- |
+| `next` / `prev` | `j` / `k`, arrows | cycle entries |
+| `rename` | `r` | rename the highlighted project or context |
+| `accept` | `Enter` | keep it as the active filter |
+| `cancel` | `Esc` | revert to the previous filter |
+
+#### `[theme_picker]` — the `T` picker
+
+| Action | Default | |
+| --- | --- | --- |
+| `next` / `prev` | `j` / `k`, arrows, `T` | preview a theme |
+| `accept` / `cancel` | `Enter` / `Esc` | keep / revert |
+
+#### `[palette]` — the `:` command palette
+
+Unbound keys are the filter text, so plain `j` / `k` type rather than navigate.
+
+| Action | Default |
+| --- | --- |
+| `next` / `prev` | arrows, `Ctrl-n` / `Ctrl-p` |
+| `accept` | `Enter` |
+| `cancel` | `Esc` |
+
+Alias: `run` for `accept`.
+
+#### `[help]` — the `?` overlay
+
+| Action | Default |
+| --- | --- |
+| `close` | `Esc`, `?` |
+
+#### `[settings]` — the `,` overlay
+
+Its toggles mirror the `[normal]` ones, so the same key works inside and
+outside the overlay.
+
+| Action | Default |
+| --- | --- |
+| `close` | `Esc`, `,` |
+| `cycle_theme` | `T` |
+| `cycle_density` | `D` |
+| `toggle_line_num` | `L` |
+| `toggle_left_pane` / `toggle_right_pane` | `[` / `]` |
+| `toggle_show_done` / `toggle_show_future` | `H` / `F` |
+| `cycle_sort` | `S` |
+
+#### `[welcome]` — the first-run overlay
+
+| Action | Default | |
+| --- | --- | --- |
+| `create_file` | `c` | create the todo.txt named on the command line |
+| `open_sample` | `s` | open the bundled sample instead |
+| `quit` | `Esc` | leave without creating anything |
+
+Aliases: `create`, `sample`, `cancel`.
 
 ### Navigation
 
@@ -378,7 +570,7 @@ chord here is ignored rather than bound to a key that could never fire.
 | `e` | edit current task in Normal mode (see [Edit dialog](#edit-dialog)) |
 | `i` | edit current task in Insert mode (see [Edit dialog](#edit-dialog)) |
 | `x` | toggle complete |
-| `dd` | delete task |
+| `dd` | delete task (moves it to `trash.txt`) |
 | `p` | cycle priority A → B → C → · |
 | `J` / `K` | move task down / up within current sort ties |
 | `c` | add or remove a context |
@@ -386,6 +578,8 @@ chord here is ignored rather than bound to a key that could never fire.
 | `yy` | copy current line to clipboard |
 | `yb` | copy current body only (no priority, dates, projects, contexts, `key:value`) |
 | `u` | undo (50 levels) |
+| `Ctrl-R` | redo (50 levels) — cleared by any new edit or an external change to the file |
+| `t` | trash view (`x` restores, `dd` deletes for good, `E` empties) |
 
 Movement preserves the active sort: priority mode requires matching priority and due date, due mode requires matching due date, and file mode allows unrestricted movement.
 Visual selections move in one undoable operation and must be fully visible within one sort tie.
@@ -625,6 +819,23 @@ task; `o` only opens an existing linked note.
 ```toml
 notes_dir = ~/notes
 ```
+
+### Which-key menu
+
+Holding a chord leader (`g`, `d`, `y`, `f`) floats a panel listing that
+leader's continuations, the way LazyVim's which-key does. Its rows are derived
+from your actual bindings, so a chord rebound in `keybinds.toml` is advertised
+under the key you really press.
+
+```toml
+which_key       = true   # default; false restores the plain leader timeout
+which_key_delay = 250    # ms a leader is held before the menu appears
+```
+
+While the menu is enabled an armed leader waits for its second key instead of
+lapsing after 600 ms — the menu is on screen, so there is nothing to time out
+of. A key that is not one of the listed continuations dismisses the leader, and
+`Esc` closes the menu without doing anything else.
 
 ### Recurrence builder
 

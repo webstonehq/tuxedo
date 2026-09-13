@@ -54,6 +54,15 @@ pub struct Config {
     /// dialog a single plain text field — `rec:` is typed by hand. Defaults
     /// to `true`. Serialized as `recurrence_builder = false`.
     pub recurrence_builder: Option<bool>,
+    /// Whether an armed chord leader floats the which-key menu listing its
+    /// continuations. Enabling it also makes the leader wait indefinitely
+    /// for its second key instead of lapsing after 600 ms — the menu is on
+    /// screen, so there is nothing to time out of. Defaults to `true`.
+    /// Serialized as `which_key = false`.
+    pub which_key: Option<bool>,
+    /// How long a leader must be held before the which-key menu appears, in
+    /// milliseconds. Defaults to 250. Serialized as `which_key_delay = 400`.
+    pub which_key_delay_ms: Option<u64>,
 }
 
 impl Config {
@@ -175,6 +184,8 @@ fn parse(s: &str) -> Config {
             }
             "week_start" => c.week_start = v.parse().ok(),
             "recurrence_builder" => c.recurrence_builder = parse_bool(v),
+            "which_key" => c.which_key = parse_bool(v),
+            "which_key_delay" => c.which_key_delay_ms = v.parse().ok(),
             // Saved searches: `filter.<name> = <query>`. The name is the
             // (trimmed) text after the `filter.` prefix; the query is the
             // (unquoted) value, which may itself contain `=`. A repeated
@@ -247,6 +258,12 @@ fn serialize(c: &Config) -> String {
     if let Some(v) = c.recurrence_builder {
         let _ = writeln!(out, "recurrence_builder = {v}");
     }
+    if let Some(v) = c.which_key {
+        let _ = writeln!(out, "which_key = {v}");
+    }
+    if let Some(v) = c.which_key_delay_ms {
+        let _ = writeln!(out, "which_key_delay = {v}");
+    }
     out
 }
 
@@ -293,6 +310,8 @@ mod tests {
             hidden_keys: vec!["uid".into(), "sync".into()],
             week_start: Some(WeekStart::Sunday),
             recurrence_builder: Some(false),
+            which_key: Some(false),
+            which_key_delay_ms: Some(400),
         };
 
         let s = serialize(&c);
@@ -450,6 +469,8 @@ mod tests {
             hidden_keys: vec!["uid".into()],
             week_start: Some(WeekStart::Sunday),
             recurrence_builder: Some(false),
+            which_key: Some(false),
+            which_key_delay_ms: Some(400),
         };
         written.save_to(&path).expect("save should succeed");
         assert!(path.exists());

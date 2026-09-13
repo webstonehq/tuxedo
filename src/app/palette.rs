@@ -93,6 +93,26 @@ pub const ENTRIES: &[PaletteEntry] = &[
         action: Action::Undo,
     },
     PaletteEntry {
+        label: "redo",
+        keys: "Ctrl-r",
+        action: Action::Redo,
+    },
+    PaletteEntry {
+        label: "trash tab",
+        keys: "t",
+        action: Action::ToggleTrashView,
+    },
+    PaletteEntry {
+        label: "restore from trash",
+        keys: "x",
+        action: Action::TrashRestore,
+    },
+    PaletteEntry {
+        label: "empty trash",
+        keys: "E",
+        action: Action::EmptyTrash,
+    },
+    PaletteEntry {
         label: "cursor down",
         keys: "j / ↓",
         action: Action::CursorDown,
@@ -258,6 +278,13 @@ pub const ENTRIES: &[PaletteEntry] = &[
         action: Action::ChangeWeekStart,
     },
 ];
+
+/// Human-readable label for `action`, or `None` for an action the palette
+/// deliberately omits (`ArmF`, which is only a chord leader). Shared with the
+/// which-key menu so both surfaces describe an action the same way.
+pub fn label_for(action: Action) -> Option<&'static str> {
+    ENTRIES.iter().find(|e| e.action == action).map(|e| e.label)
+}
 
 #[derive(Debug, Default, Clone)]
 pub struct CommandPaletteState {
@@ -536,6 +563,10 @@ mod tests {
             Action::OpenSettings,
             Action::OpenCommandPalette,
             Action::Undo,
+            Action::Redo,
+            Action::ToggleTrashView,
+            Action::TrashRestore,
+            Action::EmptyTrash,
             Action::ToggleVisual,
             Action::ToggleSelected,
             Action::GoList,

@@ -1,176 +1,35 @@
-use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver, TryRecvError};
-use std::thread;
+//! The `done.txt` archive: completed tasks moved out of the live list.
+//!
+//! The generic sibling-file machinery (loading, refresh, atomic write) lives in
+//! [`super::sidefile`]; this module holds only what is archive-specific.
 
 use super::Store;
 use super::outcome::{
     ArchiveDeleteOutcome, ArchiveOutcome, Reconcile, StoreError, UnarchiveOutcome,
 };
+use super::sidefile::{Refresh, SideFile};
 use crate::todo::{self, Task};
 
-/// Owns the archived (`done.txt`) tasks and the lifecycle around loading them
-/// off-thread at startup. Fields are `pub(crate)` so the `Store` methods in this
-/// file can mutate the archive directly; external callers go through the read
-/// methods.
-pub struct Archive {
-    pub(crate) tasks: Vec<Task>,
-    pub(crate) path: PathBuf,
-    pub(crate) last_disk: String,
-    pub(crate) loader: Option<Receiver<(String, Vec<Task>)>>,
-}
+/// The archive is a plain sibling file; the alias keeps callers and tests
+/// reading as `Archive` rather than as the generic type.
+pub type Archive = SideFile;
 
-fn done_path(todo_path: &Path) -> PathBuf {
-    todo_path
-        .parent()
-        .map(|p| p.join("done.txt"))
-        .unwrap_or_else(|| PathBuf::from("done.txt"))
-}
-
-impl Archive {
-    /// Construct an `Archive` for the sibling `done.txt` of `todo_path` and
-    /// spawn a worker thread to read+parse it. The first frame can render
-    /// `todo.txt` immediately while the loader runs in the background.
-    pub fn spawn(todo_path: &Path) -> Self {
-        Self::spawn_at(done_path(todo_path))
-    }
-
-    /// Like [`Archive::spawn`] but for an explicit `done.txt` path (e.g. a
-    /// `DONE_FILE` that isn't a sibling of the todo file).
-    pub fn spawn_at(path: PathBuf) -> Self {
-        let loader_path = path.clone();
-        let (tx, rx) = mpsc::sync_channel::<(String, Vec<Task>)>(1);
-        thread::spawn(move || {
-            let body = std::fs::read_to_string(&loader_path).unwrap_or_default();
-            let parsed = todo::parse_file(&body);
-            let _ = tx.send((body, parsed));
-        });
-        Self {
-            tasks: Vec::new(),
-            path,
-            last_disk: String::new(),
-            loader: Some(rx),
-        }
-    }
-
-    /// Read and parse the sibling `done.txt` inline (no background thread).
-    /// Used by the one-shot CLI, where spawning a loader would be wasteful.
-    pub fn load_sync(todo_path: &Path) -> Self {
-        Self::load_sync_at(done_path(todo_path))
-    }
-
-    /// Like [`Archive::load_sync`] but for an explicit `done.txt` path.
-    pub fn load_sync_at(path: PathBuf) -> Self {
-        let body = std::fs::read_to_string(&path).unwrap_or_default();
-        let tasks = todo::parse_file(&body);
-        Self {
-            tasks,
-            path,
-            last_disk: body,
-            loader: None,
-        }
-    }
-
-    /// Test-only constructor that skips the worker thread and seeds in-memory
-    /// state directly.
-    #[cfg(test)]
-    pub(crate) fn for_test(tasks: Vec<Task>, last_disk: String, path: PathBuf) -> Self {
-        Self {
-            tasks,
-            path,
-            last_disk,
-            loader: None,
-        }
-    }
-
-    pub fn tasks(&self) -> &[Task] {
-        &self.tasks
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    pub fn len(&self) -> usize {
-        self.tasks.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.tasks.is_empty()
-    }
-}
-
-/// Internal result of refreshing `done.txt` before a mutation that writes it.
-enum ArchiveRefresh {
-    Ready,
-    Reloaded,
-    Error(std::io::Error),
-}
+/// Default filename for the archive, used when no `DONE_FILE` overrides it.
+pub(crate) const DONE_NAME: &str = "done.txt";
 
 impl Store {
-    fn read_archive_body(&self) -> std::io::Result<String> {
-        match std::fs::read_to_string(&self.archive.path) {
-            Ok(body) => Ok(body),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-            Err(e) => Err(e),
-        }
-    }
-
-    fn refresh_archive_for_mutation(&mut self) -> ArchiveRefresh {
-        let body = match self.read_archive_body() {
-            Ok(b) => b,
-            Err(e) => return ArchiveRefresh::Error(e),
-        };
-        if body != self.archive.last_disk {
-            self.archive.tasks = todo::parse_file(&body);
-            self.archive.last_disk = body;
-            self.archive.loader = None;
-            return ArchiveRefresh::Reloaded;
-        }
-        self.archive.loader = None;
-        ArchiveRefresh::Ready
-    }
-
-    /// Pump archive state. Returns true when the visible archive changed: the
-    /// startup loader landed, or an external edit to `done.txt` was picked up.
-    /// Non-blocking. The caller (TUI) is responsible for any view recompute.
+    /// Pump archive state (startup loader + external `done.txt` edits).
     pub fn poll_archive(&mut self) -> bool {
-        let mut changed = false;
-        if let Some(rx) = &self.archive.loader {
-            match rx.try_recv() {
-                Ok((body, tasks)) => {
-                    self.archive.last_disk = body;
-                    self.archive.tasks = tasks;
-                    self.archive.loader = None;
-                    changed = true;
-                }
-                Err(TryRecvError::Empty) => return false,
-                Err(TryRecvError::Disconnected) => {
-                    self.archive.loader = None;
-                }
-            }
-        }
-        if !changed {
-            let read = std::fs::read_to_string(&self.archive.path);
-            changed = self.apply_archive_read(read);
+        let had_pending = self.history_pending.is_some();
+        let changed = self.archive.poll();
+        if had_pending {
+            // The first read is not an external edit; it's what the deferred
+            // history load has been waiting for.
+            self.resolve_pending_history();
+        } else if changed {
+            self.note_archive_changed();
         }
         changed
-    }
-
-    /// Apply a read result for `done.txt`. `NotFound` is treated as an empty
-    /// archive; any other I/O error preserves in-memory state and returns
-    /// `false` rather than wiping the archive.
-    pub(crate) fn apply_archive_read(&mut self, read: std::io::Result<String>) -> bool {
-        let on_disk = match read {
-            Ok(s) => s,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(_) => return false,
-        };
-        if on_disk == self.archive.last_disk {
-            return false;
-        }
-        self.archive.tasks = todo::parse_file(&on_disk);
-        self.archive.last_disk = on_disk;
-        true
     }
 
     pub fn archive_completed(&mut self) -> ArchiveOutcome {
@@ -183,7 +42,7 @@ impl Store {
             return ArchiveOutcome::Nothing;
         }
         // Read fresh so an external edit to done.txt since startup isn't lost.
-        let previous_archive_body = match self.read_archive_body() {
+        let previous_archive_body = match self.archive.read_body() {
             Ok(b) => b,
             Err(e) => return ArchiveOutcome::Error(StoreError::ArchiveIo(e)),
         };
@@ -192,6 +51,8 @@ impl Store {
             combined.push('\n');
         }
         combined.push_str(&todo::serialize(&to_move));
+        // Snapshot before touching either file so one undo puts both back.
+        self.push_history();
         // Write done.txt before truncating todo.txt so a failed archive can't
         // lose data; if the todo write fails, roll done.txt back.
         if let Err(e) = todo::write_atomic(&self.archive.path, &combined) {
@@ -203,7 +64,6 @@ impl Store {
             let _ = todo::write_atomic(&self.archive.path, &previous_archive_body);
             return ArchiveOutcome::Error(StoreError::Write(e));
         }
-        self.push_history();
         let count = to_move.len();
         self.tasks = remaining;
         self.last_disk = remaining_body;
@@ -220,10 +80,13 @@ impl Store {
             Reconcile::Unchanged => {}
             other => return UnarchiveOutcome::Aborted(other),
         }
-        match self.refresh_archive_for_mutation() {
-            ArchiveRefresh::Ready => {}
-            ArchiveRefresh::Reloaded => return UnarchiveOutcome::DoneReloaded,
-            ArchiveRefresh::Error(e) => return UnarchiveOutcome::Error(StoreError::ArchiveIo(e)),
+        match self.archive.refresh_for_mutation() {
+            Refresh::Ready => {}
+            Refresh::Reloaded => {
+                self.note_archive_changed();
+                return UnarchiveOutcome::DoneReloaded;
+            }
+            Refresh::Error(e) => return UnarchiveOutcome::Error(StoreError::ArchiveIo(e)),
         }
         if archive_idx >= self.archive.tasks.len() {
             return UnarchiveOutcome::OutOfRange;
@@ -232,6 +95,7 @@ impl Store {
         if let Err(e) = task.unmark_done() {
             return UnarchiveOutcome::Error(StoreError::Parse(e));
         }
+        let previous_archive_body = self.archive.last_disk.clone();
         let new_archive: Vec<Task> = self
             .archive
             .tasks
@@ -240,15 +104,13 @@ impl Store {
             .filter(|(i, _)| *i != archive_idx)
             .map(|(_, t)| t.clone())
             .collect();
-        let archive_body = todo::serialize(&new_archive);
-        if let Err(e) = todo::write_atomic(&self.archive.path, &archive_body) {
+        self.push_history();
+        if let Err(e) = self.archive.write(new_archive) {
             return UnarchiveOutcome::Error(StoreError::ArchiveIo(e));
         }
-        self.archive.tasks = new_archive;
-        self.archive.last_disk = archive_body;
-        self.push_history();
         self.tasks.push(task);
         if let Err(e) = self.persist() {
+            self.archive.rollback(&previous_archive_body);
             return UnarchiveOutcome::Error(e);
         }
         UnarchiveOutcome::Unarchived
@@ -256,10 +118,13 @@ impl Store {
 
     /// Permanently remove an archived task from `done.txt`.
     pub fn archive_delete(&mut self, archive_idx: usize) -> ArchiveDeleteOutcome {
-        match self.refresh_archive_for_mutation() {
-            ArchiveRefresh::Ready => {}
-            ArchiveRefresh::Reloaded => return ArchiveDeleteOutcome::DoneReloaded,
-            ArchiveRefresh::Error(e) => {
+        match self.archive.refresh_for_mutation() {
+            Refresh::Ready => {}
+            Refresh::Reloaded => {
+                self.note_archive_changed();
+                return ArchiveDeleteOutcome::DoneReloaded;
+            }
+            Refresh::Error(e) => {
                 return ArchiveDeleteOutcome::Error(StoreError::ArchiveIo(e));
             }
         }
@@ -274,12 +139,10 @@ impl Store {
             .filter(|(i, _)| *i != archive_idx)
             .map(|(_, t)| t.clone())
             .collect();
-        let archive_body = todo::serialize(&new_archive);
-        if let Err(e) = todo::write_atomic(&self.archive.path, &archive_body) {
+        self.push_history();
+        if let Err(e) = self.archive.write(new_archive) {
             return ArchiveDeleteOutcome::Error(StoreError::ArchiveIo(e));
         }
-        self.archive.tasks = new_archive;
-        self.archive.last_disk = archive_body;
         ArchiveDeleteOutcome::Deleted
     }
 
@@ -443,7 +306,7 @@ mod tests {
             path,
         );
         let err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
-        assert!(!store.apply_archive_read(Err(err)));
+        assert!(!store.archive.apply_read(Err(err)));
         assert_eq!(store.archive.len(), 1);
     }
 

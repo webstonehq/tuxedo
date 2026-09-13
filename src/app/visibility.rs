@@ -33,6 +33,7 @@ impl App {
         match self.view {
             View::List => self.rebuild_list_cache(),
             View::Archive => self.rebuild_archive_cache(),
+            View::Trash => self.rebuild_trash_cache(),
         }
     }
 
@@ -74,6 +75,15 @@ impl App {
         };
         self.visible_groups = groups;
         self.visible_cache = idxs;
+    }
+
+    /// The trash renders flat, in file order — trashed lines are stored
+    /// byte-identical to how they appeared in `todo.txt`, with no deletion-date
+    /// tag to group by. Newest-deleted is therefore last.
+    fn rebuild_trash_cache(&mut self) {
+        let len = self.store.trash().tasks().len();
+        self.visible_cache = (0..len).collect();
+        self.visible_groups = vec![GroupKey::None; len];
     }
 
     fn rebuild_archive_cache(&mut self) {

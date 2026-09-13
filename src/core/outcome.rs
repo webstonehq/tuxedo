@@ -14,6 +14,8 @@ pub enum StoreError {
     Write(std::io::Error),
     /// Reading or writing the sibling `done.txt` failed.
     ArchiveIo(std::io::Error),
+    /// Reading or writing the sibling `trash.txt` failed.
+    TrashIo(std::io::Error),
     /// A constructed line failed to parse.
     Parse(ParseError),
     /// A `+project` / `@context` mutation was rejected.
@@ -25,6 +27,7 @@ impl std::fmt::Display for StoreError {
         match self {
             StoreError::Write(e) => write!(f, "write failed: {e}"),
             StoreError::ArchiveIo(e) => write!(f, "done.txt: {e}"),
+            StoreError::TrashIo(e) => write!(f, "trash.txt: {e}"),
             StoreError::Parse(e) => write!(f, "{e}"),
             StoreError::Tag(e) => write!(f, "{e}"),
         }
@@ -82,7 +85,11 @@ pub enum MoveOutcome {
 
 #[derive(Debug)]
 pub enum DeleteOutcome {
-    Deleted { abs: usize },
+    /// `trash.txt` changed underneath us; it was reloaded and nothing written.
+    TrashReloaded,
+    Deleted {
+        abs: usize,
+    },
     Aborted(Reconcile),
     OutOfRange,
     Error(StoreError),
@@ -152,7 +159,11 @@ pub enum BulkCompleteOutcome {
 
 #[derive(Debug)]
 pub enum BulkDeleteOutcome {
-    Done { deleted: usize },
+    /// `trash.txt` changed underneath us; it was reloaded and nothing written.
+    TrashReloaded,
+    Done {
+        deleted: usize,
+    },
     Nothing,
     Aborted(Reconcile),
     Error(StoreError),
@@ -193,6 +204,14 @@ pub enum UndoOutcome {
     Error(StoreError),
 }
 
+#[derive(Debug)]
+pub enum RedoOutcome {
+    Redone,
+    Nothing,
+    Aborted(Reconcile),
+    Error(StoreError),
+}
+
 /// Result of draining a sibling `inbox.txt`. Replaces the drain flash strings
 /// the TUI used to emit inline; the caller renders this however it likes.
 #[derive(Debug, Default)]
@@ -208,4 +227,33 @@ impl DrainReport {
     pub fn is_noop(&self) -> bool {
         self.merged == 0 && self.skipped == 0 && self.error.is_none()
     }
+}
+
+/// Result of restoring a task out of `trash.txt` into the live list.
+#[derive(Debug)]
+pub enum TrashRestoreOutcome {
+    Restored,
+    OutOfRange,
+    /// `trash.txt` changed underneath us; it was reloaded and nothing written.
+    TrashReloaded,
+    Aborted(Reconcile),
+    Error(StoreError),
+}
+
+/// Result of the second, permanent delete.
+#[derive(Debug)]
+pub enum TrashDeleteOutcome {
+    Deleted,
+    OutOfRange,
+    TrashReloaded,
+    Error(StoreError),
+}
+
+/// Result of emptying the trash in one go.
+#[derive(Debug)]
+pub enum TrashEmptyOutcome {
+    Emptied { emptied: usize },
+    Nothing,
+    TrashReloaded,
+    Error(StoreError),
 }

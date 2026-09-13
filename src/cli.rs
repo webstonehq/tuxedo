@@ -49,6 +49,18 @@ pub fn done_path(todo_path: &Path) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("done.txt"))
 }
 
+/// Resolve the `trash.txt` path. Honors `$TRASH_FILE`; otherwise the sibling
+/// `trash.txt` next to the todo file (the core's default).
+pub fn trash_path(todo_path: &Path) -> PathBuf {
+    if let Some(f) = std::env::var_os("TRASH_FILE") {
+        return PathBuf::from(f);
+    }
+    todo_path
+        .parent()
+        .map(|p| p.join("trash.txt"))
+        .unwrap_or_else(|| PathBuf::from("trash.txt"))
+}
+
 /// Create `pb` (and any missing parent directories) if it doesn't exist, then
 /// return it. `create_new` avoids the TOCTOU window where a concurrently-created
 /// file would otherwise be truncated.

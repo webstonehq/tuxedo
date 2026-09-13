@@ -2,13 +2,17 @@
 
 use super::Store;
 
-/// Each test gets a unique path so parallel runs don't race on /tmp/x. The file
-/// is seeded with `raw` so `reconcile` sees a consistent disk-vs-memory state.
+/// Each test gets a unique *directory* so parallel runs don't race — not just
+/// on the todo file, but on the `done.txt` and `trash.txt` siblings the store
+/// derives from it. The file is seeded with `raw` so `reconcile` sees a
+/// consistent disk-vs-memory state.
 pub(crate) fn test_path() -> std::path::PathBuf {
     use std::sync::atomic::{AtomicUsize, Ordering};
     static N: AtomicUsize = AtomicUsize::new(0);
     let n = N.fetch_add(1, Ordering::Relaxed);
-    std::env::temp_dir().join(format!("tuxedo-core-test-{}-{}.txt", std::process::id(), n))
+    let dir = std::env::temp_dir().join(format!("tuxedo-core-test-{}-{}", std::process::id(), n));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir.join("todo.txt")
 }
 
 /// Build a `Store` rooted at a fresh temp file seeded with `raw`. Archive loads

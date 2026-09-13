@@ -36,6 +36,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     if matches!(app.view, View::Archive) {
         mode_label = "ARCHIVE".into();
     }
+    if matches!(app.view, View::Trash) {
+        mode_label = "TRASH".into();
+    }
     if let Some(f) = app.flash_active() {
         mode_label = format!("{mode_label} · {f}").into();
     }
@@ -65,6 +68,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let mut right_parts = Vec::new();
     if matches!(app.view, View::Archive) {
         right_parts.push(format!("{} archived", app.archive().len()));
+    } else if matches!(app.view, View::Trash) {
+        right_parts.push(format!("{} trashed", app.trash().len()));
     } else {
         right_parts.push(format!("{} open", app.visible_indices().len()));
     }

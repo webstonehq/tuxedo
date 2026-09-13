@@ -203,6 +203,23 @@ mod tests {
     }
 
     #[test]
+    fn external_edit_clears_redo_branch() {
+        let path = test_path();
+        std::fs::write(&path, "a\nb\n").unwrap();
+        let mut store = Store::open_sync(path.clone(), "a\nb\n".to_string(), "2026-05-06".into());
+        store.delete(0);
+        store.undo();
+        assert!(store.history.can_redo());
+
+        // A change on disk invalidates both branches: the snapshots no longer
+        // describe the file we're looking at.
+        std::fs::write(&path, "x\ny\nz\n").unwrap();
+        store.delete(0);
+        assert!(!store.history.can_redo());
+        assert!(store.history.is_empty());
+    }
+
+    #[test]
     fn apply_external_state_preserves_tasks_on_io_error() {
         let mut store = build_store("(A) 2026-05-01 keep me\n");
         let err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");

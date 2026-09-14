@@ -232,13 +232,19 @@ pub fn serialize(tasks: &[Task]) -> String {
 }
 
 /// Atomically write `body` to `path` (write to .tmp sibling, rename).
+/// If `path` is a symlink, resolves it to its real target first, so the
+/// write stays atomic while preserving the link.
 pub fn write_atomic(path: &Path, body: &str) -> std::io::Result<()> {
-    let tmp = path.with_extension("tmp");
+    let target = if path.is_symlink() {
+        std::fs::canonicalize(path)?
+    } else {
+        path.to_path_buf()
+    };
+    let tmp = target.with_extension("tmp");
     std::fs::write(&tmp, body)?;
-    std::fs::rename(&tmp, path)?;
+    std::fs::rename(&tmp, target)?;
     Ok(())
 }
-
 impl Task {
     /// Mark this task complete as of `today`. No-op if already done.
     /// The serialized line follows todo.txt convention: `x DONE CREATED BODY`,

@@ -7,6 +7,7 @@ mod json;
 use anyhow::{Context, Result};
 
 use crate::app::Filter;
+use crate::config::Config;
 use crate::core::filter as corefilter;
 use crate::core::{
     AddOutcome, ArchiveOutcome, CompleteOutcome, DeleteOutcome, EditOutcome, PriorityOutcome, Store,
@@ -93,11 +94,14 @@ pub fn run(argv: &[String]) -> Result<Option<i32>> {
     };
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let mut store = Store::open_sync_with_done(path, done, body, today);
+    if is_mutating_command(&cmd) {
+        store.set_hooks(Config::load().hooks);
+    }
 
     let json = args.json;
     let force = args.force;
     let pos = &args.free;
-    let code = match cmd.as_str() {
+    let mut code = match cmd.as_str() {
         "add" | "a" => cmd_add(&mut store, pos, json),
         "append" | "app" => cmd_text_op(&mut store, pos, json, TextOp::Append),
         "prepend" | "prep" => cmd_text_op(&mut store, pos, json, TextOp::Prepend),
@@ -117,7 +121,38 @@ pub fn run(argv: &[String]) -> Result<Option<i32>> {
             2
         }
     };
+    for report in store.take_hook_reports() {
+        if report.failed() {
+            eprintln!("tuxedo: {}", report.diagnostic());
+            if code == 0 {
+                code = 1;
+            }
+        }
+    }
     Ok(Some(code))
+}
+
+fn is_mutating_command(cmd: &str) -> bool {
+    matches!(
+        cmd,
+        "add"
+            | "a"
+            | "append"
+            | "app"
+            | "prepend"
+            | "prep"
+            | "replace"
+            | "pri"
+            | "p"
+            | "depri"
+            | "dp"
+            | "done"
+            | "do"
+            | "complete"
+            | "del"
+            | "rm"
+            | "archive"
+    )
 }
 
 // ----- helpers -----------------------------------------------------------
@@ -291,6 +326,17 @@ fn cmd_pri(store: &mut Store, pos: &[String], json: bool) -> i32 {
             }
             0
         }
+        PriorityOutcome::Unchanged => {
+            let n = abs + 1;
+            let task = &store.tasks()[abs];
+            if json {
+                json_task("pri", n, task);
+            } else {
+                println!("{n} {}", task.raw);
+                println!("{prefix}: {n} prioritized ({c}).");
+            }
+            0
+        }
         PriorityOutcome::OutOfRange => err(format!("no task {}", abs + 1)),
         PriorityOutcome::Aborted(_) => err("file changed on disk; nothing changed"),
         PriorityOutcome::Error(e) => store_error(json, "pri", e),
@@ -301,7 +347,6 @@ fn cmd_depri(store: &mut Store, pos: &[String], json: bool) -> i32 {
     if pos.is_empty() {
         return usage("depri N...");
     }
-    let prefix = file_prefix(store);
     let len = store.tasks().len();
     let mut indices = Vec::new();
     for s in pos {
@@ -310,16 +355,17 @@ fn cmd_depri(store: &mut Store, pos: &[String], json: bool) -> i32 {
             Err(e) => return err(e),
         }
     }
+    let prefix = file_prefix(store);
     let mut code = 0;
     for abs in indices {
         match store.set_priority_at(abs, None) {
-            PriorityOutcome::Changed { abs, .. } => {
+            PriorityOutcome::Changed { .. } | PriorityOutcome::Unchanged => {
                 let n = abs + 1;
-                let t = &store.tasks()[abs];
+                let task = &store.tasks()[abs];
                 if json {
-                    json_task("depri", n, t);
+                    json_task("depri", n, task);
                 } else {
-                    println!("{n} {}", t.raw);
+                    println!("{n} {}", task.raw);
                     println!("{prefix}: {n} deprioritized.");
                 }
             }
@@ -348,12 +394,11 @@ fn cmd_done(store: &mut Store, pos: &[String], json: bool) -> i32 {
     indices.sort_unstable();
     indices.dedup();
     indices.reverse();
-
     let prefix = file_prefix(store);
+    let mut code = 0;
     // (number, completed task, optional (next number, spawned task))
     type Completed = (usize, Task, Option<(usize, Task)>);
     let mut completed: Vec<Completed> = Vec::new();
-    let mut code = 0;
     for abs in indices {
         if store.tasks()[abs].done {
             code = err(format!("task {} already done", abs + 1));
@@ -377,18 +422,15 @@ fn cmd_done(store: &mut Store, pos: &[String], json: bool) -> i32 {
     }
     completed.reverse(); // back to ascending for display
     if json {
-        let refs: Vec<(usize, &Task)> = completed.iter().map(|(n, t, _)| (*n, t)).collect();
+        let refs: Vec<(usize, &Task)> = completed.iter().map(|(n, task, _)| (*n, task)).collect();
         println!(
             "{{\"ok\":true,\"action\":\"done\",\"tasks\":{}}}",
             json::task_array(&refs)
         );
     } else {
-        for (n, t, next) in &completed {
-            // todo.sh format for the completion itself.
-            println!("{n} {}", t.raw);
+        for (n, task, next) in &completed {
+            println!("{n} {}", task.raw);
             println!("{prefix}: {n} marked as done.");
-            // Recurrence is a tuxedo feature todo.sh lacks; surface the spawned
-            // next instance as a freshly-added task in the same idiom.
             if let Some((nn, nt)) = next {
                 println!("{nn} {}", nt.raw);
                 println!("{prefix}: {nn} added.");

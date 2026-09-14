@@ -66,6 +66,7 @@ pub enum CompleteOutcome {
 #[derive(Debug)]
 pub enum PriorityOutcome {
     Changed { abs: usize, priority: Option<char> },
+    Unchanged,
     Aborted(Reconcile),
     OutOfRange,
     Error(StoreError),

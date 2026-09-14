@@ -1,5 +1,6 @@
 use super::Store;
 use super::outcome::{DrainReport, Reconcile};
+use crate::hooks::HookEvent;
 use crate::{inbox, todo};
 
 impl Store {
@@ -124,6 +125,7 @@ impl Store {
         match todo::write_atomic(&self.file_path, &body) {
             Ok(()) => {
                 self.last_disk = body;
+                self.post_commit(HookEvent::Create);
             }
             Err(e) => {
                 // Roll back the in-memory append; leave staging for retry.
@@ -155,6 +157,7 @@ mod tests {
     use super::*;
     use crate::core::Store;
     use crate::core::test_support::{build_store, test_path};
+    use crate::hooks::{HookConfig, HookEvent};
 
     #[test]
     fn external_edit_reloads_and_aborts_mutation() {
@@ -255,6 +258,21 @@ mod tests {
         assert!(on_disk.contains("Call mom"));
         assert!(!dir.join("inbox.txt").exists());
         assert!(!dir.join("inbox.txt.tuxedo-staging").exists());
+    }
+
+    #[test]
+    fn drain_emits_one_create_hook_for_a_batch() {
+        let (mut store, dir, _) = build_store_with_dir("existing\n");
+        store.set_hooks(HookConfig {
+            after_mutation: Some("/definitely/not/a/tuxedo-hook".into()),
+        });
+        std::fs::write(dir.join("inbox.txt"), "one\ntwo\n").unwrap();
+
+        assert_eq!(store.drain_inbox().merged, 2);
+        let reports = store.take_hook_reports();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].event, HookEvent::Create);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

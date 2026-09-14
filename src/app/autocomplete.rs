@@ -117,7 +117,17 @@ impl App {
         };
         let prefix_lc = target.prefix.to_lowercase();
         let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
-        for t in self.store.tasks() {
+        let tasks: Box<dyn Iterator<Item = &Task>> = if self.prefs.autocomplete_archive {
+            Box::new(
+                self.store
+                    .tasks()
+                    .iter()
+                    .chain(self.store.archive().tasks()),
+            )
+        } else {
+            Box::new(self.store.tasks().iter())
+        };
+        for t in tasks {
             let source = match target.kind {
                 TokenKind::Project => &t.projects,
                 TokenKind::Context => &t.contexts,
@@ -516,5 +526,91 @@ mod tests {
 
         app.autocomplete_accept();
         assert_eq!(app.draft.text(), "work");
+    }
+
+    #[test]
+    fn autocomplete_matches_includes_archive_projects() {
+        let mut app = build_app("a +active\n");
+        let archive_tasks = crate::todo::parse_file(
+            "x 2026-05-01 2026-04-01 archived task +archived\n",
+        );
+        let path = app.archive().path().to_path_buf();
+        app.store.archive = crate::app::Archive::for_test(
+            archive_tasks,
+            String::new(),
+            path,
+        );
+        app.draft_set("Foo +a".into());
+        let m = app.autocomplete_matches();
+        assert!(m.contains(&"archived"), "archive project should appear in autocomplete");
+    }
+
+    #[test]
+    fn autocomplete_matches_includes_archive_contexts() {
+        let mut app = build_app("a @home\n");
+        let archive_tasks = crate::todo::parse_file(
+            "x 2026-05-01 2026-04-01 old chore @office\n",
+        );
+        let path = app.archive().path().to_path_buf();
+        app.store.archive = crate::app::Archive::for_test(
+            archive_tasks,
+            String::new(),
+            path,
+        );
+        app.draft_set("Clean @o".into());
+        let m = app.autocomplete_matches();
+        assert!(m.contains(&"office"), "archive context should appear in autocomplete");
+    }
+
+    #[test]
+    fn autocomplete_matches_dedups_across_active_and_archive() {
+        let mut app = build_app("a +shared\n");
+        let archive_tasks = crate::todo::parse_file(
+            "x 2026-05-01 2026-04-01 old task +shared\n",
+        );
+        let path = app.archive().path().to_path_buf();
+        app.store.archive = crate::app::Archive::for_test(
+            archive_tasks,
+            String::new(),
+            path,
+        );
+        app.draft_set("Foo +s".into());
+        let m = app.autocomplete_matches();
+        assert_eq!(m.iter().filter(|s| **s == "shared").count(), 1);
+    }
+
+    #[test]
+    fn autocomplete_matches_empty_when_only_archive_and_no_match() {
+        let mut app = build_app("plain task\n");
+        let archive_tasks = crate::todo::parse_file(
+            "x 2026-05-01 2026-04-01 archived +foo\n",
+        );
+        let path = app.archive().path().to_path_buf();
+        app.store.archive = crate::app::Archive::for_test(
+            archive_tasks,
+            String::new(),
+            path,
+        );
+        app.draft_set("Hi +zzz".into());
+        assert!(app.autocomplete_matches().is_empty());
+    }
+
+    #[test]
+    fn autocomplete_matches_excludes_archive_when_pref_disabled() {
+        let mut app = build_app("a +active\n");
+        let archive_tasks = crate::todo::parse_file(
+            "x 2026-05-01 2026-04-01 archived task +archived\n",
+        );
+        let path = app.archive().path().to_path_buf();
+        app.store.archive = crate::app::Archive::for_test(
+            archive_tasks,
+            String::new(),
+            path,
+        );
+        app.prefs.autocomplete_archive = false;
+        app.draft_set("Foo +a".into());
+        let m = app.autocomplete_matches();
+        assert!(m.contains(&"active"), "active project should still appear");
+        assert!(!m.contains(&"archived"), "archive project should not appear when pref is off");
     }
 }

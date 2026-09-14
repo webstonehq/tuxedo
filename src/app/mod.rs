@@ -158,7 +158,6 @@ pub struct App {
     /// Theme index captured when the theme picker opened, so cancel
     /// can restore it.
     theme_pick_orig: usize,
-    pub week_start: WeekStart,
 }
 
 impl App {
@@ -219,7 +218,6 @@ impl App {
             notes_dir: note_dir,
             pending_editor_path: None,
             theme_pick_orig: 0,
-            week_start: WeekStart::Sunday,
         };
         app.recompute_visible();
         app
@@ -646,7 +644,6 @@ impl App {
                 query: query.clone(),
             })
             .collect();
-        self.week_start = new_cfg.week_start.unwrap_or(WeekStart::Sunday);
         self.recompute_visible();
     }
 

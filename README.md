@@ -379,7 +379,7 @@ chord here is ignored rather than bound to a key that could never fire.
 | `i` | edit current task in Insert mode (see [Edit dialog](#edit-dialog)) |
 | `x` | toggle complete |
 | `dd` | delete task |
-| `p` | cycle priority A → B → C → · |
+| `p` | cycle priority A → B → C → · ([configurable](#priority-presets)) |
 | `J` / `K` | move task down / up within current sort ties |
 | `c` | add or remove a context |
 | `+` | add a project |
@@ -627,6 +627,29 @@ task; `o` only opens an existing linked note.
 ```toml
 notes_dir = ~/notes
 ```
+
+### Priority presets
+
+`p` cycles the selected task's priority. The ring defaults to
+`A → B → C → none`; set `priorities` to pick your own letters and order:
+
+```toml
+priorities = A, C, E
+```
+
+Entries are single A-Z letters, case-insensitive and comma-separated.
+Anything else is dropped, repeats are ignored, and an empty or wholly
+unusable list falls back to `A, B, C`. The same ring drives the create/edit
+dialog's **PRIORITY** chooser, so the letters you configure are the ones it
+offers — a long ring scrolls to keep the cursor in view.
+
+A task whose priority is not in your ring — say a `(Z)` that arrived from
+another tool — counts as unset, so `p` pulls it to the first preset rather
+than clearing it. To clear outright, pick the chooser's `clear` row or use
+the CLI's `depri`.
+
+The setting is config-only (no in-app toggle) and hot-reloads like every
+other field.
 
 ### Recurrence builder
 

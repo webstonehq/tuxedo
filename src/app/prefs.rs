@@ -43,7 +43,14 @@ pub struct Prefs {
     /// for `rec:` / `/rec`. Config-only (no in-app toggle); see
     /// `Config::recurrence_builder`.
     pub recurrence_builder: bool,
+    /// Priority letters the `p` key and the dialog's priority chooser cycle
+    /// through, in order. Never empty. Config-only (no in-app toggle); see
+    /// `Config::priorities`.
+    pub priority_presets: Vec<char>,
 }
+
+/// Ring used when the config names no usable priority letters.
+pub const DEFAULT_PRIORITIES: [char; 3] = ['A', 'B', 'C'];
 
 impl Prefs {
     pub fn from_config(cfg: Config) -> Self {
@@ -67,6 +74,11 @@ impl Prefs {
             hidden_keys: cfg.hidden_keys,
             week_start: cfg.week_start.unwrap_or(WeekStart::Sunday),
             recurrence_builder: cfg.recurrence_builder.unwrap_or(true),
+            priority_presets: if cfg.priorities.is_empty() {
+                DEFAULT_PRIORITIES.to_vec()
+            } else {
+                cfg.priorities
+            },
         }
     }
 
@@ -162,5 +174,42 @@ impl Prefs {
         cfg.show_future = Some(self.show_future);
         cfg.hidden_keys = self.hidden_keys.clone();
         cfg.save()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn priority_presets_default_when_config_is_silent() {
+        let p = Prefs::from_config(Config::default());
+        assert_eq!(p.priority_presets, vec!['A', 'B', 'C']);
+    }
+
+    #[test]
+    fn priority_presets_take_the_configured_ring() {
+        let cfg = Config {
+            priorities: vec!['A', 'C', 'E'],
+            ..Config::default()
+        };
+        assert_eq!(
+            Prefs::from_config(cfg).priority_presets,
+            vec!['A', 'C', 'E']
+        );
+    }
+
+    #[test]
+    fn priority_presets_fall_back_when_every_entry_was_invalid() {
+        // `Config` parsing drops unusable entries, so an all-invalid line
+        // reaches `Prefs` as an empty vec rather than as junk.
+        let cfg = Config {
+            priorities: Vec::new(),
+            ..Config::default()
+        };
+        assert_eq!(
+            Prefs::from_config(cfg).priority_presets,
+            vec!['A', 'B', 'C']
+        );
     }
 }

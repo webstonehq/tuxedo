@@ -432,6 +432,36 @@ fn insert_priority_chooser() {
 }
 
 #[test]
+fn insert_priority_chooser_custom_ring() {
+    let mut app = make_app();
+    app.prefs.priority_presets = vec!['A', 'C', 'E', 'F'];
+    app.mode = Mode::Insert;
+    app.draft_set_insert("Buy milk +groceries".to_string());
+    app.draft
+        .set_overlay(Some(DraftOverlay::PriorityChooser(PriorityChooserState {
+            selected: 2,
+        })));
+    snapshot_app("insert_priority_chooser_custom_ring", &app);
+}
+
+/// A 26-letter ring does not fit the chooser on a short terminal. The popup
+/// clamps to the screen and the rows scroll, so the draw must stay inside the
+/// buffer rather than panicking on an out-of-bounds write.
+#[test]
+fn priority_chooser_clamps_to_a_short_screen() {
+    let mut app = make_app();
+    app.prefs.priority_presets = ('A'..='Z').collect();
+    app.mode = Mode::Insert;
+    app.draft_set_insert("Buy milk".to_string());
+    app.draft
+        .set_overlay(Some(DraftOverlay::PriorityChooser(PriorityChooserState {
+            selected: 25,
+        })));
+    let mut terminal = Terminal::new(TestBackend::new(COLS, 12)).expect("terminal init");
+    terminal.draw(|f| ui::draw(f, &app)).expect("draw frame");
+}
+
+#[test]
 fn empty_state() {
     let mut app = App::new(
         PathBuf::from(FIXTURE_PATH),

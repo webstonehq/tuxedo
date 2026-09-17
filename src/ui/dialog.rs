@@ -5,7 +5,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::{
-    App, BuilderField, CalendarTarget, DraftOverlay, Mode, REC_UNIT_ORDER, TokenKind, WeekStart,
+    App, BuilderField, CalendarTarget, DraftOverlay, Mode, REC_UNIT_ORDER, SlashEntry, SlashKind,
+    TokenKind, WeekStart,
 };
 use crate::theme::Theme;
 
@@ -629,9 +630,19 @@ fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
         .map(|e| e.label.chars().count())
         .max()
         .unwrap_or(0);
+    // The Priority entry advertises the configured ring, so its description is
+    // computed rather than read from the static table.
+    let pri_desc = slash_priority_desc(&app.prefs.priority_presets);
+    let describe = |e: &SlashEntry| -> String {
+        if e.kind == SlashKind::Priority {
+            pri_desc.clone()
+        } else {
+            e.description.to_string()
+        }
+    };
     let desc_w = matches
         .iter()
-        .map(|e| e.description.chars().count())
+        .map(|e| describe(e).chars().count())
         .max()
         .unwrap_or(0);
     let cmd_w = matches
@@ -688,7 +699,7 @@ fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
         let pad = total.saturating_sub(used);
 
         let label_padded = pad_to(entry.label, label_w_pad);
-        let desc_padded = pad_to(entry.description, desc_w_pad);
+        let desc_padded = pad_to(&describe(entry), desc_w_pad);
         lines.push(
             Line::from(vec![
                 Span::styled("  ", Style::default().bg(bg)),
@@ -708,6 +719,22 @@ fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
         Paragraph::new(lines).style(Style::default().bg(theme.panel)),
         inner,
     );
+}
+
+/// Priority letters shown beside the `/prio` slash entry. Long rings are
+/// truncated so one configured key cannot blow out the popup's width.
+fn slash_priority_desc(presets: &[char]) -> String {
+    const MAX: usize = 6;
+    let mut out = presets
+        .iter()
+        .take(MAX)
+        .map(char::to_string)
+        .collect::<Vec<_>>()
+        .join(" · ");
+    if presets.len() > MAX {
+        out.push_str(" · …");
+    }
+    out
 }
 
 fn pad_to(s: &str, width: usize) -> String {
@@ -1071,8 +1098,16 @@ fn render_priority_chooser(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App
     let Some(state) = app.priority_state() else {
         return;
     };
+    let presets = &app.prefs.priority_presets;
+    // The ring plus the trailing `clear` row.
+    let row_count = presets.len() + 1;
     let popup_w: u16 = 24;
-    let popup_h: u16 = 8;
+    // Two borders, a blank line, and the key hint sit around the rows.
+    let chrome: u16 = 4;
+    let popup_h = u16::try_from(row_count)
+        .unwrap_or(u16::MAX)
+        .saturating_add(chrome)
+        .min(screen.height);
     let area = anchor_below_dialog(dlg, screen, popup_w, popup_h);
     frame.render_widget(Clear, area);
     let block = Block::default()
@@ -1088,14 +1123,19 @@ fn render_priority_chooser(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let rows: [(u8, &str, ratatui::style::Color); 4] = [
-        (0, "(A)", theme.pri_a),
-        (1, "(B)", theme.pri_b),
-        (2, "(C)", theme.pri_c),
-        (3, "clear", theme.dim),
-    ];
+    // A long ring on a short terminal cannot draw every row, so scroll the
+    // window to keep the cursor in view.
+    let visible = usize::from(inner.height).saturating_sub(2).max(1);
+    let offset = state
+        .selected
+        .saturating_sub(visible.saturating_sub(1))
+        .min(row_count.saturating_sub(visible));
     let mut lines: Vec<Line> = Vec::new();
-    for (i, label, color) in rows {
+    for i in offset..(offset + visible).min(row_count) {
+        let (label, color) = match presets.get(i) {
+            Some(&p) => (format!("({p})"), theme.priority_color(p)),
+            None => ("clear".to_string(), theme.dim),
+        };
         let is_sel = state.selected == i;
         let bg = if is_sel { theme.cursor } else { theme.panel };
         let m = if is_sel {
@@ -1107,7 +1147,7 @@ fn render_priority_chooser(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App
             Line::from(vec![
                 Span::styled("  ", Style::default().bg(bg)),
                 Span::styled(
-                    label.to_string(),
+                    label.clone(),
                     Style::default().fg(color).bg(bg).add_modifier(m),
                 ),
                 Span::styled(

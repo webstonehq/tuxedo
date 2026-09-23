@@ -61,6 +61,8 @@ pub enum Action {
     /// Open the theme picker dialog (j/k to preview, Enter to accept).
     OpenThemePicker,
     ChangeWeekStart,
+    OpenGithubItem,
+    BeginPromptGithub,
 }
 
 impl Action {
@@ -116,6 +118,8 @@ impl Action {
             "open_share" | "share" => Some(Self::OpenShare),
             "open_theme_picker" | "theme_picker" => Some(Self::OpenThemePicker),
             "change_week_start" => Some(Self::ChangeWeekStart),
+            "open_github_item" => Some(Self::OpenGithubItem),
+            "begin_prompt_github" => Some(Self::BeginPromptGithub),
             _ => None,
         }
     }

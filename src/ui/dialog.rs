@@ -426,6 +426,7 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
         Mode::PromptSaveFilter => ("✦", " SAVE FILTER AS "),
         Mode::PromptRenameProject => ("✦", " RENAME PROJECT "),
         Mode::PromptRenameContext => ("✦", " RENAME CONTEXT "),
+        Mode::PromptGithub => ("#", " ADD GITHUB ITEM "),
         _ => return,
     };
     let block = Block::default()

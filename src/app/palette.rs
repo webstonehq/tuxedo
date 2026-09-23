@@ -257,6 +257,16 @@ pub const ENTRIES: &[PaletteEntry] = &[
         keys: "W",
         action: Action::ChangeWeekStart,
     },
+    PaletteEntry {
+        label: "Open linked Github item in browser",
+        keys: "Ctrl-O",
+        action: Action::OpenGithubItem,
+    },
+    PaletteEntry {
+        label: "Add GitHub item to current task",
+        keys: "#",
+        action: Action::BeginPromptGithub,
+    },
 ];
 
 #[derive(Debug, Default, Clone)]

@@ -60,7 +60,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Mode::CommandPalette => "type to filter · Enter run · Esc cancel",
         Mode::Share => "scan the QR · any key dismisses",
         Mode::Welcome => "c create ./todo.txt · s open sample · q quit",
-        Mode::PromptGithub => "type github item number · Enter save · Esc cancel",
+        Mode::PromptGithub => "type github item id · Enter save · Esc cancel",
         _ => "j/k · n new · r reschedule · x done · / search · ? help · u undo · q quit",
     };
 

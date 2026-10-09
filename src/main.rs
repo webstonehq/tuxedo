@@ -231,6 +231,10 @@ fn run(
                         open_path_in_editor(&path)?;
                         terminal.clear()?;
                     }
+                    if let Some(item) = app.take_pending_github_item() {
+                        open_github_item_in_browser(&item)?;
+                        terminal.clear()?;
+                    }
                     dirty = true;
                 }
                 // A terminal resize must trigger an immediate redraw;
@@ -313,6 +317,19 @@ fn open_path_in_editor(path: &std::path::Path) -> Result<()> {
     }
 }
 
+fn open_github_item_in_browser(item: &String) -> Result<()> {
+    let cmd = "gh".to_string();
+    let status = std::process::Command::new(&cmd)
+        .arg("browse")
+        .arg(item)
+        .status()
+        .with_context(|| format!("failed to open issue"));
+    match status {
+        Ok(_) => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
 fn next_timeout(app: &App) -> Duration {
     let earliest = match (app.flash_deadline(), app.chord.deadline()) {
         (Some(f), Some(c)) => Some(f.min(c)),
@@ -347,7 +364,8 @@ fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
         | Mode::PromptContext
         | Mode::PromptRenameProject
         | Mode::PromptRenameContext
-        | Mode::PromptSaveFilter => handle_prompt(app, key),
+        | Mode::PromptSaveFilter
+        | Mode::PromptGithub => handle_prompt(app, key),
         Mode::PickProject | Mode::PickContext | Mode::PickSavedFilter => handle_pick(app, key),
         Mode::PickTheme => handle_pick_theme(app, key),
         Mode::CommandPalette => handle_command_palette(app, key),
@@ -981,6 +999,7 @@ fn handle_prompt(app: &mut App, key: KeyEvent) {
                 Mode::PromptSaveFilter => app.save_current_filter_as(&value),
                 Mode::PromptRenameProject => app.rename_current_project_as(&value),
                 Mode::PromptRenameContext => app.rename_current_context_as(&value),
+                Mode::PromptGithub => app.add_github_item_to_current(&value),
                 _ => {}
             }
         }
@@ -1017,6 +1036,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
             KeyCode::Char('d') => Some(Action::HalfPageDown),
             KeyCode::Char('u') => Some(Action::HalfPageUp),
             KeyCode::Char('p') => Some(Action::OpenCommandPalette),
+            KeyCode::Char('o') => Some(Action::OpenGithubItem),
             _ => None,
         };
     }
@@ -1095,6 +1115,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('F') => Action::ToggleShowFuture,
         KeyCode::Esc => Action::EscapeStack,
         KeyCode::Char('W') => Action::ChangeWeekStart,
+        KeyCode::Char('#') => Action::BeginPromptGithub,
         _ => return None,
     })
 }
@@ -1137,7 +1158,8 @@ fn apply_action(app: &mut App, action: Action) {
             | Action::CycleSort
             | Action::ToggleShowDone
             | Action::ToggleShowFuture
-            | Action::Undo => {
+            | Action::Undo
+            | Action::BeginPromptGithub => {
                 app.flash("read-only in archive");
                 return;
             }
@@ -1359,6 +1381,11 @@ fn apply_action(app: &mut App, action: Action) {
         Action::ChangeWeekStart => {
             app.toggle_week_start_date();
             app.recompute_visible();
+        }
+        Action::OpenGithubItem => app.open_github_item_for_current(),
+        Action::BeginPromptGithub => {
+            app.mode = Mode::PromptGithub;
+            app.draft_clear();
         }
     }
 }

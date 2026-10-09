@@ -135,7 +135,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
         | Mode::PromptContext
         | Mode::PromptSaveFilter
         | Mode::PromptRenameProject
-        | Mode::PromptRenameContext => {
+        | Mode::PromptRenameContext
+        | Mode::PromptGithub => {
             let w: u16 = PROMPT_MAX_W.min(area.width.saturating_sub(4));
             let r = centered_in(area, w, PROMPT_H);
             frame.render_widget(Clear, r);

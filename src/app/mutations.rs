@@ -250,6 +250,24 @@ impl App {
         }
     }
 
+    pub fn add_github_item_to_current(&mut self, ident: &str) {
+        let Some(abs) = self.cur_task_index_in_tasks() else {
+            return;
+        };
+        match self.store.append_at(abs, &format!("github:{}", ident)) {
+            EditOutcome::Saved { abs } => self.after_mutation(abs),
+            EditOutcome::Aborted(r) => {
+                self.handle_reconcile_abort(r);
+                return;
+            }
+            EditOutcome::Error(e) => {
+                self.flash(format!("github link failed: {e}"));
+                return;
+            }
+            EditOutcome::Empty | EditOutcome::OutOfRange | EditOutcome::TermNotFound => return,
+        }
+    }
+
     pub fn rename_current_project_as(&mut self, new_name: &str) {
         let Some(name) = self.filter.project.clone() else {
             return;
@@ -365,6 +383,23 @@ impl App {
             return;
         }
         self.queue_editor_path(target.path);
+    }
+
+    pub fn open_github_item_for_current(&mut self) {
+        let Some(task) = self.cur_task().cloned() else {
+            return;
+        };
+
+        let item = task
+            .raw
+            .split_whitespace()
+            .find_map(|token| token.strip_prefix("github:"))
+            .map(|s| s.trim_matches('"').to_string())
+            .filter(|s| !s.is_empty());
+
+        if let Some(item) = item {
+            self.queue_github_item(item);
+        }
     }
 
     pub fn undo(&mut self) {

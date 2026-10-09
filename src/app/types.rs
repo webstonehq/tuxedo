@@ -47,6 +47,7 @@ pub enum Mode {
     /// target and no `./todo.txt` exists. `c` creates `./todo.txt`, `s`
     /// opens the bundled sample, `q`/`Esc` quits without creating anything.
     Welcome,
+    PromptGithub,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

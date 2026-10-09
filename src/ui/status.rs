@@ -32,6 +32,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Mode::Share => "SHARE".into(),
         Mode::PickTheme => "PICK THEME".into(),
         Mode::Welcome => "WELCOME".into(),
+        Mode::PromptGithub => "GITHUB".into(),
     };
     if matches!(app.view, View::Archive) {
         mode_label = "ARCHIVE".into();
@@ -59,6 +60,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Mode::CommandPalette => "type to filter · Enter run · Esc cancel",
         Mode::Share => "scan the QR · any key dismisses",
         Mode::Welcome => "c create ./todo.txt · s open sample · q quit",
+        Mode::PromptGithub => "type github item id · Enter save · Esc cancel",
         _ => "j/k · n new · r reschedule · x done · / search · ? help · u undo · q quit",
     };
 

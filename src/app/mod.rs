@@ -155,6 +155,7 @@ pub struct App {
     /// Path queued for opening in the user's editor after the TUI temporarily
     /// restores the terminal. Set by OpenNote and drained by the run loop.
     pending_editor_path: Option<PathBuf>,
+    pending_github_item: Option<String>,
     /// Theme index captured when the theme picker opened, so cancel
     /// can restore it.
     theme_pick_orig: usize,
@@ -218,6 +219,7 @@ impl App {
             share: None,
             notes_dir: note_dir,
             pending_editor_path: None,
+            pending_github_item: None,
             theme_pick_orig: 0,
             week_start: WeekStart::Sunday,
         };
@@ -442,12 +444,20 @@ impl App {
         self.pending_editor_path = Some(path);
     }
 
+    pub fn queue_github_item(&mut self, item: String) {
+        self.pending_github_item = Some(item);
+    }
+
     pub fn notes_dir(&self) -> &PathBuf {
         &self.notes_dir
     }
 
     pub fn take_pending_editor_path(&mut self) -> Option<PathBuf> {
         self.pending_editor_path.take()
+    }
+
+    pub fn take_pending_github_item(&mut self) -> Option<String> {
+        self.pending_github_item.take()
     }
 
     /// True when at least one task is marked done. Used by the binary to

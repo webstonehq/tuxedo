@@ -2,36 +2,36 @@
 # Original TokyoNight palette: https://github.com/folke/tokyonight.nvim
 # Tuxedo theme adaptation by github.com/ronload
 
-name = TokyoNight Storm
+name = "TokyoNight Storm"
 
-bg = #24283b
-panel = #1f2335
-border = #414868
+bg = "#24283b"
+panel = "#1f2335"
+border = "#414868"
 
-fg = #c0caf5
-dim = #565f89
-accent = #7aa2f7
+fg = "#c0caf5"
+dim = "#565f89"
+accent = "#7aa2f7"
 
-cursor = #292e42
-selection = #292e42
-selected = #292e42
+cursor = "#292e42"
+selection = "#292e42"
+selected = "#292e42"
 
-statusbar = #1f2335
-status_fg = #a9b1d6
-mode_fg = #24283b
-mode_bg = #7aa2f7
+statusbar = "#1f2335"
+status_fg = "#a9b1d6"
+mode_fg = "#24283b"
+mode_bg = "#7aa2f7"
 
-pri_a = #f7768e
-pri_b = #ff9e64
-pri_c = #9ece6a
-pri_d = #7aa2f7
-pri_other = #bb9af7
+pri_a = "#f7768e"
+pri_b = "#ff9e64"
+pri_c = "#9ece6a"
+pri_d = "#7aa2f7"
+pri_other = "#bb9af7"
 
-project = #7aa2f7
-context = #1abc9c
+project = "#7aa2f7"
+context = "#1abc9c"
 
-done = #545c7e
-matched = #e0af68
-due = #e0af68
-overdue = #f7768e
-today = #f7768e
+done = "#545c7e"
+matched = "#e0af68"
+due = "#e0af68"
+overdue = "#f7768e"
+today = "#f7768e"

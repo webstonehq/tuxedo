@@ -2,36 +2,36 @@
 # Original Catppuccin palette: https://catppuccin.com
 # Tuxedo theme adaptation by github.com/jman223
 
-name = Catppuccin Mocha
+name = "Catppuccin Mocha"
 
-bg = #1e1e2e
-panel = #181825
-border = #45475a
+bg = "#1e1e2e"
+panel = "#181825"
+border = "#45475a"
 
-fg = #cdd6f4
-dim = #7f849c
-accent = #89b4fa
+fg = "#cdd6f4"
+dim = "#7f849c"
+accent = "#89b4fa"
 
-cursor = #313244
-selection = #313244
-selected = #313244
+cursor = "#313244"
+selection = "#313244"
+selected = "#313244"
 
-statusbar = #181825
-status_fg = #bac2de
-mode_fg = #1e1e2e
-mode_bg = #89b4fa
+statusbar = "#181825"
+status_fg = "#bac2de"
+mode_fg = "#1e1e2e"
+mode_bg = "#89b4fa"
 
-pri_a = #f38ba8
-pri_b = #fab387
-pri_c = #a6e3a1
-pri_d = #89b4fa
-pri_other = #cba6f7
+pri_a = "#f38ba8"
+pri_b = "#fab387"
+pri_c = "#a6e3a1"
+pri_d = "#89b4fa"
+pri_other = "#cba6f7"
 
-project = #89b4fa
-context = #94e2d5
+project = "#89b4fa"
+context = "#94e2d5"
 
-done = #6c7086
-matched = #f9e2af
-due = #f9e2af
-overdue = #f38ba8
-today = #f38ba8
+done = "#6c7086"
+matched = "#f9e2af"
+due = "#f9e2af"
+overdue = "#f38ba8"
+today = "#f38ba8"

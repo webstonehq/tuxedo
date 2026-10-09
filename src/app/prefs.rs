@@ -161,6 +161,7 @@ impl Prefs {
         cfg.show_done = Some(self.show_done);
         cfg.show_future = Some(self.show_future);
         cfg.hidden_keys = self.hidden_keys.clone();
+        cfg.week_start = Some(self.week_start);
         cfg.save()
     }
 }

@@ -5,7 +5,6 @@
 
 use super::App;
 use super::types::{AddOutcome, Mode, Sort, View};
-use crate::app::WeekStart;
 use crate::core::AddOutcome as CoreAdd;
 use crate::core::{
     ArchiveDeleteOutcome, ArchiveOutcome, CompleteOutcome, DeleteOutcome, EditOutcome, MoveOutcome,
@@ -435,13 +434,12 @@ impl App {
         }
     }
 
+    /// Flip the calendar's first weekday, flash the new value, and persist
+    /// it like every other in-app preference toggle.
     pub fn toggle_week_start_date(&mut self) {
-        let week_start = match self.week_start {
-            WeekStart::Sunday => WeekStart::Monday,
-            WeekStart::Monday => WeekStart::Sunday,
-        };
-
-        self.week_start = week_start
+        let msg = self.prefs.cycle_week_start();
+        self.flash(msg);
+        self.save_prefs();
     }
 }
 
@@ -647,8 +645,18 @@ mod tests {
     fn test_toggling_week_start() {
         let mut app = build_app("");
         app.toggle_week_start_date();
-        assert_eq!(app.week_start, WeekStart::Monday);
+        assert_eq!(app.prefs.week_start, WeekStart::Monday);
         app.toggle_week_start_date();
-        assert_eq!(app.week_start, WeekStart::Sunday);
+        assert_eq!(app.prefs.week_start, WeekStart::Sunday);
+    }
+
+    #[test]
+    fn week_start_from_config_applies_at_startup() {
+        let cfg = Config {
+            week_start: Some(WeekStart::Monday),
+            ..Config::default()
+        };
+        let app = build_app_with_config("", cfg);
+        assert_eq!(app.prefs.week_start, WeekStart::Monday);
     }
 }

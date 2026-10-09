@@ -59,7 +59,7 @@ impl App {
 
         filter::sort_by_prefs(&mut idxs, tasks, self.prefs.sort);
 
-        let week_start = &self.week_start;
+        let week_start = &self.prefs.week_start;
 
         let groups: Vec<GroupKey> = match self.prefs.sort {
             Sort::File => vec![GroupKey::None; idxs.len()],

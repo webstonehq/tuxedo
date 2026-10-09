@@ -14,9 +14,11 @@ use std::path::{Path, PathBuf};
 
 use crate::app::WeekStart;
 use crate::app::{Density, Sort};
+use crate::hooks::HookConfig;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Config {
+    pub hooks: HookConfig,
     pub theme: Option<String>,
     pub density: Option<Density>,
     pub sort: Option<Sort>,
@@ -143,8 +145,10 @@ fn parse(s: &str) -> Config {
             continue;
         };
         let k = k.trim();
-        let v = unquote(v.trim());
+        let raw_value = v.trim();
+        let v = unquote(raw_value);
         match k {
+            "hook.after_mutation" => c.hooks.after_mutation = parse_hook_path(raw_value),
             "theme" => c.theme = Some(v.to_string()),
             "density" => c.density = v.parse().ok(),
             "sort" => c.sort = v.parse().ok(),
@@ -199,6 +203,9 @@ fn parse(s: &str) -> Config {
 fn serialize(c: &Config) -> String {
     let mut out = String::from("# tuxedo config\n");
     // writeln! against a String is infallible; the unwrap can never fire.
+    if let Some(v) = &c.hooks.after_mutation {
+        let _ = writeln!(out, "hook.after_mutation = {}", quote_hook_path(v));
+    }
     if let Some(v) = &c.theme {
         let _ = writeln!(out, "theme = {v}");
     }
@@ -259,6 +266,15 @@ fn unquote(s: &str) -> &str {
     }
 }
 
+fn parse_hook_path(s: &str) -> Option<PathBuf> {
+    let path = unquote(s);
+    (!path.trim().is_empty()).then(|| PathBuf::from(path))
+}
+
+fn quote_hook_path(path: &Path) -> String {
+    format!("\"{}\"", path.display())
+}
+
 fn parse_bool(s: &str) -> Option<bool> {
     match s {
         "true" | "on" | "yes" | "1" => Some(true),
@@ -274,6 +290,9 @@ mod tests {
     #[test]
     fn round_trips() {
         let c = Config {
+            hooks: HookConfig {
+                after_mutation: Some("/opt/tuxedo/hooks/mutation".into()),
+            },
             theme: Some("Nord".into()),
             density: Some(Density::Cozy),
             sort: Some(Sort::Due),
@@ -434,6 +453,9 @@ mod tests {
         assert!(path.ends_with("tuxedo/config.toml"));
 
         let written = Config {
+            hooks: HookConfig {
+                after_mutation: Some("/tmp/tuxedo-all-hook".into()),
+            },
             theme: Some("Dawn".into()),
             density: Some(Density::Compact),
             sort: Some(Sort::File),
@@ -456,5 +478,13 @@ mod tests {
         let loaded = Config::load_from(&path);
         assert_eq!(loaded, written);
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn empty_hook_path_is_disabled() {
+        assert_eq!(
+            parse("hook.after_mutation = \"\"\n").hooks.after_mutation,
+            None
+        );
     }
 }

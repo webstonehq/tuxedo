@@ -4,6 +4,7 @@ use super::outcome::{
     EditOutcome, MoveOutcome, PriorityOutcome, Reconcile, StoreError, TagOutcome,
 };
 use crate::core::outcome::RenameOutcome;
+use crate::hooks::HookEvent;
 use crate::recurrence::{self, RecSpec};
 use crate::todo::{self, TagError};
 
@@ -55,7 +56,12 @@ impl Store {
                     self.tasks.insert(abs + 1, parsed);
                     Some(abs + 1)
                 });
-                if let Err(e) = self.persist() {
+                let event = if was_done {
+                    HookEvent::Uncomplete
+                } else {
+                    HookEvent::Complete
+                };
+                if let Err(e) = self.persist_with_hook(event) {
                     return CompleteOutcome::Error(e);
                 }
                 match (was_done, spawned) {
@@ -78,7 +84,7 @@ impl Store {
         }
         self.push_history();
         match self.tasks[abs].cycle_priority() {
-            Ok(priority) => match self.persist() {
+            Ok(priority) => match self.persist_with_hook(HookEvent::Update) {
                 Ok(()) => PriorityOutcome::Changed { abs, priority },
                 Err(e) => PriorityOutcome::Error(e),
             },
@@ -95,9 +101,12 @@ impl Store {
         if abs >= self.tasks.len() {
             return PriorityOutcome::OutOfRange;
         }
+        if self.tasks[abs].priority == priority {
+            return PriorityOutcome::Unchanged;
+        }
         self.push_history();
         match self.tasks[abs].set_priority(priority) {
-            Ok(()) => match self.persist() {
+            Ok(()) => match self.persist_with_hook(HookEvent::Update) {
                 Ok(()) => PriorityOutcome::Changed { abs, priority },
                 Err(e) => PriorityOutcome::Error(e),
             },
@@ -123,7 +132,7 @@ impl Store {
         for &(abs, target) in swaps {
             self.tasks.swap(abs, target);
         }
-        match self.persist() {
+        match self.persist_with_hook(HookEvent::Update) {
             Ok(()) => {
                 self.history.push(previous);
                 MoveOutcome::Moved
@@ -145,7 +154,7 @@ impl Store {
         }
         self.push_history();
         self.tasks.remove(abs);
-        match self.persist() {
+        match self.persist_with_hook(HookEvent::Delete) {
             Ok(()) => DeleteOutcome::Deleted { abs },
             Err(e) => DeleteOutcome::Error(e),
         }
@@ -186,10 +195,9 @@ impl Store {
             Ok(task) => {
                 self.push_history();
                 self.tasks.push(task);
-                match self.persist() {
-                    Ok(()) => AddOutcome::Added {
-                        abs: self.tasks.len() - 1,
-                    },
+                let abs = self.tasks.len() - 1;
+                match self.persist_with_hook(HookEvent::Create) {
+                    Ok(()) => AddOutcome::Added { abs },
                     Err(e) => AddOutcome::Error(e),
                 }
             }
@@ -288,7 +296,7 @@ impl Store {
             Ok(task) => {
                 self.push_history();
                 self.tasks[abs] = task;
-                match self.persist() {
+                match self.persist_with_hook(HookEvent::Update) {
                     Ok(()) => EditOutcome::Saved { abs },
                     Err(e) => EditOutcome::Error(e),
                 }
@@ -311,7 +319,7 @@ impl Store {
             Ok(true) => {
                 self.push_history();
                 self.tasks[abs] = task;
-                match self.persist() {
+                match self.persist_with_hook(HookEvent::Update) {
                     Ok(()) => TagOutcome::Added {
                         abs,
                         name: name.to_string(),
@@ -355,7 +363,7 @@ impl Store {
             }
         }
 
-        match self.persist() {
+        match self.persist_with_hook(HookEvent::Update) {
             Ok(()) => RenameOutcome::Done { renamed },
             Err(e) => RenameOutcome::Error(e),
         }
@@ -391,7 +399,7 @@ impl Store {
             }
         }
 
-        match self.persist() {
+        match self.persist_with_hook(HookEvent::Update) {
             Ok(()) => RenameOutcome::Done { renamed },
             Err(e) => RenameOutcome::Error(e),
         }
@@ -417,7 +425,7 @@ impl Store {
             Ok(()) => {
                 self.push_history();
                 self.tasks[abs] = task;
-                if let Err(e) = self.persist() {
+                if let Err(e) = self.persist_with_hook(HookEvent::Update) {
                     return TagOutcome::Error(e);
                 }
                 if has {
@@ -482,7 +490,7 @@ impl Store {
             self.tasks.insert(abs + 1, parsed);
         }
         let completed = to_complete.len();
-        match self.persist() {
+        match self.persist_with_hook(HookEvent::Complete) {
             Ok(()) => BulkCompleteOutcome::Done { completed, spawned },
             Err(e) => BulkCompleteOutcome::Error(e),
         }
@@ -508,7 +516,7 @@ impl Store {
         for abs in indices {
             self.tasks.remove(abs);
         }
-        match self.persist() {
+        match self.persist_with_hook(HookEvent::Delete) {
             Ok(()) => BulkDeleteOutcome::Done { deleted },
             Err(e) => BulkDeleteOutcome::Error(e),
         }
@@ -582,6 +590,43 @@ mod tests {
     use super::*;
     use crate::core::outcome::CompleteOutcome;
     use crate::core::test_support::build_store;
+    use crate::hooks::{HookConfig, HookEvent, HookExecution};
+
+    #[test]
+    fn generic_hook_covers_all_live_mutations() {
+        let generic = std::path::PathBuf::from("/definitely/not/a/generic-hook");
+        let mut store = build_store("first\nsecond\n");
+        store.set_hooks(HookConfig {
+            after_mutation: Some(generic.clone()),
+        });
+
+        store.add_finalized("third");
+        let report = store.take_hook_reports().pop().expect("create report");
+        assert_eq!(report.event, HookEvent::Create);
+        assert_eq!(report.script, generic);
+        assert_eq!(report.execution, HookExecution::SpawnFailed);
+
+        store.append_at(0, "updated");
+        let report = store.take_hook_reports().pop().expect("update report");
+        assert_eq!(report.event, HookEvent::Update);
+
+        store.complete_many(&[0, 1]);
+        let report = store.take_hook_reports().pop().expect("complete report");
+        assert_eq!(report.event, HookEvent::Complete);
+
+        store.toggle_complete(0);
+        let report = store.take_hook_reports().pop().expect("uncomplete report");
+        assert_eq!(report.event, HookEvent::Uncomplete);
+
+        store.delete_many(&[0, 1]);
+        let reports = store.take_hook_reports();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].event, HookEvent::Delete);
+
+        store.undo();
+        let report = store.take_hook_reports().pop().expect("undo report");
+        assert_eq!(report.event, HookEvent::Undo);
+    }
 
     #[test]
     fn toggle_complete_marks_pending_task_done() {

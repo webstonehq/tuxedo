@@ -210,6 +210,7 @@ impl Store {
         self.archive.tasks = todo::parse_file(&combined);
         self.archive.last_disk = combined;
         self.archive.loader = None;
+        self.post_commit(crate::hooks::HookEvent::Archive);
         ArchiveOutcome::Archived { count }
     }
 
@@ -248,7 +249,7 @@ impl Store {
         self.archive.last_disk = archive_body;
         self.push_history();
         self.tasks.push(task);
-        if let Err(e) = self.persist() {
+        if let Err(e) = self.persist_with_hook(crate::hooks::HookEvent::Unarchive) {
             return UnarchiveOutcome::Error(e);
         }
         UnarchiveOutcome::Unarchived
@@ -280,6 +281,7 @@ impl Store {
         }
         self.archive.tasks = new_archive;
         self.archive.last_disk = archive_body;
+        self.post_commit(crate::hooks::HookEvent::Delete);
         ArchiveDeleteOutcome::Deleted
     }
 
@@ -293,6 +295,15 @@ impl Store {
             Err(e) => Err(StoreError::Write(e)),
         }
     }
+
+    pub(crate) fn persist_with_hook(
+        &mut self,
+        event: crate::hooks::HookEvent,
+    ) -> Result<(), StoreError> {
+        self.persist()?;
+        self.post_commit(event);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -301,6 +312,7 @@ mod tests {
     use super::*;
     use crate::core::Store;
     use crate::core::test_support::build_store;
+    use crate::hooks::{HookConfig, HookEvent};
     use std::time::{Duration, Instant};
 
     fn dir_for(tag: &str) -> std::path::PathBuf {
@@ -353,6 +365,56 @@ mod tests {
     fn archive_nothing_when_no_completed() {
         let mut store = build_store("a\nb\n");
         assert!(matches!(store.archive_completed(), ArchiveOutcome::Nothing));
+    }
+
+    #[test]
+    fn archive_emits_one_hook_after_both_files_commit() {
+        let mut store = build_store("x 2026-05-05 2026-05-01 done\n");
+        store.set_hooks(HookConfig {
+            after_mutation: Some("/definitely/not/a/tuxedo-hook".into()),
+        });
+
+        assert!(matches!(
+            store.archive_completed(),
+            ArchiveOutcome::Archived { count: 1 }
+        ));
+        let reports = store.take_hook_reports();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].event, HookEvent::Archive);
+    }
+
+    #[test]
+    fn generic_hook_covers_unarchive_and_archive_delete() {
+        let dir = dir_for("generic-events");
+        let todo_path = dir.join("todo.txt");
+        let done_path = dir.join("done.txt");
+        let generic = std::path::PathBuf::from("/definitely/not/a/generic-hook");
+
+        std::fs::write(&todo_path, "").unwrap();
+        std::fs::write(&done_path, "x 2026-05-05 2026-05-01 archived\n").unwrap();
+        let mut store = Store::open_sync(todo_path.clone(), "".into(), "2026-05-06".into());
+        store.set_hooks(HookConfig {
+            after_mutation: Some(generic.clone()),
+        });
+        assert!(matches!(store.unarchive(0), UnarchiveOutcome::Unarchived));
+        let report = store.take_hook_reports().pop().expect("unarchive report");
+        assert_eq!(report.event, HookEvent::Unarchive);
+        assert_eq!(report.script, generic);
+
+        std::fs::write(&todo_path, "").unwrap();
+        std::fs::write(&done_path, "x 2026-05-05 2026-05-01 archived\n").unwrap();
+        let mut store = Store::open_sync(todo_path, "".into(), "2026-05-06".into());
+        store.set_hooks(HookConfig {
+            after_mutation: Some("/definitely/not/a/generic-hook".into()),
+        });
+        assert!(matches!(
+            store.archive_delete(0),
+            ArchiveDeleteOutcome::Deleted
+        ));
+        let reports = store.take_hook_reports();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].event, HookEvent::Delete);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn wait_archive_loaded(store: &mut Store) {

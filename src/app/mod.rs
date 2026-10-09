@@ -355,11 +355,15 @@ impl App {
         self.prefs.sort_label()
     }
 
-    /// Persist preferences. On failure, flashes a short error so the user
-    /// sees the problem inside the TUI (writing to stderr would smash the
-    /// alt-screen).
+    /// Persist preferences to `config_path` when set, else the XDG default.
+    /// On failure, flashes a short error so the user sees the problem inside
+    /// the TUI (writing to stderr would smash the alt-screen).
     pub fn save_prefs(&mut self) {
-        if let Err(e) = self.prefs.save() {
+        let result = match &self.config_path {
+            Some(path) => self.prefs.save_to(path),
+            None => self.prefs.save(),
+        };
+        if let Err(e) = result {
             self.flash(format!("config save failed: {e}"));
         }
     }

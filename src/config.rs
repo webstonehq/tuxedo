@@ -54,6 +54,12 @@ pub struct Config {
     /// dialog a single plain text field — `rec:` is typed by hand. Defaults
     /// to `true`. Serialized as `recurrence_builder = false`.
     pub recurrence_builder: Option<bool>,
+    /// Priority letters the `p` key cycles through, in order. Parsed as a
+    /// comma-separated list of single A-Z letters, uppercased, duplicates
+    /// dropped so the cycle position stays unambiguous. Empty means unset;
+    /// `Prefs` falls back to `A`, `B`, `C`. Serialized as
+    /// `priorities = A, B, C`.
+    pub priorities: Vec<char>,
 }
 
 impl Config {
@@ -173,6 +179,10 @@ fn parse(s: &str) -> Config {
                     .map(str::to_string)
                     .collect();
             }
+            // Same forgiving comma split as `hide_keys`. Anything that is
+            // not a single ASCII letter is dropped rather than failing the
+            // whole file, matching this parser's forward-compatible habit.
+            "priorities" => c.priorities = parse_priorities(v),
             "week_start" => c.week_start = v.parse().ok(),
             "recurrence_builder" => c.recurrence_builder = parse_bool(v),
             // Saved searches: `filter.<name> = <query>`. The name is the
@@ -241,6 +251,10 @@ fn serialize(c: &Config) -> String {
     if !c.hidden_keys.is_empty() {
         let _ = writeln!(out, "hide_keys = {}", c.hidden_keys.join(", "));
     }
+    if !c.priorities.is_empty() {
+        let joined: Vec<String> = c.priorities.iter().map(char::to_string).collect();
+        let _ = writeln!(out, "priorities = {}", joined.join(", "));
+    }
     if let Some(v) = c.week_start {
         let _ = writeln!(out, "week_start = {v}");
     }
@@ -257,6 +271,24 @@ fn unquote(s: &str) -> &str {
     } else {
         s
     }
+}
+
+fn parse_priorities(v: &str) -> Vec<char> {
+    let mut out: Vec<char> = Vec::new();
+    for entry in v.split(',') {
+        let mut chars = entry.trim().chars();
+        let (Some(ch), None) = (chars.next(), chars.next()) else {
+            continue;
+        };
+        if !ch.is_ascii_alphabetic() {
+            continue;
+        }
+        let ch = ch.to_ascii_uppercase();
+        if !out.contains(&ch) {
+            out.push(ch);
+        }
+    }
+    out
 }
 
 fn parse_bool(s: &str) -> Option<bool> {
@@ -293,11 +325,30 @@ mod tests {
             hidden_keys: vec!["uid".into(), "sync".into()],
             week_start: Some(WeekStart::Sunday),
             recurrence_builder: Some(false),
+            priorities: vec!['A', 'C', 'E'],
         };
 
         let s = serialize(&c);
         let parsed = parse(&s);
         assert_eq!(parsed, c);
+    }
+
+    #[test]
+    fn priorities_normalize_case_and_drop_duplicates() {
+        let c = parse("priorities = a, B, a, c\n");
+        assert_eq!(c.priorities, vec!['A', 'B', 'C']);
+    }
+
+    #[test]
+    fn priorities_drop_invalid_entries() {
+        let c = parse("priorities = A, , AB, 3, !, z\n");
+        assert_eq!(c.priorities, vec!['A', 'Z']);
+    }
+
+    #[test]
+    fn priorities_empty_value_yields_empty_vec() {
+        let c = parse("priorities =\n");
+        assert!(c.priorities.is_empty());
     }
 
     #[test]
@@ -450,6 +501,7 @@ mod tests {
             hidden_keys: vec!["uid".into()],
             week_start: Some(WeekStart::Sunday),
             recurrence_builder: Some(false),
+            priorities: vec!['A', 'C', 'E'],
         };
         written.save_to(&path).expect("save should succeed");
         assert!(path.exists());

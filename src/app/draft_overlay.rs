@@ -67,8 +67,10 @@ pub const SLASH_ENTRIES: &[SlashEntry] = &[
         kind: SlashKind::Threshold,
     },
     SlashEntry {
+        // Rendered from the configured ring instead of this field; see
+        // `ui::dialog::slash_priority_desc`.
         label: "Priority",
-        description: "A · B · C",
+        description: "",
         cmd: "/prio",
         kind: SlashKind::Priority,
     },
@@ -148,8 +150,9 @@ pub struct RecurrenceBuilderState {
 
 #[derive(Debug, Clone)]
 pub struct PriorityChooserState {
-    /// 0=A, 1=B, 2=C, 3=clear.
-    pub selected: u8,
+    /// Index into the configured priority ring. The one-past-the-end slot is
+    /// the `clear` row, so a ring of N letters has N+1 selectable rows.
+    pub selected: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -721,13 +724,11 @@ impl App {
 
 impl App {
     pub fn open_priority_chooser(&mut self) {
-        let existing = find_priority(self.draft.text());
-        let selected = match existing {
-            Some('A') => 0,
-            Some('B') => 1,
-            Some('C') => 2,
-            _ => 0,
-        };
+        // A draft priority outside the ring has no row of its own, so the
+        // cursor starts at the first preset, matching what `p` does in the list.
+        let selected = find_priority(self.draft.text())
+            .and_then(|p| self.prefs.priority_presets.iter().position(|&c| c == p))
+            .unwrap_or(0);
         self.draft
             .set_overlay(Some(DraftOverlay::PriorityChooser(PriorityChooserState {
                 selected,
@@ -742,25 +743,23 @@ impl App {
     }
 
     pub fn priority_step(&mut self, forward: bool) {
+        let n = self.prefs.priority_presets.len() + 1;
         let Some(DraftOverlay::PriorityChooser(s)) = self.draft.overlay_mut() else {
             return;
         };
-        let n: i32 = 4; // A, B, C, clear
-        let cur = s.selected as i32;
-        let next = (cur + if forward { 1 } else { -1 }).rem_euclid(n);
-        s.selected = next as u8;
+        s.selected = if forward {
+            (s.selected + 1) % n
+        } else {
+            (s.selected + n - 1) % n
+        };
     }
 
     pub fn priority_accept(&mut self) {
         let Some(DraftOverlay::PriorityChooser(s)) = self.draft.overlay() else {
             return;
         };
-        let pri = match s.selected {
-            0 => Some('A'),
-            1 => Some('B'),
-            2 => Some('C'),
-            _ => None,
-        };
+        // `get` returns None for the one-past-the-end `clear` row.
+        let pri = self.prefs.priority_presets.get(s.selected).copied();
         self.draft.set_overlay(None);
         self.apply_priority(pri);
     }

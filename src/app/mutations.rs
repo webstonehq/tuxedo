@@ -13,7 +13,7 @@ use crate::core::{
 };
 use crate::nl;
 use crate::note;
-use crate::todo::Task;
+use crate::todo::{self, Task};
 
 fn same_sort_key(sort: Sort, a: &Task, b: &Task) -> bool {
     match sort {
@@ -44,8 +44,16 @@ impl App {
         }
     }
 
+    /// Step the task at `abs` to the next priority in the configured ring.
+    /// The pre-read of the current priority is safe because `set_priority_at`
+    /// reconciles first and aborts if the file moved under us, so a stale
+    /// read can never be written.
     pub fn cycle_priority(&mut self, abs: usize) {
-        match self.store.cycle_priority(abs) {
+        let Some(current) = self.store.tasks().get(abs).map(|t| t.priority) else {
+            return;
+        };
+        let next = todo::next_in_cycle(current, &self.prefs.priority_presets);
+        match self.store.set_priority_at(abs, next) {
             PriorityOutcome::Changed { abs, .. } => self.after_mutation(abs),
             PriorityOutcome::Aborted(r) => self.handle_reconcile_abort(r),
             PriorityOutcome::OutOfRange => {}

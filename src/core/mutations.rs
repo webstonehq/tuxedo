@@ -68,24 +68,6 @@ impl Store {
         }
     }
 
-    pub fn cycle_priority(&mut self, abs: usize) -> PriorityOutcome {
-        match self.reconcile() {
-            Reconcile::Unchanged => {}
-            other => return PriorityOutcome::Aborted(other),
-        }
-        if abs >= self.tasks.len() {
-            return PriorityOutcome::OutOfRange;
-        }
-        self.push_history();
-        match self.tasks[abs].cycle_priority() {
-            Ok(priority) => match self.persist() {
-                Ok(()) => PriorityOutcome::Changed { abs, priority },
-                Err(e) => PriorityOutcome::Error(e),
-            },
-            Err(e) => PriorityOutcome::Error(StoreError::Parse(e)),
-        }
-    }
-
     /// Set or clear a task's priority outright (CLI `pri` / `depri`).
     pub fn set_priority_at(&mut self, abs: usize, priority: Option<char>) -> PriorityOutcome {
         match self.reconcile() {

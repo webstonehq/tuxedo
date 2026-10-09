@@ -292,19 +292,6 @@ impl Task {
         self.replace_from_raw(&new_raw)
     }
 
-    /// Cycle priority A → B → C → none → A. Returns the new value (for the
-    /// caller to flash). Behaves like `set_priority` w.r.t. the line format.
-    pub fn cycle_priority(&mut self) -> Result<Option<char>, ParseError> {
-        let next = match self.priority {
-            None => Some('A'),
-            Some('A') => Some('B'),
-            Some('B') => Some('C'),
-            Some(_) => None,
-        };
-        self.set_priority(next)?;
-        Ok(next)
-    }
-
     /// Append `+name` to the line. Returns `Ok(true)` if added, `Ok(false)`
     /// if the project was already present.
     pub fn add_project(&mut self, name: &str) -> Result<bool, TagError> {
@@ -399,6 +386,17 @@ impl Task {
     fn replace_from_raw(&mut self, raw: &str) -> Result<(), ParseError> {
         *self = parse_line(raw)?;
         Ok(())
+    }
+}
+
+/// Next priority in the `presets` ring: each preset in order, then clear,
+/// then wrap. A priority outside the ring is treated as unset, so it pulls the
+/// task to the first preset rather than clearing.
+pub fn next_in_cycle(current: Option<char>, presets: &[char]) -> Option<char> {
+    match current.and_then(|c| presets.iter().position(|&p| p == c)) {
+        Some(i) if i + 1 < presets.len() => Some(presets[i + 1]),
+        Some(_) => None,
+        None => presets.first().copied(),
     }
 }
 
@@ -672,5 +670,42 @@ mod tests {
         for (a, b) in parsed.iter().zip(reparsed.iter()) {
             assert_eq!(a.raw, b.raw);
         }
+    }
+
+    #[test]
+    fn next_in_cycle_walks_the_default_ring() {
+        let ring = ['A', 'B', 'C'];
+        assert_eq!(next_in_cycle(None, &ring), Some('A'));
+        assert_eq!(next_in_cycle(Some('A'), &ring), Some('B'));
+        assert_eq!(next_in_cycle(Some('B'), &ring), Some('C'));
+        assert_eq!(next_in_cycle(Some('C'), &ring), None);
+    }
+
+    #[test]
+    fn next_in_cycle_walks_a_custom_ring_in_order() {
+        let ring = ['A', 'C', 'E'];
+        assert_eq!(next_in_cycle(None, &ring), Some('A'));
+        assert_eq!(next_in_cycle(Some('A'), &ring), Some('C'));
+        assert_eq!(next_in_cycle(Some('C'), &ring), Some('E'));
+        assert_eq!(next_in_cycle(Some('E'), &ring), None);
+    }
+
+    #[test]
+    fn next_in_cycle_single_element_ring_toggles() {
+        let ring = ['A'];
+        assert_eq!(next_in_cycle(None, &ring), Some('A'));
+        assert_eq!(next_in_cycle(Some('A'), &ring), None);
+    }
+
+    #[test]
+    fn next_in_cycle_off_ring_priority_pulls_to_first_preset() {
+        let ring = ['A', 'B', 'C'];
+        assert_eq!(next_in_cycle(Some('Z'), &ring), Some('A'));
+    }
+
+    #[test]
+    fn next_in_cycle_empty_ring_clears() {
+        assert_eq!(next_in_cycle(Some('A'), &[]), None);
+        assert_eq!(next_in_cycle(None, &[]), None);
     }
 }

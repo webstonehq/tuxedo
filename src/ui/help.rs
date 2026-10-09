@@ -7,12 +7,16 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 use crate::app::App;
 use crate::theme::Theme;
 
-type Section = (&'static str, &'static [(&'static str, &'static str)]);
+type Section<'a> = (&'a str, &'a [(&'a str, &'a str)]);
+
+/// Longest `p` description the help column fits. Past this the ring is
+/// dropped from the row rather than colliding with the next column.
+const PRIORITY_HINT_BUDGET: usize = 27;
 
 // Opposed key pairs share a row. The overlay is height-bound (it fills a
 // 32-row terminal exactly), so pairing is what buys the room for RECURRENCE
 // without pushing FORMAT off the bottom.
-const NAVIGATION: Section = (
+const NAVIGATION: Section<'static> = (
     "NAVIGATION",
     &[
         ("j / k  (↓ / ↑)", "next / previous task"),
@@ -21,7 +25,7 @@ const NAVIGATION: Section = (
     ],
 );
 
-const EDITING: Section = (
+const EDITING: Section<'static> = (
     "EDITING",
     &[
         ("n", "new task"),
@@ -29,7 +33,7 @@ const EDITING: Section = (
         ("r", "reschedule task"),
         ("x", "toggle complete"),
         ("dd", "delete task"),
-        ("p", "cycle priority A→B→C→·"),
+        ("p", "cycle priority"),
         ("J / K", "move task down / up"),
         ("c", "add/remove context"),
         ("+", "add project"),
@@ -40,7 +44,7 @@ const EDITING: Section = (
 
 /// Motions inside the `↻ REPEAT` overlay that `rec:` opens in the create/edit
 /// dialog. Rebindable under `[recurrence]` in `keybinds.toml`.
-const RECURRENCE: Section = (
+const RECURRENCE: Section<'static> = (
     "RECURRENCE (rec:)",
     &[
         ("j / k / Tab", "next / prev field"),
@@ -49,7 +53,7 @@ const RECURRENCE: Section = (
     ],
 );
 
-const VIEW: Section = (
+const VIEW: Section<'static> = (
     "VIEW",
     &[
         ("/", "fuzzy search"),
@@ -69,7 +73,7 @@ const VIEW: Section = (
     ],
 );
 
-const SYSTEM: Section = (
+const SYSTEM: Section<'static> = (
     "SYSTEM",
     &[
         (": / Ctrl-P", "command palette"),
@@ -79,7 +83,7 @@ const SYSTEM: Section = (
     ],
 );
 
-const FORMAT: Section = (
+const FORMAT: Section<'static> = (
     "FORMAT",
     &[
         ("(A)", "priority A-Z"),
@@ -117,10 +121,23 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     // Keybindings (top, two columns) — divider — Format (bottom, two columns).
     // Each half splits sections across left/right; the last section in each
     // column drops its trailing blank so the divider lands tight.
+    let pri_hint = priority_hint(&app.prefs.priority_presets);
+    let editing_rows: Vec<(&str, &str)> = EDITING
+        .1
+        .iter()
+        .map(|&(k, d)| {
+            if k == "p" {
+                (k, pri_hint.as_str())
+            } else {
+                (k, d)
+            }
+        })
+        .collect();
+    let editing: Section = (EDITING.0, &editing_rows);
     let kb_lines = two_columns(
         theme,
         inner.width,
-        &[NAVIGATION, EDITING, RECURRENCE],
+        &[NAVIGATION, editing, RECURRENCE],
         &[VIEW, SYSTEM],
     );
     let kb_height = u16::try_from(kb_lines.len()).unwrap_or(u16::MAX);
@@ -162,8 +179,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 fn two_columns<'a>(
     theme: &Theme,
     total_width: u16,
-    left: &[Section],
-    right: &[Section],
+    left: &[Section<'_>],
+    right: &[Section<'_>],
 ) -> Vec<Line<'a>> {
     let left_lines = render_sections_trimmed(theme, left);
     let right_lines = render_sections_trimmed(theme, right);
@@ -186,7 +203,23 @@ fn two_columns<'a>(
     out
 }
 
-fn render_sections_trimmed<'a>(theme: &Theme, sections: &[Section]) -> Vec<Line<'a>> {
+/// Description for the `p` row: the configured ring, arrow-joined, ending in
+/// `·` for the clear slot. A ring too long for the column falls back to the
+/// bare label rather than overrunning into the next column.
+fn priority_hint(presets: &[char]) -> String {
+    let mut out = String::from("cycle priority ");
+    for p in presets {
+        out.push(*p);
+        out.push('→');
+    }
+    out.push('·');
+    if out.chars().count() > PRIORITY_HINT_BUDGET {
+        return "cycle priority".to_string();
+    }
+    out
+}
+
+fn render_sections_trimmed<'a>(theme: &Theme, sections: &[Section<'_>]) -> Vec<Line<'a>> {
     let mut lines = render_sections(theme, sections);
     // Drop the trailing blank that `render_sections` appends after the last
     // section so columns end flush.
@@ -202,7 +235,7 @@ fn line_is_blank(line: &Line) -> bool {
         .all(|s| s.content.chars().all(|c| c == ' '))
 }
 
-fn render_sections<'a>(theme: &Theme, sections: &[Section]) -> Vec<Line<'a>> {
+fn render_sections<'a>(theme: &Theme, sections: &[Section<'_>]) -> Vec<Line<'a>> {
     let mut lines: Vec<Line> = Vec::new();
     for (title, items) in sections {
         // An empty title means "this is a continuation column, skip the
@@ -246,5 +279,26 @@ fn pad_str(s: &str, w: usize) -> String {
         let mut o = s.to_string();
         o.push_str(&" ".repeat(w - len));
         o
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn priority_hint_renders_the_default_ring() {
+        assert_eq!(priority_hint(&['A', 'B', 'C']), "cycle priority A→B→C→·");
+    }
+
+    #[test]
+    fn priority_hint_renders_a_custom_ring() {
+        assert_eq!(priority_hint(&['A', 'C', 'E']), "cycle priority A→C→E→·");
+    }
+
+    #[test]
+    fn priority_hint_falls_back_when_the_ring_overruns_the_column() {
+        let long: Vec<char> = ('A'..='Z').collect();
+        assert_eq!(priority_hint(&long), "cycle priority");
     }
 }

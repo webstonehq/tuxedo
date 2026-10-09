@@ -196,17 +196,20 @@ fn parse(s: &str) -> Config {
     c
 }
 
+/// For now, we will manually quote each value (so we follow TOML-specs)
+/// # TODO
+/// - [ ] import and use some **TOML parser+writer** and use that instead.
 fn serialize(c: &Config) -> String {
     let mut out = String::from("# tuxedo config\n");
     // writeln! against a String is infallible; the unwrap can never fire.
     if let Some(v) = &c.theme {
-        let _ = writeln!(out, "theme = {v}");
+        let _ = writeln!(out, "theme = \"{v}\"");
     }
     if let Some(v) = c.density {
-        let _ = writeln!(out, "density = {v}");
+        let _ = writeln!(out, "density = \"{v}\"");
     }
     if let Some(v) = c.sort {
-        let _ = writeln!(out, "sort = {v}");
+        let _ = writeln!(out, "sort = \"{v}\"");
     }
     if let Some(v) = c.show_left {
         let _ = writeln!(out, "show_left = {v}");
@@ -227,22 +230,22 @@ fn serialize(c: &Config) -> String {
         let _ = writeln!(out, "show_future = {v}");
     }
     if let Some(v) = &c.share_token {
-        let _ = writeln!(out, "share_token = {v}");
+        let _ = writeln!(out, "share_token = \"{v}\"");
     }
     if let Some(v) = c.share_port {
         let _ = writeln!(out, "share_port = {v}");
     }
     for (name, query) in &c.filters {
-        let _ = writeln!(out, "filter.{name} = {query}");
+        let _ = writeln!(out, "filter.{name} = \"{query}\"");
     }
     if let Some(v) = &c.notes_dir {
-        let _ = writeln!(out, "notes_dir = {v}");
+        let _ = writeln!(out, "notes_dir = \"{v}\"");
     }
     if !c.hidden_keys.is_empty() {
         let _ = writeln!(out, "hide_keys = {}", c.hidden_keys.join(", "));
     }
     if let Some(v) = c.week_start {
-        let _ = writeln!(out, "week_start = {v}");
+        let _ = writeln!(out, "week_start = \"{v}\"");
     }
     if let Some(v) = c.recurrence_builder {
         let _ = writeln!(out, "recurrence_builder = {v}");
@@ -250,6 +253,14 @@ fn serialize(c: &Config) -> String {
     out
 }
 
+/// Remove first and last **"** char if `s` is quoted.
+/// # Examples
+/// ```rust
+/// let foo = "\"foo\"";
+/// let bar = "bar";
+/// // assert_eq!(unquote(foo), "foo"); // "quotes" removed
+/// // assert_eq!(unquote(bar), bar);   // no change
+/// ```
 fn unquote(s: &str) -> &str {
     let b = s.as_bytes();
     if b.len() >= 2 && b[0] == b'"' && b[b.len() - 1] == b'"' {
@@ -259,6 +270,10 @@ fn unquote(s: &str) -> &str {
     }
 }
 
+/// Parse a string "boolean" into an actual boolean
+/// **"true"|"on"|"yes"|"1"** => `true`
+/// **"false"|"off"|"no"|"0"** => `false`
+/// else => None
 fn parse_bool(s: &str) -> Option<bool> {
     match s {
         "true" | "on" | "yes" | "1" => Some(true),

@@ -844,6 +844,7 @@ fn handle_settings(app: &mut App, key: KeyEvent) {
         KeyCode::Char(']') => apply_action(app, Action::ToggleRightPane),
         KeyCode::Char('H') => apply_action(app, Action::ToggleShowDone),
         KeyCode::Char('F') => apply_action(app, Action::ToggleShowFuture),
+        KeyCode::Char('B') => apply_action(app, Action::ToggleShowBlocked),
         KeyCode::Char('S') => apply_action(app, Action::CycleSort),
         _ => {}
     }
@@ -1093,6 +1094,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('L') => Action::ToggleLineNum,
         KeyCode::Char('H') => Action::ToggleShowDone,
         KeyCode::Char('F') => Action::ToggleShowFuture,
+        KeyCode::Char('B') => Action::ToggleShowBlocked,
         KeyCode::Esc => Action::EscapeStack,
         KeyCode::Char('W') => Action::ChangeWeekStart,
         _ => return None,
@@ -1137,6 +1139,7 @@ fn apply_action(app: &mut App, action: Action) {
             | Action::CycleSort
             | Action::ToggleShowDone
             | Action::ToggleShowFuture
+            | Action::ToggleShowBlocked
             | Action::Undo => {
                 app.flash("read-only in archive");
                 return;
@@ -1304,6 +1307,12 @@ fn apply_action(app: &mut App, action: Action) {
         }
         Action::ToggleShowFuture => {
             app.prefs.toggle_show_future();
+            app.cursor = 0;
+            app.recompute_visible();
+            app.save_prefs();
+        }
+        Action::ToggleShowBlocked => {
+            app.prefs.toggle_show_blocked();
             app.cursor = 0;
             app.recompute_visible();
             app.save_prefs();

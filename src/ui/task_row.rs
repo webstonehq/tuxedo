@@ -19,6 +19,9 @@ pub struct RowOpts<'a> {
     /// rendered body. Empty (the common case) means render everything,
     /// byte-for-byte as before.
     pub hidden_keys: &'a [String],
+    /// True when this task has a `needs:` reference pointing to an existing
+    /// undone task.
+    pub blocked: bool,
 }
 
 pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<'a> {
@@ -141,7 +144,11 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     } else {
         Style::default()
     };
-    Line::from(spans).style(line_style)
+    Line::from(spans).style(line_style.add_modifier(if opts.blocked {
+        Modifier::DIM
+    } else {
+        Modifier::empty()
+    }))
 }
 
 fn push_token_spans<'a>(
@@ -389,6 +396,7 @@ mod tests {
             match_term: Some("a"),
             today: "2026-05-06",
             hidden_keys: &[],
+            blocked: false,
         };
         // Build must not panic; we don't assert on the rendered spans.
         let _ = build_line(&task, opts, &MUTED);
@@ -410,6 +418,7 @@ mod tests {
             match_term: Some("cade"),
             today: "2026-05-06",
             hidden_keys: &[],
+            blocked: false,
         };
         let line = build_line(&task, opts, &MUTED);
         let highlight_bg = MUTED.matched;
@@ -438,6 +447,7 @@ mod tests {
             match_term: None,
             today: "2026-05-06",
             hidden_keys: hidden,
+            blocked: false,
         };
         let line = build_line(&task, opts, &MUTED);
         line.spans
@@ -505,6 +515,7 @@ mod tests {
             match_term: None,
             today: "2026-05-06",
             hidden_keys: &[],
+            blocked: false,
         };
         let line = build_line(&task, opts, &MUTED);
         let url_span = line
@@ -536,6 +547,7 @@ mod tests {
             match_term: None,
             today: "2026-05-06",
             hidden_keys: &[],
+            blocked: false,
         };
         let line = build_line(&task, opts, &MUTED);
         let url_span = line
@@ -557,6 +569,28 @@ mod tests {
         assert_eq!(
             body_text("Pay rent due:2026-05-15 uid:x", &h),
             "Pay rent due:2026-05-15",
+        );
+    }
+
+    #[test]
+    fn blocked_row_is_dimmed() {
+        let task = parse_line("Blocked task +project").unwrap();
+        let opts = RowOpts {
+            idx_label: 0,
+            cursor: false,
+            multi_mode: false,
+            multi_checked: false,
+            selected: false,
+            show_line_num: false,
+            match_term: None,
+            today: "2026-05-06",
+            hidden_keys: &[],
+            blocked: true,
+        };
+        let line = build_line(&task, opts, &MUTED);
+        assert!(
+            line.style.add_modifier.contains(Modifier::DIM),
+            "blocked row line style must carry DIM"
         );
     }
 }

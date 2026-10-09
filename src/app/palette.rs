@@ -188,6 +188,11 @@ pub const ENTRIES: &[PaletteEntry] = &[
         action: Action::ToggleShowFuture,
     },
     PaletteEntry {
+        label: "show blocked in list",
+        keys: "B",
+        action: Action::ToggleShowBlocked,
+    },
+    PaletteEntry {
         label: "toggle filter pane",
         keys: "[",
         action: Action::ToggleLeftPane,
@@ -553,6 +558,7 @@ mod tests {
             Action::ToggleLineNum,
             Action::ToggleShowDone,
             Action::ToggleShowFuture,
+            Action::ToggleShowBlocked,
             Action::CopyLine,
             Action::CopyBody,
             Action::EscapeStack,

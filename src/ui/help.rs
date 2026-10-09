@@ -62,6 +62,7 @@ const VIEW: Section = (
         ("A", "archive completed"),
         ("H", "show done in list"),
         ("F", "show future in list"),
+        ("B", "show blocked in list"),
         ("[ / ]", "toggle filter / detail"),
         ("T", "theme picker"),
         ("D", "cycle density"),

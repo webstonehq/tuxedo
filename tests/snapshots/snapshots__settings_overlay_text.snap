@@ -17,13 +17,13 @@ expression: buffer_to_text(&buf)
    detail sidebar              on  (] to toggle)                                                    
    show done in list           off  (H to toggle)                                                   
    show future in list         off  (F to toggle)                                                   
+   show blocked in list        on  (B to toggle)                                                    
                                                                                                     
  BEHAVIOR                                                                                           
    default sort                priority (S to cycle)                                                
                                                                                                     
  KEYBINDINGS                                                                                        
                                press ? for the full list                                            
-                                                                                                    
                                                                                                     
                                                                                                     
                                                                                                     

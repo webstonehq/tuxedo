@@ -56,6 +56,10 @@ pub struct Task {
     /// filter parses it on demand via `crate::threshold`.
     pub threshold: Option<String>,
     pub notes: Vec<String>,
+    /// Raw value of the `id:` tag if present.
+    pub id: Option<String>,
+    /// Raw value of the `needs:` tag if present.
+    pub needs: Option<String>,
 }
 
 pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
@@ -94,6 +98,8 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
     let rec = find_kv(rest, "rec");
     let threshold = find_kv(rest, "t");
     let notes = find_quoted_kv(rest, "note");
+    let id = find_kv(rest, "id");
+    let needs = find_kv(rest, "needs");
     let clean_raw = body_after_quoted_kv(line);
 
     Ok(Task {
@@ -109,6 +115,8 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
         rec,
         threshold,
         notes,
+        id,
+        needs,
     })
 }
 
@@ -672,5 +680,12 @@ mod tests {
         for (a, b) in parsed.iter().zip(reparsed.iter()) {
             assert_eq!(a.raw, b.raw);
         }
+    }
+
+    #[test]
+    fn parses_id_and_needs() {
+        let t = parse_line("Build wall id:wall needs:foundation").unwrap();
+        assert_eq!(t.id.as_deref(), Some("wall"));
+        assert_eq!(t.needs.as_deref(), Some("foundation"));
     }
 }

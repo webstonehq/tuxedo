@@ -1,6 +1,7 @@
 use super::App;
 use super::types::{Sort, View};
 use crate::core::filter::{self, ListDueBucket};
+use crate::todo::Task;
 
 /// One entry per visible row, parallel to `visible_cache`. Renderers detect
 /// group transitions by comparing successive entries; under `Sort::File` every
@@ -44,8 +45,22 @@ impl App {
         let needle = (!self.filter.search.is_empty())
             .then(|| filter::resolve_needle(&self.filter.search, today));
 
+        let undone_ids: std::collections::HashSet<&str> = tasks
+            .iter()
+            .filter(|t| !t.done)
+            .filter_map(|t| t.id.as_deref())
+            .collect();
+        let is_blocked = |t: &Task| {
+            t.needs
+                .as_deref()
+                .is_some_and(|dep| undone_ids.contains(dep))
+        };
+
         let mut idxs: Vec<usize> = (0..tasks.len())
             .filter(|&i| {
+                if !self.prefs.show_blocked && is_blocked(&tasks[i]) {
+                    return false;
+                }
                 filter::list_predicate(
                     &tasks[i],
                     self.prefs.show_done,

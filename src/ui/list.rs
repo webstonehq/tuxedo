@@ -68,6 +68,13 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         let last = visible.len().saturating_sub(1);
         let mut last_group: Option<&GroupKey> = None;
 
+        let undone_ids: std::collections::HashSet<&str> = app
+            .tasks()
+            .iter()
+            .filter(|t| !t.done)
+            .filter_map(|t| t.id.as_deref())
+            .collect();
+
         for (i, (&abs, gk)) in visible.iter().zip(groups.iter()).enumerate() {
             // Emit a section header on group transitions. `GroupKey::None`
             // means the active sort is `Sort::File`; we never render a header
@@ -81,6 +88,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             }
 
             let task = &app.tasks()[abs];
+            let blocked = task
+                .needs
+                .as_deref()
+                .is_some_and(|dep| undone_ids.contains(dep));
             let opts = task_row::RowOpts {
                 idx_label: i,
                 cursor: i == app.cursor && app.mode != Mode::Help && app.mode != Mode::Settings,
@@ -91,6 +102,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 match_term,
                 today: app.today(),
                 hidden_keys: &app.prefs.hidden_keys,
+                blocked,
             };
             if i == app.cursor {
                 cursor_line = Some(lines.len());

@@ -415,6 +415,12 @@ impl App {
         self.save_prefs();
     }
 
+    pub fn toggle_autocomplete_archive(&mut self) {
+        let msg = self.prefs.toggle_autocomplete_archive();
+        self.flash(msg);
+        self.save_prefs();
+    }
+
     pub fn cycle_sort(&mut self) {
         let msg = self.prefs.cycle_sort();
         self.flash(msg);

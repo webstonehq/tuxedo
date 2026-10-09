@@ -48,6 +48,7 @@ pub struct Config {
     /// task rows (list + archive). The line is stored on disk untouched;
     /// this only affects display. Serialized as `hide_keys = a, b, c`.
     pub hidden_keys: Vec<String>,
+    pub autocomplete_archive: Option<bool>,
     pub week_start: Option<WeekStart>,
     /// Whether typing `rec:` (or picking `/rec`) inside the create/edit
     /// dialog opens the recurrence builder overlay. `false` keeps the
@@ -173,6 +174,7 @@ fn parse(s: &str) -> Config {
                     .map(str::to_string)
                     .collect();
             }
+            "autocomplete_archive" => c.autocomplete_archive = parse_bool(v),
             "week_start" => c.week_start = v.parse().ok(),
             "recurrence_builder" => c.recurrence_builder = parse_bool(v),
             // Saved searches: `filter.<name> = <query>`. The name is the
@@ -241,6 +243,9 @@ fn serialize(c: &Config) -> String {
     if !c.hidden_keys.is_empty() {
         let _ = writeln!(out, "hide_keys = {}", c.hidden_keys.join(", "));
     }
+    if let Some(v) = c.autocomplete_archive {
+        let _ = writeln!(out, "autocomplete_archive = {v}");
+    }
     if let Some(v) = c.week_start {
         let _ = writeln!(out, "week_start = {v}");
     }
@@ -291,6 +296,7 @@ mod tests {
             ],
             notes_dir: Some("~/notes".into()),
             hidden_keys: vec!["uid".into(), "sync".into()],
+            autocomplete_archive: Some(true),
             week_start: Some(WeekStart::Sunday),
             recurrence_builder: Some(false),
         };
@@ -448,6 +454,7 @@ mod tests {
             filters: vec![("errand".into(), "@errand".into())],
             notes_dir: Some("/tmp/notes".into()),
             hidden_keys: vec!["uid".into()],
+            autocomplete_archive: Some(true),
             week_start: Some(WeekStart::Sunday),
             recurrence_builder: Some(false),
         };

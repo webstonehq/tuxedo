@@ -38,6 +38,7 @@ pub struct Prefs {
     /// Metadata keys whose `key:value` tokens are hidden from task rows.
     /// Config-only (no in-app toggle); see `Config::hidden_keys`.
     pub hidden_keys: Vec<String>,
+    pub autocomplete_archive: bool,
     pub week_start: WeekStart,
     /// Whether the create/edit dialog opens the recurrence builder overlay
     /// for `rec:` / `/rec`. Config-only (no in-app toggle); see
@@ -65,6 +66,7 @@ impl Prefs {
             show_done: cfg.show_done.unwrap_or(false),
             show_future: cfg.show_future.unwrap_or(false),
             hidden_keys: cfg.hidden_keys,
+            autocomplete_archive: cfg.autocomplete_archive.unwrap_or(true),
             week_start: cfg.week_start.unwrap_or(WeekStart::Sunday),
             recurrence_builder: cfg.recurrence_builder.unwrap_or(true),
         }
@@ -133,6 +135,14 @@ impl Prefs {
         self.show_future = !self.show_future;
     }
 
+    pub fn toggle_autocomplete_archive(&mut self) -> String {
+        self.autocomplete_archive = !self.autocomplete_archive;
+        format!(
+            "autocomplete archive: {}",
+            if self.autocomplete_archive { "on" } else { "off" }
+        )
+    }
+
     pub fn cycle_week_start(&mut self) -> String {
         self.week_start = match self.week_start {
             WeekStart::Sunday => WeekStart::Monday,
@@ -160,6 +170,7 @@ impl Prefs {
         cfg.show_status_bar = Some(self.layout.status_bar);
         cfg.show_done = Some(self.show_done);
         cfg.show_future = Some(self.show_future);
+        cfg.autocomplete_archive = Some(self.autocomplete_archive);
         cfg.hidden_keys = self.hidden_keys.clone();
         cfg.save()
     }

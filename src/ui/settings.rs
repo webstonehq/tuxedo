@@ -58,6 +58,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             "  line numbers",
             Some(format!("{}  (L to toggle)", on(app.prefs.layout.line_num))),
         ),
+        ("  task count", Some(on(app.prefs.layout.task_count).into())),
         ("  status bar", Some(on(app.prefs.layout.status_bar).into())),
         (
             "  filter sidebar",

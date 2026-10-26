@@ -1,5 +1,6 @@
 ---
 source: tests/snapshots.rs
+assertion_line: 227
 expression: buffer_to_styled(&buf)
 ---
 {bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}▶{/}{fg=#e07a7a bg=#1f232b}▮{/}{fg=#8aa9c9 bg=#1f232b}◀{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b mod=bold}settings{/}{fg=#6b7280 bg=#1f232b}  •  19 tasks  •  {/}{fg=#8aa9c9 bg=#1f232b}sort:priority{/}{bg=#1f232b}                                                        {/}
@@ -12,6 +13,7 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}   theme                       {/}{fg=#6b7280 bg=#1a1d23}Muted Slate ▾  (T to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                          {/}
 {fg=#c8ccd4 bg=#1a1d23}   density                     {/}{fg=#6b7280 bg=#1a1d23}compact ▾  (D to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                              {/}
 {fg=#c8ccd4 bg=#1a1d23}   line numbers                {/}{fg=#6b7280 bg=#1a1d23}on  (L to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                    {/}
+{fg=#c8ccd4 bg=#1a1d23}   task count                  {/}{fg=#6b7280 bg=#1a1d23}on{/}{fg=#c8ccd4 bg=#1a1d23}                                                                   {/}
 {fg=#c8ccd4 bg=#1a1d23}   status bar                  {/}{fg=#6b7280 bg=#1a1d23}on{/}{fg=#c8ccd4 bg=#1a1d23}                                                                   {/}
 {fg=#c8ccd4 bg=#1a1d23}   filter sidebar              {/}{fg=#6b7280 bg=#1a1d23}on  ([ to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}   detail sidebar              {/}{fg=#6b7280 bg=#1a1d23}on  (] to toggle){/}{fg=#c8ccd4 bg=#1a1d23}                                                    {/}
@@ -23,7 +25,6 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}KEYBINDINGS{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                        {/}
 {fg=#c8ccd4 bg=#1a1d23}                               {/}{fg=#6b7280 bg=#1a1d23}press ? for the full list{/}{fg=#c8ccd4 bg=#1a1d23}                                            {/}
-{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}

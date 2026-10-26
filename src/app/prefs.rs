@@ -10,6 +10,7 @@ pub struct Layout {
     pub left: bool,
     pub right: bool,
     pub line_num: bool,
+    pub task_count: bool,
     pub status_bar: bool,
 }
 
@@ -19,6 +20,7 @@ impl Default for Layout {
             left: true,
             right: true,
             line_num: true,
+            task_count: true,
             status_bar: true,
         }
     }
@@ -60,6 +62,7 @@ impl Prefs {
                 left: cfg.show_left.unwrap_or(true),
                 right: cfg.show_right.unwrap_or(true),
                 line_num: cfg.show_line_num.unwrap_or(true),
+                task_count: cfg.show_task_count.unwrap_or(true),
                 status_bar: cfg.show_status_bar.unwrap_or(true),
             },
             show_done: cfg.show_done.unwrap_or(false),
@@ -157,6 +160,7 @@ impl Prefs {
         cfg.show_left = Some(self.layout.left);
         cfg.show_right = Some(self.layout.right);
         cfg.show_line_num = Some(self.layout.line_num);
+        cfg.show_task_count = Some(self.layout.task_count);
         cfg.show_status_bar = Some(self.layout.status_bar);
         cfg.show_done = Some(self.show_done);
         cfg.show_future = Some(self.show_future);

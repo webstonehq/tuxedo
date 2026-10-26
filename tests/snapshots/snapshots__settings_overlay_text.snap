@@ -12,6 +12,7 @@ expression: buffer_to_text(&buf)
    theme                       Muted Slate ▾  (T to cycle)                                          
    density                     compact ▾  (D to cycle)                                              
    line numbers                on  (L to toggle)                                                    
+   task count                  on                                                                   
    status bar                  on                                                                   
    filter sidebar              on  ([ to toggle)                                                    
    detail sidebar              on  (] to toggle)                                                    
@@ -23,7 +24,6 @@ expression: buffer_to_text(&buf)
                                                                                                     
  KEYBINDINGS                                                                                        
                                press ? for the full list                                            
-                                                                                                    
                                                                                                     
                                                                                                     
                                                                                                     

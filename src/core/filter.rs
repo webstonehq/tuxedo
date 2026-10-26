@@ -223,11 +223,12 @@ fn cmp_priority(tasks: &[Task]) -> impl Fn(&usize, &usize) -> Ordering + '_ {
 /// Sort by due-date asc (None last).
 fn cmp_due(tasks: &[Task]) -> impl Fn(&usize, &usize) -> Ordering + '_ {
     |&a, &b| {
-        tasks[a]
-            .due
-            .as_deref()
-            .unwrap_or("z")
-            .cmp(tasks[b].due.as_deref().unwrap_or("z"))
+        let ta = &tasks[a];
+        let tb = &tasks[b];
+        let da = ta.due.as_deref().unwrap_or("z");
+        let db = tb.due.as_deref().unwrap_or("z");
+        da.cmp(db)
+            .then_with(|| ta.priority.unwrap_or('Z').cmp(&tb.priority.unwrap_or('Z')))
     }
 }
 

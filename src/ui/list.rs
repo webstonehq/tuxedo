@@ -76,7 +76,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 if !lines.is_empty() {
                     push_blanks(&mut lines, blank);
                 }
-                lines.push(group_header(theme, gk, counts.lookup(gk)));
+                lines.push(group_header(theme, gk, counts.lookup(gk), app));
                 last_group = Some(gk);
             }
 
@@ -163,7 +163,7 @@ fn group_count_key(gk: &GroupKey) -> String {
     }
 }
 
-fn group_header<'a>(theme: &Theme, gk: &GroupKey, count: usize) -> Line<'a> {
+fn group_header<'a>(theme: &Theme, gk: &GroupKey, count: usize, app: &App) -> Line<'a> {
     let (label, color) = match gk {
         GroupKey::ListPriority(Some(c)) => (format!("PRIORITY {c}"), theme.priority_color(*c)),
         GroupKey::ListPriority(None) => ("NO PRIORITY".to_string(), theme.dim),
@@ -173,12 +173,18 @@ fn group_header<'a>(theme: &Theme, gk: &GroupKey, count: usize) -> Line<'a> {
         GroupKey::None => (String::new(), theme.fg),
     };
 
-    let char_count = count.to_string().len() + label.len();
+    let show_task_count = app.prefs.layout.task_count;
+    let mut char_count = label.len();
+    let mut task_count: Span = Span::raw("   ");
+    if show_task_count {
+        char_count += count.to_string().len();
+        task_count = Span::styled(format!("({})", count), Style::default().fg(theme.dim));
+    }
     let divider_length = 80 - char_count;
 
     Line::from(vec![
         Span::raw(" "),
-        Span::styled(format!("({})", count), Style::default().fg(theme.dim)),
+        task_count,
         Span::raw("  "),
         Span::styled(
             label,

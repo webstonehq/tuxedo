@@ -108,9 +108,9 @@ pub struct App {
     pub chord: Chord,
     pub file_path: PathBuf,
     /// Resolved path of the on-disk config file. Set by the binary after
-    /// construction so the settings overlay can render a stable, real path
-    /// without the renderer having to reach into the environment itself.
-    /// `None` in tests/examples that don't care about the value.
+    /// construction; preference saves and reloads use this same destination.
+    /// The settings overlay also displays it without reading the environment.
+    /// `None` falls back to the XDG default when saving preferences.
     pub config_path: Option<PathBuf>,
     pub should_quit: bool,
     visible_cache: Vec<usize>,

@@ -1441,11 +1441,9 @@ mod tests {
     }
 
     fn mktempcfg(basename: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "tuxedo-{basename}-{}-{:?}.txt",
-            std::process::id(),
-            std::thread::current().id()
-        ))
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        std::env::temp_dir().join(format!("tuxedo-{basename}-{}-{n}.txt", std::process::id(),))
     }
 
     fn welcome_app(name: &str) -> (App, std::path::PathBuf) {
@@ -1461,6 +1459,7 @@ mod tests {
             "2026-05-07".into(),
             Config::default(),
         );
+        app.config_path = Some(mktempcfg("welcome-config"));
         app.mode = Mode::Welcome;
         (app, path)
     }
@@ -1628,12 +1627,14 @@ mod tests {
     fn build_app_with_due() -> App {
         let path = mktempcfg("bindings");
         let _ = std::fs::write(&path, "Buy milk due:2026-06-30\n");
-        App::new(
+        let mut app = App::new(
             path,
             "Buy milk due:2026-06-30\n".into(),
             "2026-05-07".into(),
             Config::default(),
-        )
+        );
+        app.config_path = Some(mktempcfg("due-config"));
+        app
     }
 
     #[test]
@@ -2029,6 +2030,7 @@ mod tests {
             "2026-05-06".into(),
             Config::default(),
         );
+        app.config_path = Some(dir.join("config.toml"));
         if done_raw.is_some() {
             // Drain the startup archive loader so app.archive is populated.
             let deadline = Instant::now() + Duration::from_secs(2);

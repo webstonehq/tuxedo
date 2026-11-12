@@ -330,19 +330,15 @@ escape_stack         = "Esc"
 quit                 = "q"
 ```
 
-Custom bindings are checked before the defaults. The default bindings remain
-available when they still resolve to that action. A custom single key can
-shadow a default chord leader or its second key; a custom two-key prefix
-can also consume a default single key. Help and command-palette keys show
-the reachable bindings, including aliases. Help groups task controls into navigation, editing, selection, view, layout
-and system sections, with aligned columns in wider panes. Editor, recurrence
-and format references follow below; narrow panes stack the sections. Help scrolls with `j` / `k`,
-arrows or Page Up / Page Down; `Esc`, `?` or `q` closes it. These help
-controls and inline-editor controls have their own fixed bindings. Action names
-are snake_case, matching the names in the command palette where possible: `toggle_complete`, `pick_project`,
-`open_theme_picker`, and so on. Key names can be single characters, two-key
-chords like `ZZ`, modifier forms like `Ctrl-n` / `Alt-x`, named keys like
-`Esc`, `Enter`, `Tab`, arrows, `Page-Up`, `Page-Down`, or `F1` through `F24`.
+Custom bindings take precedence over defaults, including chord prefixes and
+second keys. Help and command-palette labels show reachable bindings and
+aliases. Help and inline-editor controls use fixed bindings.
+
+Action names are snake_case, matching the command palette where possible:
+`toggle_complete`, `pick_project`, `open_theme_picker`, and so on. Key names
+can be single characters, two-key chords like `ZZ`, modifier forms like
+`Ctrl-n` / `Alt-x`, named keys like `Esc`, `Enter`, `Tab`, arrows,
+`Page-Up`, `Page-Down`, or `F1` through `F24`.
 
 ### Recurrence builder keys
 
@@ -398,15 +394,11 @@ must be fully visible within one sort tie.
 
 ### Edit dialog
 
-The edit dialog uses vim-style modal editing. Press `i` to edit the current task
-starting in **Insert mode** — start typing immediately. Press `e` to start in
-**Normal mode** so you can navigate before changing anything. The add prompt
-(`n`) also opens directly in Insert mode.
-
-The dialog title shows **ADD TASK** or **EDIT TASK** beside the **Vim** profile
-and **Normal** or **Insert** mode. The padded draft and save/Escape guidance stay
-inside the dialog. These remain visible when the status bar is hidden. Long drafts scroll to keep
-the cursor visible.
+The edit dialog uses Vim-style modal editing, with the profile and mode in
+its title. Press `i` to edit in **Insert mode**, or `e` for **Normal mode**.
+The add prompt (`n`) starts in Insert mode. Long drafts scroll to keep the
+cursor visible; mode and save/cancel controls also work with the status bar
+hidden.
 
 The modal keys below apply in Normal mode:
 
@@ -447,12 +439,8 @@ The modal keys below apply in Normal mode:
 | `o` | open the current task's existing `note:<path>` in `$VISUAL` / `$EDITOR` |
 | `O` | create the current task's note if needed, then open it |
 
-Task selection shows checked rows and an explicit selected-task count. With
-`show_status_bar = false`, a compact contextual footer appears for task
-selection, pending chords and active search. Search keeps its editable query,
-cursor, match count and Enter/Escape controls visible. Notices use a separate
-row (wrapping when needed) so they do not replace active input. Narrow layouts
-prioritize current mode, selection and controls over date/version information.
+Selected tasks are checked and counted. Search input, selection counts,
+pending chords and notices remain visible with the status bar hidden.
 
 While a `+project` or `@context` filter is active, `n` seeds the add prompt
 with the matching tags so a task added under a filter stays in view —
@@ -477,6 +465,9 @@ backspace to drop them. A `/`-search filter seeds nothing.
 | `?` | help overlay |
 | `,` | settings overlay |
 | `q` | quit |
+
+In help, scroll with `j` / `k`, arrows or Page Up / Page Down; close with
+`Esc`, `?` or `q`.
 
 Two-key chord prompts (`gg`, `dd`, `yy`, `yb`, `fp`, `fc`, `ff`, `fs`) show
 a `g…` / `d…` / `y…` / `f…` indicator in the status-bar mode chip while the

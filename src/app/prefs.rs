@@ -1,7 +1,7 @@
 use std::io;
 use std::path::Path;
 
-use super::types::{Density, Sort};
+use super::types::{Density, GroupBy, Sort};
 use crate::app::WeekStart;
 use crate::config::Config;
 use crate::theme::{self, Theme};
@@ -33,6 +33,7 @@ pub struct Prefs {
     theme_idx: usize,
     pub density: Density,
     pub sort: Sort,
+    pub group_by: GroupBy,
     pub layout: Layout,
     pub show_done: bool,
     pub show_future: bool,
@@ -57,6 +58,7 @@ impl Prefs {
             theme_idx,
             density: cfg.density.unwrap_or(Density::Comfortable),
             sort: cfg.sort.unwrap_or(Sort::Priority),
+            group_by: cfg.group_by.unwrap_or_default(),
             layout: Layout {
                 left: cfg.show_left.unwrap_or(true),
                 right: cfg.show_right.unwrap_or(true),
@@ -155,6 +157,7 @@ impl Prefs {
         cfg.theme = Some(self.theme().name.to_string());
         cfg.density = Some(self.density);
         cfg.sort = Some(self.sort);
+        cfg.group_by = Some(self.group_by);
         cfg.show_left = Some(self.layout.left);
         cfg.show_right = Some(self.layout.right);
         cfg.show_line_num = Some(self.layout.line_num);

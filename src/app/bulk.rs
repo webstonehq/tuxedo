@@ -11,6 +11,10 @@ impl App {
             return;
         }
         let indices: Vec<usize> = self.selection.iter().collect();
+        if indices.iter().any(|i| !self.visible_indices().contains(i)) {
+            self.flash("selection includes hidden tasks");
+            return;
+        }
         match self.store.complete_many(&indices) {
             BulkCompleteOutcome::Done { completed, spawned } => {
                 self.selection.clear();
@@ -39,6 +43,10 @@ impl App {
             return;
         }
         let indices: Vec<usize> = self.selection.iter().collect();
+        if indices.iter().any(|i| !self.visible_indices().contains(i)) {
+            self.flash("selection includes hidden tasks");
+            return;
+        }
         match self.store.delete_many(&indices) {
             BulkDeleteOutcome::Done { deleted } => {
                 self.selection.clear();

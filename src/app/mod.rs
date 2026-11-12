@@ -28,6 +28,8 @@ mod types;
 mod visibility;
 
 #[cfg(test)]
+mod grouping_tests;
+#[cfg(test)]
 pub(crate) mod test_support;
 
 pub use crate::core::Archive;
@@ -46,10 +48,10 @@ pub use palette::CommandPaletteState;
 pub use prefs::{Layout, Prefs};
 pub use selection::Selection;
 pub use types::{
-    AUTOCOMPLETE_CAP, AddOutcome, Density, FLASH_TTL, Filter, LEADER_WINDOW, Mode, SavedFilter,
-    Sort, UNDO_LIMIT, View,
+    AUTOCOMPLETE_CAP, AddOutcome, Density, FLASH_TTL, Filter, GroupBy, LEADER_WINDOW, Mode,
+    SavedFilter, Sort, UNDO_LIMIT, View,
 };
-pub use visibility::GroupKey;
+pub use visibility::{DisplayRow, GroupKey};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WeekStart {
@@ -118,10 +120,8 @@ pub struct App {
     pub config_path: Option<PathBuf>,
     pub should_quit: bool,
     visible_cache: Vec<usize>,
-    /// Parallel to `visible_cache`: `visible_groups[i]` is the group key for
-    /// the row at `visible_cache[i]`. `GroupKey::None` for List under
-    /// `Sort::File`; priority/due bucket keys under other List sorts; date
-    /// keys for Archive. Renderers read this to draw section headers.
+    display_rows: Vec<DisplayRow>,
+    /// Matching task group keys, parallel to the task-only cache.
     visible_groups: Vec<crate::app::visibility::GroupKey>,
     /// Latest known release tag, populated asynchronously by the update
     /// checker. `None` while we haven't heard back (or the check is disabled,
@@ -213,6 +213,7 @@ impl App {
             config_path: None,
             should_quit: false,
             visible_cache: Vec::new(),
+            display_rows: Vec::new(),
             visible_groups: Vec::new(),
             latest_version: None,
             update_check: None,
@@ -227,7 +228,15 @@ impl App {
             theme_pick_orig: 0,
             week_start: WeekStart::Sunday,
         };
+        app.week_start = app.prefs.week_start;
         app.recompute_visible();
+        if let Some(row) = app
+            .display_rows
+            .iter()
+            .position(|r| matches!(r, DisplayRow::Task(_)))
+        {
+            app.cursor = row;
+        }
         app
     }
 
@@ -524,6 +533,7 @@ impl App {
         }
         self.view_cursor[self.view.idx()] = self.cursor;
         self.view = view;
+        self.display_rows.clear();
         self.recompute_visible();
         self.cursor = self.view_cursor[view.idx()];
         self.clamp_cursor();
@@ -533,7 +543,6 @@ impl App {
     /// Typing into the search prompt calls this on every keystroke.
     pub fn set_search(&mut self, search: String) {
         self.filter.search = search;
-        self.cursor = 0;
         self.recompute_visible();
     }
 
@@ -543,21 +552,18 @@ impl App {
             return;
         }
         self.filter.search.clear();
-        self.cursor = 0;
         self.recompute_visible();
     }
 
     /// Set or clear the active project filter. `None` removes it.
     pub fn set_project_filter(&mut self, project: Option<String>) {
         self.filter.project = project;
-        self.cursor = 0;
         self.recompute_visible();
     }
 
     /// Set or clear the active context filter. `None` removes it.
     pub fn set_context_filter(&mut self, context: Option<String>) {
         self.filter.context = context;
-        self.cursor = 0;
         self.recompute_visible();
     }
 
@@ -581,7 +587,6 @@ impl App {
             return;
         }
         self.filter.clear();
-        self.cursor = 0;
         self.recompute_visible();
     }
 

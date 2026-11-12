@@ -54,7 +54,11 @@ impl App {
     }
 
     pub fn move_tasks(&mut self, down: bool) {
+        let current = self.cur_abs();
         let moving_selection = self.mode == Mode::Visual && !self.selection.is_empty();
+        if !moving_selection && self.task_action_on_header() {
+            return;
+        }
         if moving_selection {
             let visible_selected = self
                 .visible_cache
@@ -69,11 +73,20 @@ impl App {
                 let mut selected = self.selection.iter();
                 selected.next().is_some_and(|first| {
                     selected.any(|abs| {
-                        !same_sort_key(
-                            self.prefs.sort,
-                            &self.store.tasks()[first],
-                            &self.store.tasks()[abs],
-                        )
+                        self.visible_cache
+                            .iter()
+                            .position(|i| *i == first)
+                            .map(|p| &self.visible_groups[p])
+                            != self
+                                .visible_cache
+                                .iter()
+                                .position(|i| *i == abs)
+                                .map(|p| &self.visible_groups[p])
+                            || !same_sort_key(
+                                self.prefs.sort,
+                                &self.store.tasks()[first],
+                                &self.store.tasks()[abs],
+                            )
                     })
                 })
             };
@@ -85,12 +98,11 @@ impl App {
         let mut moving: Vec<bool> = self
             .visible_cache
             .iter()
-            .enumerate()
-            .map(|(cursor, &abs)| {
+            .map(|&abs| {
                 if moving_selection {
                     self.selection.is_selected(abs)
                 } else {
-                    cursor == self.cursor
+                    Some(abs) == current
                 }
             })
             .collect();
@@ -99,6 +111,7 @@ impl App {
             for cursor in (0..moving.len().saturating_sub(1)).rev() {
                 if moving[cursor]
                     && !moving[cursor + 1]
+                    && self.visible_groups[cursor] == self.visible_groups[cursor + 1]
                     && same_sort_key(
                         self.prefs.sort,
                         &self.store.tasks()[self.visible_cache[cursor]],
@@ -113,6 +126,7 @@ impl App {
             for cursor in 1..moving.len() {
                 if moving[cursor]
                     && !moving[cursor - 1]
+                    && self.visible_groups[cursor] == self.visible_groups[cursor - 1]
                     && same_sort_key(
                         self.prefs.sort,
                         &self.store.tasks()[self.visible_cache[cursor]],
@@ -134,7 +148,7 @@ impl App {
             }
             return;
         }
-        let Some(mut follow_abs) = self.visible_cache.get(self.cursor).copied() else {
+        let Some(mut follow_abs) = current.or_else(|| self.selection.iter().next()) else {
             return;
         };
         for &(abs, target) in &swaps {
@@ -235,6 +249,9 @@ impl App {
     }
 
     pub fn add_project_to_current(&mut self, name: &str) {
+        if self.task_action_on_header() {
+            return;
+        }
         let Some(abs) = self.cur_abs() else {
             return;
         };
@@ -287,6 +304,9 @@ impl App {
     }
 
     pub fn toggle_context_on_current(&mut self, name: &str) {
+        if self.task_action_on_header() {
+            return;
+        }
         let Some(abs) = self.cur_abs() else {
             return;
         };
@@ -315,6 +335,9 @@ impl App {
     }
 
     fn open_note_for_current_with_create(&mut self, create: bool) {
+        if self.task_action_on_header() {
+            return;
+        }
         let Some(task) = self.cur_task().cloned() else {
             return;
         };

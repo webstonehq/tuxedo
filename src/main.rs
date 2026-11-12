@@ -1025,6 +1025,7 @@ fn apply_action(app: &mut App, action: Action) {
             Action::BeginAdd
             | Action::BeginEdit
             | Action::BeginEditInsert
+            | Action::Reschedule
             | Action::CyclePriority
             | Action::MoveTaskDown
             | Action::MoveTaskUp
@@ -1047,7 +1048,41 @@ fn apply_action(app: &mut App, action: Action) {
             _ => {}
         }
     }
-    let len = app.visible_indices().len();
+    let selected_bulk = app.mode == Mode::Visual
+        && !app.selection.is_empty()
+        && matches!(
+            action,
+            Action::ToggleComplete
+                | Action::Delete
+                | Action::CopyLine
+                | Action::CopyBody
+                | Action::MoveTaskDown
+                | Action::MoveTaskUp
+        );
+    if !selected_bulk
+        && matches!(
+            action,
+            Action::BeginEdit
+                | Action::BeginEditInsert
+                | Action::ToggleComplete
+                | Action::Delete
+                | Action::CyclePriority
+                | Action::MoveTaskDown
+                | Action::MoveTaskUp
+                | Action::Reschedule
+                | Action::BeginPromptProject
+                | Action::BeginPromptContext
+                | Action::CopyLine
+                | Action::CopyBody
+                | Action::OpenNote
+                | Action::CreateOrOpenNote
+                | Action::ToggleSelected
+        )
+        && app.task_action_on_header()
+    {
+        return;
+    }
+    let len = app.display_rows().len();
     match action {
         Action::Quit => app.should_quit = true,
         Action::CursorDown => {
@@ -1541,6 +1576,45 @@ mod tests {
         );
     }
 
+    #[test]
+    fn header_task_actions_never_mutate_or_enter_task_prompts() {
+        for action in [
+            Action::BeginEdit,
+            Action::BeginEditInsert,
+            Action::ToggleComplete,
+            Action::Delete,
+            Action::CyclePriority,
+            Action::MoveTaskDown,
+            Action::MoveTaskUp,
+            Action::Reschedule,
+            Action::BeginPromptProject,
+            Action::BeginPromptContext,
+            Action::CopyLine,
+            Action::CopyBody,
+            Action::OpenNote,
+            Action::CreateOrOpenNote,
+        ] {
+            let mut app = build_app();
+            app.prefs.group_by = tuxedo::app::GroupBy::Priority;
+            app.recompute_visible();
+            app.cursor = 0;
+            let before = std::fs::read(&app.file_path).expect("read isolated fixture");
+            apply_action(&mut app, action);
+            assert_eq!(app.cur_abs(), None, "{action:?}");
+            assert_eq!(app.mode, Mode::Normal, "{action:?}");
+            assert_eq!(
+                app.flash_active(),
+                Some("group header — choose a task"),
+                "{action:?}"
+            );
+            assert_eq!(
+                std::fs::read(&app.file_path).expect("read isolated fixture"),
+                before,
+                "{action:?}"
+            );
+        }
+    }
+
     fn build_app() -> App {
         let path = mktempcfg("bindings");
         let _ = std::fs::write(&path, "a\nb\nc\n");
@@ -1548,7 +1622,10 @@ mod tests {
             path,
             "a\nb\nc\n".into(),
             "2026-05-07".into(),
-            Config::default(),
+            Config {
+                group_by: Some(tuxedo::app::GroupBy::None),
+                ..Config::default()
+            },
         );
         // Give saves a scratch destination so tests that exercise a
         // save_prefs-triggering action (e.g. via handle_settings) never
@@ -1564,7 +1641,10 @@ mod tests {
             path,
             "Buy milk due:2026-06-30\n".into(),
             "2026-05-07".into(),
-            Config::default(),
+            Config {
+                group_by: Some(tuxedo::app::GroupBy::None),
+                ..Config::default()
+            },
         );
         app.config_path = Some(mktempcfg("due-config"));
         app
@@ -1814,6 +1894,7 @@ mod tests {
         );
         app.prefs.sort = Sort::File;
         app.recompute_visible();
+        app.cursor = 0; // Move the first file row; sort changes now retain task focus.
         apply_action(&mut app, Action::MoveTaskDown);
         assert_eq!(
             task_lines(&app),
@@ -1961,7 +2042,10 @@ mod tests {
             todo_path,
             todo_raw.into(),
             "2026-05-06".into(),
-            Config::default(),
+            Config {
+                group_by: Some(tuxedo::app::GroupBy::None),
+                ..Config::default()
+            },
         );
         app.config_path = Some(dir.join("config.toml"));
         if done_raw.is_some() {

@@ -662,6 +662,23 @@ complete. The setting is config-only (no in-app toggle) and hot-reloads like
 every other field. Other pickers are unaffected — `due:` and `t:` still open
 the calendar.
 
+### Grouping tasks
+
+`group_by` controls list sections independently of `sort`:
+
+```toml
+group_by = auto
+```
+
+Choose `auto` to follow the sort (priority or due sections, flat file order),
+`none` for a flat list, `priority`, or `due`. The sort orders members inside
+each section; file sort preserves their file order. Priority sections run
+A through Z, then NO PRIORITY. Due sections run OVERDUE, TODAY, THIS WEEK,
+NEXT WEEK, LATER, then NO DUE DATE, using the configured week start.
+Completed tasks appear only in DONE when grouping is enabled and done tasks
+are shown. Grouping never reorders the task file and does not affect CLI lists.
+Headers have their own cursor positions; task actions on a header show a notice.
+
 ### Hiding `key:value` tags
 
 Some `key:value` extensions are for machines, not eyes — e.g. a `uid:` you

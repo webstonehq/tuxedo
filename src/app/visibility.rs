@@ -1,20 +1,47 @@
 use super::App;
-use super::types::{Sort, View};
+use super::types::{GroupBy, View};
 use crate::core::filter::{self, ListDueBucket};
 
-/// One entry per visible row, parallel to `visible_cache`. Renderers detect
-/// group transitions by comparing successive entries; under `Sort::File` every
-/// row is `None` so the renderer skips headers.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Stable presentation identity, independent of member order and row offset.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum GroupKey {
     None,
     ArchiveDate(String),
     /// `Some('A'..='Z')` for a graded priority, `None` for unprioritized.
     ListPriority(Option<char>),
     ListDue(ListDueBucket),
+    Done,
+}
+
+/// Focusable rows carry task identity only for real tasks. Archive headers
+/// retain their existing nonfocusable rendering and are not represented here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DisplayRow {
+    Header { key: GroupKey, count: usize },
+    Task(usize),
 }
 
 impl App {
+    pub fn display_rows(&self) -> &[DisplayRow] {
+        &self.display_rows
+    }
+
+    pub fn focused_header(&self) -> Option<&GroupKey> {
+        match self.display_rows.get(self.cursor) {
+            Some(DisplayRow::Header { key, .. }) => Some(key),
+            _ => None,
+        }
+    }
+
+    pub fn task_action_on_header(&mut self) -> bool {
+        if self.focused_header().is_some() {
+            self.flash("group header — choose a task");
+            true
+        } else {
+            false
+        }
+    }
+
     /// Indices into the active view's task source after filter + sort, in
     /// display order. The source is `archive().tasks()` in Archive view,
     /// `tasks()` otherwise. Reads the cache populated by `recompute_visible`.
@@ -30,10 +57,25 @@ impl App {
     /// Recompute the cached visible-index list and parallel group keys. Call
     /// after any mutation that affects filter/sort/view/tasks/archive.
     pub fn recompute_visible(&mut self) {
+        let focused = self.display_rows.get(self.cursor).cloned();
         match self.view {
             View::List => self.rebuild_list_cache(),
             View::Archive => self.rebuild_archive_cache(),
         }
+        if let Some(pos) = self
+            .display_rows
+            .iter()
+            .position(|row| match (row, &focused) {
+                (DisplayRow::Task(a), Some(DisplayRow::Task(b))) => a == b,
+                (DisplayRow::Header { key: a, .. }, Some(DisplayRow::Header { key: b, .. })) => {
+                    a == b
+                }
+                _ => false,
+            })
+        {
+            self.cursor = pos;
+        }
+        self.clamp_cursor();
     }
 
     fn rebuild_list_cache(&mut self) {
@@ -59,21 +101,48 @@ impl App {
 
         filter::sort_by_prefs(&mut idxs, tasks, self.prefs.sort);
 
-        let week_start = &self.week_start;
-
-        let groups: Vec<GroupKey> = match self.prefs.sort {
-            Sort::File => vec![GroupKey::None; idxs.len()],
-            Sort::Priority => idxs
-                .iter()
-                .map(|&i| GroupKey::ListPriority(tasks[i].priority))
-                .collect(),
-            Sort::Due => idxs
-                .iter()
-                .map(|&i| GroupKey::ListDue(filter::due_bucket(&tasks[i], today, week_start)))
-                .collect(),
+        let grouping = self.prefs.group_by.effective(self.prefs.sort);
+        let key = |i: usize| {
+            if grouping == GroupBy::None {
+                GroupKey::None
+            } else if tasks[i].done {
+                GroupKey::Done
+            } else {
+                match grouping {
+                    GroupBy::Priority => GroupKey::ListPriority(tasks[i].priority),
+                    GroupBy::Due => {
+                        GroupKey::ListDue(filter::due_bucket(&tasks[i], today, &self.week_start))
+                    }
+                    _ => GroupKey::None,
+                }
+            }
         };
-        self.visible_groups = groups;
+        // Stable grouping preserves the chosen sort and its existing ties.
+        // Option<char> orders None first, so rank unprioritized explicitly last.
+        idxs.sort_by_key(|&i| match key(i) {
+            GroupKey::ListPriority(Some(c)) => (0, c as u32),
+            GroupKey::ListPriority(None) => (1, 0),
+            GroupKey::ListDue(b) => (0, b as u32),
+            GroupKey::Done => (2, 0),
+            _ => (0, 0),
+        });
+        self.visible_groups = idxs.iter().map(|&i| key(i)).collect();
         self.visible_cache = idxs;
+        self.display_rows.clear();
+        for (pos, &abs) in self.visible_cache.iter().enumerate() {
+            let group = &self.visible_groups[pos];
+            if *group != GroupKey::None && (pos == 0 || self.visible_groups[pos - 1] != *group) {
+                let count = self.visible_groups[pos..]
+                    .iter()
+                    .take_while(|g| *g == group)
+                    .count();
+                self.display_rows.push(DisplayRow::Header {
+                    key: group.clone(),
+                    count,
+                });
+            }
+            self.display_rows.push(DisplayRow::Task(abs));
+        }
     }
 
     fn rebuild_archive_cache(&mut self) {
@@ -96,16 +165,20 @@ impl App {
                 GroupKey::ArchiveDate(date)
             })
             .collect();
+        self.display_rows = idxs.iter().copied().map(DisplayRow::Task).collect();
         self.visible_cache = idxs;
         self.visible_groups = groups;
     }
 
     pub fn cur_abs(&self) -> Option<usize> {
-        self.visible_cache.get(self.cursor).copied()
+        match self.display_rows.get(self.cursor) {
+            Some(DisplayRow::Task(abs)) => Some(*abs),
+            _ => None,
+        }
     }
 
     pub fn clamp_cursor(&mut self) {
-        let len = self.visible_cache.len();
+        let len = self.display_rows.len();
         if len == 0 {
             self.cursor = 0;
         } else if self.cursor >= len {
@@ -116,7 +189,11 @@ impl App {
     /// Move the cursor to wherever `abs` lives in the current visible list.
     /// Falls back to clamping if `abs` was filtered out.
     pub(super) fn follow_cursor(&mut self, abs: usize) {
-        if let Some(pos) = self.visible_cache.iter().position(|&i| i == abs) {
+        if let Some(pos) = self
+            .display_rows
+            .iter()
+            .position(|row| *row == DisplayRow::Task(abs))
+        {
             self.cursor = pos;
         } else {
             self.clamp_cursor();
@@ -127,6 +204,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::Sort;
     use crate::app::test_support::build_app;
     use crate::core::filter::ListDueBucket;
 

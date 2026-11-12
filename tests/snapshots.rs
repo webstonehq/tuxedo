@@ -569,3 +569,58 @@ fn help_required_sizes() {
         );
     }
 }
+
+#[test]
+fn visible_interaction_states_required_sizes() {
+    for (width, height) in [(110, 32), (80, 24)] {
+        for scene in [
+            "edit_normal",
+            "edit_insert",
+            "task_selection",
+            "search_notice",
+            "help_archive",
+        ] {
+            let mut app = make_app();
+            app.prefs.layout.status_bar = false;
+            match scene {
+                "edit_normal" | "edit_insert" => {
+                    app.selection.enter_edit(0);
+                    app.mode = Mode::Insert;
+                    app.draft_set("(A) Review current interaction +demo @desk".into());
+                    if scene == "edit_insert" {
+                        app.draft
+                            .set_input_mode(tuxedo::app::DialogInputMode::Insert);
+                    }
+                }
+                "task_selection" => {
+                    app.mode = Mode::Visual;
+                    app.selection.toggle(0);
+                    app.selection.toggle(1);
+                }
+                "search_notice" => {
+                    app.mode = Mode::Search;
+                    app.draft_set_insert("work".into());
+                    app.set_search("work".into());
+                    app.flash("File changed externally; reloaded tasks. Review before continuing.");
+                }
+                "help_archive" => {
+                    app.prefs.layout.status_bar = true;
+                    app.set_view(View::Archive);
+                    app.mode = Mode::Help;
+                }
+                _ => unreachable!(),
+            }
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal.draw(|f| ui::draw(f, &app)).unwrap();
+            let buf = terminal.backend().buffer();
+            insta::assert_snapshot!(
+                format!("state_{scene}_{width}x{height}_text"),
+                buffer_to_text(buf)
+            );
+            insta::assert_snapshot!(
+                format!("state_{scene}_{width}x{height}_styled"),
+                buffer_to_styled(buf)
+            );
+        }
+    }
+}

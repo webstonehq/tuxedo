@@ -100,3 +100,118 @@ fn palette_keeps_complete_key_after_long_action_label() {
     assert!(text.contains("Ctrl-c "));
     assert!(!text.contains("c / Ctrl"));
 }
+
+#[test]
+fn hidden_bar_search_keeps_long_query_cursor_count_controls_and_notices() {
+    let mut app = app();
+    app.prefs.layout.status_bar = false;
+    app.mode = Mode::Search;
+    let query = format!("{}QUERY_END", "long-query-".repeat(20));
+    app.draft_set_insert(query.clone());
+    app.set_search(query);
+    app.flash("External change detected; tasks reloaded. Review the new list before continuing.");
+    for (width, height) in [(110, 32), (80, 24), (40, 12)] {
+        let text = screen(&app, width, height);
+        assert!(text.contains("QUERY_END█"));
+        assert!(text.contains("0 matches") || text.contains("0 hits"));
+        assert!(text.contains("Enter"));
+        assert!(text.contains("Esc cancel"));
+        assert!(text.contains("Notice:"));
+        assert!(text.contains("continuing."));
+    }
+}
+
+#[test]
+fn selected_task_count_survives_hidden_bar_and_narrow_layout() {
+    let mut app = app();
+    app.prefs.layout.status_bar = false;
+    app.mode = Mode::Visual;
+    app.selection.toggle(0);
+    app.selection.toggle(1);
+    app.chord.arm('d');
+    for width in [110, 80, 40, 30, 20, 12] {
+        let text = screen(&app, width, 24);
+        assert!(
+            text.contains("2 tasks selected")
+                || text.contains("2 selected")
+                || text.contains("2 sel"),
+            "width {width}: {text}"
+        );
+        assert!(text.contains("TASK"));
+        if width >= 80 {
+            assert!(text.contains("[x]"));
+        }
+    }
+}
+
+#[test]
+fn help_over_archive_names_active_interaction_and_keeps_archive() {
+    let mut app = app();
+    app.set_view(tuxedo::app::View::Archive);
+    app.mode = Mode::Help;
+    let before = app.archive().len();
+    let text = screen(&app, 80, 24);
+    assert!(text.contains("HELP"));
+    assert!(!text.contains("ARCHIVE ·"));
+    assert_eq!(app.archive().len(), before);
+    assert_eq!(app.view(), tuxedo::app::View::Archive);
+}
+
+#[test]
+fn hidden_bar_is_contextual_and_notices_do_not_restore_general_footer() {
+    let mut app = app();
+    app.prefs.layout.status_bar = false;
+    let text = screen(&app, 80, 24);
+    assert!(!text.contains("NORMAL"));
+    app.flash("Notice stays readable");
+    let text = screen(&app, 80, 24);
+    assert!(text.contains("Notice stays readable"));
+    assert!(!text.contains("NORMAL"));
+    assert!(!text.contains("tuxedo 2026"));
+}
+
+#[test]
+fn narrow_state_layouts_do_not_panic_or_drop_search_cursor() {
+    let mut app = app();
+    app.prefs.layout.status_bar = false;
+    app.flash("A notice");
+    for mode in [
+        Mode::Normal,
+        Mode::Search,
+        Mode::Visual,
+        Mode::Help,
+        Mode::Insert,
+    ] {
+        app.mode = mode;
+        app.draft_set_insert("a long draft with a visible tail".into());
+        for width in [0, 1, 5, 12, 20, 30] {
+            for height in [0, 1, 2, 5, 10] {
+                screen(&app, width, height);
+            }
+        }
+    }
+    app.mode = Mode::Search;
+    assert!(screen(&app, 20, 10).contains("█"));
+}
+
+#[test]
+fn long_words_in_notices_are_fully_visible_and_tiny_search_keeps_cursor() {
+    let mut app = app();
+    app.prefs.layout.status_bar = false;
+    app.mode = Mode::Search;
+    app.draft_set_insert("query".into());
+    app.selection.toggle(0);
+    app.selection.toggle(1);
+    app.flash(format!("{} FINISHED", vec!["z".repeat(41); 6].join(" ")));
+    let text = screen(&app, 80, 24);
+    assert!(text.contains("FINISHED"));
+    assert!(text.contains("query█"));
+    assert!(text.contains("Enter accept"));
+    let text = screen(&app, 20, 10);
+    assert!(text.contains("2sel"));
+    assert!(text.contains("↵OK Esc×"));
+    app.clear_flash();
+    for width in [1, 2] {
+        assert!(screen(&app, width, 4).contains("█"));
+    }
+}

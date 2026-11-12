@@ -3,7 +3,7 @@ source: tests/snapshots.rs
 expression: buffer_to_text(terminal.backend().buffer())
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL       
-  ┌ tuxedo · help ───────────────────────────────────────────────────────────┐  
+  ┌ tuxedo · HELP ───────────────────────────────────────────────────────────┐  
  P│TASK LIST · effective bindings                                            │A)
   │ n: new task                                                              │02
   │ e: edit current task (normal mode)                                       │02
@@ -25,4 +25,4 @@ expression: buffer_to_text(terminal.backend().buffer())
   │j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 1/53                            │  
   └──────────────────────────────────────────────────────────────────────────┘  
                                                                                 
- HELP   ? close help                     15 open · 2026-05-06 · tuxedo 2026.8.1
+ HELP  · Esc close · j/k scroll · 15 open · 2026-05-06 · tuxedo 2026.8.1

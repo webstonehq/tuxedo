@@ -403,6 +403,11 @@ starting in **Insert mode** — start typing immediately. Press `e` to start in
 **Normal mode** so you can navigate before changing anything. The add prompt
 (`n`) also opens directly in Insert mode.
 
+The dialog shows the **Vim** profile and **Normal** or **Insert** mode directly
+above the draft, with save and mode-specific Escape guidance inside the dialog.
+These remain visible when the status bar is hidden. Long drafts scroll to keep
+the cursor visible.
+
 The modal keys below apply in Normal mode:
 
 | Key | Action |
@@ -441,6 +446,13 @@ The modal keys below apply in Normal mode:
 | `H` | toggle showing done tasks in the main list |
 | `o` | open the current task's existing `note:<path>` in `$VISUAL` / `$EDITOR` |
 | `O` | create the current task's note if needed, then open it |
+
+Task selection shows checked rows and an explicit selected-task count. With
+`show_status_bar = false`, a compact contextual footer appears for task
+selection, pending chords and active search. Search keeps its editable query,
+cursor, match count and Enter/Escape controls visible. Notices use a separate
+row (wrapping when needed) so they do not replace active input. Narrow layouts
+prioritize current mode, selection and controls over date/version information.
 
 While a `+project` or `@context` filter is active, `n` seeds the add prompt
 with the matching tags so a task added under a filter stays in view —

@@ -100,7 +100,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.border))
-        .title(" tuxedo · help ")
+        .title(" tuxedo · HELP ")
         .style(Style::default().bg(theme.panel).fg(theme.fg));
     let inner = block.inner(area);
     frame.render_widget(block, area);

@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(buf)
+---
+ FILTERS                   ▶▮◀ done.txt  •  0 tasks  •  sort:completion-date DETAIL                           
+     ┌ tuxedo · HELP ──────────────────────────────────────────────────────────────────────────────────┐      
+ PROJ│TASK LIST · effective bindings                                                                   │      
+   +w│ n: new task                                                                                     │      
+   +h│ e: edit current task (normal mode)                                                              │      
+   +f│ i: edit current task (insert mode)                                                              │      
+   +h│ x: toggle complete                                                                              │      
+   +l│ dd: delete task                                                                                 │      
+   +p│ p: cycle priority                                                                               │      
+   +t│ J: move task down                                                                               │      
+     │ K: move task up                                                                                 │      
+ CONT│ +: add project to current task                                                                  │      
+   @e│ c: add or remove context on current task                                                        │      
+   @h│ yy: copy line to clipboard                                                                      │      
+   @l│ yb: copy body to clipboard                                                                      │      
+   @p│ o: open task note                                                                               │      
+     │ O: create or open task note                                                                     │      
+     │ u: undo                                                                                         │      
+     │ j / Down: cursor down                                                                           │      
+     │ k / Up: cursor up                                                                               │      
+     │ gg: jump to first task                                                                          │      
+     │ G: jump to last task                                                                            │      
+     │ Ctrl-d: page down                                                                               │      
+     │ Ctrl-u: page up                                                                                 │      
+     │ /: fuzzy search                                                                                 │      
+     │ fp: filter by project                                                                           │      
+     │ fc: filter by context                                                                           │      
+     │ ff: pick saved filter                                                                           │      
+     │j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 1/45                                                   │      
+     └─────────────────────────────────────────────────────────────────────────────────────────────────┘      
+                                                                                                              
+ HELP  · Esc close · j/k scroll · 0 archived · 2026-05-06 · tuxedo 2026.8.1

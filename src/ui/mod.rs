@@ -53,9 +53,28 @@ pub fn draw(frame: &mut Frame, app: &App) {
     // Paint full background.
     frame.render_widget(Block::default().style(Style::default().bg(theme.bg)), area);
 
-    let bottom = if app.prefs.layout.status_bar { 1 } else { 0 };
-    let [body_area, bottom_area] =
-        Layout::vertical([Constraint::Min(1), Constraint::Length(bottom)]).areas(area);
+    let status_rows = if app.mode == Mode::Search {
+        2
+    } else {
+        u16::from(status::contextual(app))
+    };
+    let status_rows = status_rows.min(area.height);
+    let min_body = if app.mode == Mode::Insert {
+        DIALOG_H
+    } else {
+        1
+    };
+    let notice_rows = status::notice_height(app, area.width).min(
+        area.height
+            .saturating_sub(status_rows)
+            .saturating_sub(min_body),
+    );
+    let [body_area, bottom_area, notice_area] = Layout::vertical([
+        Constraint::Min(0),
+        Constraint::Length(status_rows),
+        Constraint::Length(notice_rows),
+    ])
+    .areas(area);
 
     // Determine pane widths. Sidebars apply to every view; navigation +
     // detail pane track the cursor regardless of which view is active.
@@ -94,13 +113,12 @@ pub fn draw(frame: &mut Frame, app: &App) {
         detail::render(frame, ra, app);
     }
 
-    if app.prefs.layout.status_bar {
-        if app.mode == Mode::Search {
-            status::render_command_line(frame, bottom_area, app);
-        } else {
-            status::render(frame, bottom_area, app);
-        }
+    if app.mode == Mode::Search {
+        status::render_command_line(frame, bottom_area, app);
+    } else if status_rows > 0 {
+        status::render(frame, bottom_area, app);
     }
+    status::render_notice(frame, notice_area, app);
 
     // Overlays
     match app.mode {
@@ -108,14 +126,14 @@ pub fn draw(frame: &mut Frame, app: &App) {
             let dlg_w: u16 = (u32::from(center_area.width) * 4 / 5)
                 .clamp(u32::from(DIALOG_MIN_W), u32::from(DIALOG_MAX_W))
                 as u16;
-            let dlg = centered_in(area, dlg_w, DIALOG_H);
+            let dlg = centered_in(body_area, dlg_w, DIALOG_H);
             frame.render_widget(Clear, dlg);
             dialog::render(frame, dlg, app);
             // At most one overlay shows at a time. The autocomplete popup is
             // suppressed while a metadata picker is open so we don't stack
             // two floating panels in the same spot.
-            if !dialog::render_overlay(frame, dlg, area, app) {
-                dialog::render_autocomplete(frame, dlg, area, app);
+            if !dialog::render_overlay(frame, dlg, body_area, app) {
+                dialog::render_autocomplete(frame, dlg, body_area, app);
             }
         }
         Mode::Help => {
@@ -123,7 +141,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
             let w: u16 = (u32::from(area.width) * 9 / 10)
                 .clamp(u32::from(HELP_MIN_W), u32::from(HELP_MAX_W))
                 as u16;
-            let r = centered_in(area, w, h);
+            let r = centered_in(body_area, w, h);
             frame.render_widget(Clear, r);
             help::render(frame, r, app);
         }
@@ -137,11 +155,11 @@ pub fn draw(frame: &mut Frame, app: &App) {
         | Mode::PromptRenameProject
         | Mode::PromptRenameContext => {
             let w: u16 = PROMPT_MAX_W.min(area.width.saturating_sub(4));
-            let r = centered_in(area, w, PROMPT_H);
+            let r = centered_in(body_area, w, PROMPT_H);
             frame.render_widget(Clear, r);
             dialog::render_prompt(frame, r, app);
             if matches!(app.mode, Mode::PromptProject | Mode::PromptContext) {
-                dialog::render_autocomplete(frame, r, area, app);
+                dialog::render_autocomplete(frame, r, body_area, app);
             }
         }
         Mode::CommandPalette => {
@@ -149,13 +167,13 @@ pub fn draw(frame: &mut Frame, app: &App) {
             let w: u16 = (u32::from(area.width) * 3 / 5)
                 .clamp(u32::from(PALETTE_MIN_W), u32::from(PALETTE_MAX_W))
                 as u16;
-            let r = centered_in(area, w, h);
+            let r = centered_in(body_area, w, h);
             frame.render_widget(Clear, r);
             command_palette::render(frame, r, app);
         }
         Mode::Share => {
             let (w, h) = share::size_for(app);
-            let r = centered_in(area, w, h);
+            let r = centered_in(body_area, w, h);
             frame.render_widget(Clear, r);
             share::render(frame, r, app);
         }
@@ -164,12 +182,12 @@ pub fn draw(frame: &mut Frame, app: &App) {
             let w: u16 = (u32::from(area.width) * 3 / 5)
                 .clamp(u32::from(PALETTE_MIN_W), u32::from(PALETTE_MAX_W))
                 as u16;
-            let r = centered_in(area, w, h);
+            let r = centered_in(body_area, w, h);
             frame.render_widget(Clear, r);
             theme_picker::render(frame, r, app);
         }
         Mode::Welcome => {
-            let r = centered_in(area, welcome::WIDTH, welcome::HEIGHT);
+            let r = centered_in(body_area, welcome::WIDTH, welcome::HEIGHT);
             frame.render_widget(Clear, r);
             welcome::render(frame, r, app);
         }

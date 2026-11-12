@@ -413,3 +413,124 @@ fn selection_follows_task_identity_after_delete_recurring_insert_and_archive() {
     app.delete_selected();
     assert_eq!(app.tasks()[0].raw, "(C) last");
 }
+
+#[test]
+fn bulk_mutations_keep_unselected_surviving_focus_and_next_action() {
+    for complete in [false, true] {
+        let raw = if complete {
+            "(A) Alpha rec:1d\n(A) Beta\n(A) Gamma\n(A) Delta\n"
+        } else {
+            "(A) Alpha\n(A) Beta\n(A) Gamma\n(A) Delta\n"
+        };
+        let mut app = build_app(raw);
+        app.selection.toggle(0);
+        app.follow_cursor(2);
+        app.mode = Mode::Visual;
+        if complete {
+            app.complete_selected();
+        } else {
+            app.delete_selected();
+        }
+        assert_eq!(app.cur_task().expect("focused survivor").raw, "(A) Gamma");
+        assert_eq!(app.cur_abs(), Some(if complete { 3 } else { 1 }));
+        assert!(app.selection.is_empty());
+        assert_eq!(app.mode, Mode::Normal);
+        assert_eq!(app.store.history.len(), 1);
+        let after_bulk = std::fs::read(&app.file_path).expect("fixture");
+        app.delete(app.cur_abs().expect("focused task index"));
+        assert!(!app.tasks().iter().any(|task| task.raw == "(A) Gamma"));
+        assert!(app.tasks().iter().any(|task| task.raw == "(A) Beta"));
+        assert!(app.tasks().iter().any(|task| task.raw == "(A) Delta"));
+        assert_eq!(app.store.history.len(), 2);
+        app.undo();
+        assert_eq!(std::fs::read(&app.file_path).expect("fixture"), after_bulk);
+        app.undo();
+        assert_eq!(
+            std::fs::read_to_string(&app.file_path).expect("fixture"),
+            raw
+        );
+        assert!(app.store.history.is_empty());
+    }
+}
+
+#[test]
+fn bulk_focus_remapping_distinguishes_duplicates_and_actual_spawns() {
+    // Only Alpha spawns: the other selected row has an invalid recurrence.
+    // The two duplicate rows are byte-identical, so raw-text matching cannot
+    // identify the focused second occurrence after positions shift.
+    let raw = "(A) Alpha rec:1d\n(A) duplicate\n(A) no successor rec:invalid\n(A) duplicate\n(B) collapsed\n";
+    for complete in [false, true] {
+        let mut app = build_app(raw);
+        focus_header(&mut app, GroupKey::ListPriority(Some('B')));
+        app.toggle_group();
+        app.selection.toggle(0);
+        app.selection.toggle(2);
+        app.follow_cursor(3);
+        app.mode = Mode::Visual;
+        if complete {
+            app.complete_selected();
+        } else {
+            app.delete_selected();
+        }
+        let focused = if complete { 4 } else { 1 };
+        let first_duplicate = if complete { 2 } else { 0 };
+        assert_eq!(app.cur_abs(), Some(focused));
+        assert_eq!(app.tasks()[focused].raw, app.tasks()[first_duplicate].raw);
+        assert!(app.group_collapsed(&GroupKey::ListPriority(Some('B'))));
+        assert_eq!(app.hidden_by_collapse(), 1);
+        assert!(app.selection.is_empty());
+        assert_eq!(app.store.history.len(), 1);
+        app.cycle_priority(app.cur_abs().expect("second duplicate"));
+        assert_eq!(app.tasks()[first_duplicate].priority, Some('A'));
+        assert_eq!(app.tasks()[focused].priority, Some('B'));
+        assert_eq!(
+            app.focused_header(),
+            Some(&GroupKey::ListPriority(Some('B')))
+        );
+        assert_eq!(app.hidden_by_collapse(), 2);
+        assert_eq!(app.store.history.len(), 2);
+        app.undo();
+        app.undo();
+        assert_eq!(
+            std::fs::read_to_string(&app.file_path).expect("fixture"),
+            raw
+        );
+        assert!(app.store.history.is_empty());
+    }
+}
+
+#[test]
+fn bulk_focus_preserves_collapsed_header_and_removed_task_falls_back_nearby() {
+    for complete in [false, true] {
+        let mut app = build_app("(A) Alpha rec:1d\n(A) Beta\n(B) hidden\n");
+        focus_header(&mut app, GroupKey::ListPriority(Some('B')));
+        app.toggle_group();
+        app.selection.toggle(0);
+        app.mode = Mode::Visual;
+        if complete {
+            app.complete_selected();
+        } else {
+            app.delete_selected();
+        }
+        assert_eq!(
+            app.focused_header(),
+            Some(&GroupKey::ListPriority(Some('B')))
+        );
+        assert_eq!(app.cur_abs(), None);
+        assert!(app.group_collapsed(&GroupKey::ListPriority(Some('B'))));
+    }
+    let mut app = build_app("(A) Alpha\n(A) Beta\n(A) Gamma\n(A) Delta\n");
+    app.follow_cursor(2);
+    app.selection.toggle(2);
+    app.delete_selected();
+    assert_eq!(app.cur_task().expect("nearby fallback").raw, "(A) Delta");
+    assert!(app.cursor < app.display_rows().len());
+    // A completed focused task may be filtered out; use a valid nearby row.
+    app.follow_cursor(0);
+    app.selection.toggle(0);
+    app.complete_selected();
+    assert_eq!(
+        app.cur_task().expect("filtered focus fallback").raw,
+        "(A) Beta"
+    );
+}

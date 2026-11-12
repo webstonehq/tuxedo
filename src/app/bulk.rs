@@ -18,8 +18,13 @@ impl App {
             self.flash("selection includes hidden tasks");
             return;
         }
+        let focused = self.cur_abs();
         match self.store.complete_many(&indices) {
-            BulkCompleteOutcome::Done { completed, spawned } => {
+            BulkCompleteOutcome::Done {
+                completed,
+                spawned,
+                inserted_after,
+            } => {
                 self.selection.clear();
                 self.mode = Mode::Normal;
                 self.flash(if spawned > 0 {
@@ -27,8 +32,9 @@ impl App {
                 } else {
                     format!("completed {completed}")
                 });
-                self.recompute_visible();
-                self.clamp_cursor();
+                let follow =
+                    focused.map(|abs| abs + inserted_after.iter().filter(|&&at| at < abs).count());
+                self.refresh_bulk_focus(focused, follow);
             }
             BulkCompleteOutcome::NothingToComplete => {
                 self.flash("nothing to complete");
@@ -53,13 +59,16 @@ impl App {
             self.flash("selection includes hidden tasks");
             return;
         }
+        let focused = self.cur_abs();
         match self.store.delete_many(&indices) {
             BulkDeleteOutcome::Done { deleted } => {
                 self.selection.clear();
                 self.mode = Mode::Normal;
                 self.flash(format!("deleted {deleted}"));
-                self.recompute_visible();
-                self.clamp_cursor();
+                let follow = focused
+                    .filter(|abs| !indices.contains(abs))
+                    .map(|abs| abs - indices.iter().filter(|&&removed| removed < abs).count());
+                self.refresh_bulk_focus(focused, follow);
             }
             BulkDeleteOutcome::Nothing => {
                 self.selection.clear();
@@ -67,6 +76,21 @@ impl App {
             }
             BulkDeleteOutcome::Aborted(r) => self.handle_reconcile_abort(r),
             BulkDeleteOutcome::Error(e) => self.flash(format!("write failed: {e}")),
+        }
+    }
+
+    /// Bulk writes can shift storage indices before the view is rebuilt.
+    /// Follow the mapped survivor, retain header identity, or fall back to a
+    /// nearby display row when the focused task was removed/filtered out.
+    fn refresh_bulk_focus(&mut self, previous_task: Option<usize>, follow: Option<usize>) {
+        let previous_row = self.cursor;
+        self.recompute_visible();
+        if previous_task.is_some() {
+            self.cursor = previous_row;
+            self.clamp_cursor();
+            if let Some(abs) = follow {
+                self.follow_cursor(abs);
+            }
         }
     }
 }

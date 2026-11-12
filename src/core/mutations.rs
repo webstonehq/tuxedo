@@ -478,12 +478,17 @@ impl Store {
         // can't shift earlier indices.
         spawns.sort_by_key(|s| std::cmp::Reverse(s.0));
         let spawned = spawns.len();
+        let inserted_after = spawns.iter().map(|(abs, _)| *abs).collect();
         for (abs, parsed) in spawns {
             self.tasks.insert(abs + 1, parsed);
         }
         let completed = to_complete.len();
         match self.persist() {
-            Ok(()) => BulkCompleteOutcome::Done { completed, spawned },
+            Ok(()) => BulkCompleteOutcome::Done {
+                completed,
+                spawned,
+                inserted_after,
+            },
             Err(e) => BulkCompleteOutcome::Error(e),
         }
     }
@@ -863,13 +868,18 @@ mod tests {
         let mut store = build_store("a\nPay rent due:2026-04-15 rec:+1m\nb\nWater plants rec:1w\n");
         store.set_today("2026-05-09".to_string());
         let out = store.complete_many(&[1, 3]);
-        assert!(matches!(
-            out,
+        match out {
             BulkCompleteOutcome::Done {
-                completed: 2,
-                spawned: 2
+                completed,
+                spawned,
+                inserted_after,
+            } => {
+                assert_eq!(completed, 2);
+                assert_eq!(spawned, 2);
+                assert_eq!(inserted_after, [3, 1]);
             }
-        ));
+            other => panic!("unexpected completion outcome: {other:?}"),
+        }
         assert_eq!(store.tasks().len(), 6);
         assert!(store.tasks()[1].done);
         assert_eq!(store.tasks()[2].due.as_deref(), Some("2026-05-15"));

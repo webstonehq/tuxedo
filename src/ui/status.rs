@@ -94,7 +94,11 @@ fn hints(app: &App) -> Vec<String> {
         // Draft and metadata controls live beside their active input.
         Mode::Insert => Vec::new(),
         Mode::Help => vec!["Esc close · j/k scroll".into()],
-        Mode::Settings => vec!["Esc back".into()],
+        Mode::Settings => [Action::EscapeStack, Action::OpenSettings, Action::Quit]
+            .into_iter()
+            .find_map(|action| action_hint(app, action, "back"))
+            .into_iter()
+            .collect(),
         Mode::PromptProject
         | Mode::PromptSaveFilter
         | Mode::PromptRenameProject

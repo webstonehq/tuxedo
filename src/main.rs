@@ -1598,6 +1598,48 @@ mod tests {
     }
 
     #[test]
+    fn settings_full_render_back_hint_dispatches_when_escape_opens_grouping() {
+        use ratatui::{Terminal, backend::TestBackend};
+        for (config, back) in [
+            ("[normal]\npick_grouping = \"Esc\"", ","),
+            (
+                "[normal]\npick_grouping = \"Esc\"\nopen_help = \",\"\nescape_stack = \"zb\"",
+                "zb",
+            ),
+        ] {
+            let mut app = build_app();
+            app.keybinds = KeyBindings::parse(config);
+            app.mode = Mode::Settings;
+            let mut terminal = Terminal::new(TestBackend::new(110, 32)).expect("terminal");
+            terminal
+                .draw(|frame| ui::draw(frame, &app))
+                .expect("settings render");
+            let text: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(text.contains(&format!("{back} back")), "{text}");
+            assert!(!text.contains("Esc back"));
+            handle_settings(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+            assert_eq!(app.mode, Mode::PickGrouping);
+            app.pick_grouping_cancel();
+            assert_eq!(app.mode, Mode::Settings);
+            if back == "zb" {
+                handle_settings(&mut app, key('z'));
+                assert_eq!(app.mode, Mode::Settings, "chord prefix must not close");
+                handle_settings(&mut app, key('b'));
+            } else {
+                handle_settings(&mut app, key(','));
+            }
+            assert_eq!(app.mode, Mode::Normal);
+            assert!(!app.should_quit, "Settings Quit aliases close the overlay");
+        }
+    }
+
+    #[test]
     fn grouping_settings_custom_chord_does_not_trigger_its_fixed_prefix() {
         let mut app = build_app();
         let theme = app.prefs.theme_idx();

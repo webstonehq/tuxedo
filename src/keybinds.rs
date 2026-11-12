@@ -163,7 +163,9 @@ impl KeyBindings {
             KeyCode::Char('K') => Action::MoveTaskUp,
             KeyCode::Char('G') => Action::CursorBottom,
             // First 'g' arms the chord; second 'g' fires CursorTop.
+            KeyCode::Char('g') if chord.consume('f') => Action::PickGrouping,
             KeyCode::Char('g') if chord.toggle('g') => Action::CursorTop,
+            KeyCode::Enter => Action::ToggleGroup,
             KeyCode::Char('n') => Action::BeginAdd,
             KeyCode::Char('r') => Action::Reschedule,
             KeyCode::Char('a') => Action::ToggleArchiveView,
@@ -392,6 +394,8 @@ const NORMAL_DEFAULTS: &[(&str, Action)] = &[
     ("ff", Action::PickSavedFilter),
     ("fs", Action::SaveCurrentFilter),
     ("S", Action::CycleSort),
+    ("fg", Action::PickGrouping),
+    ("Enter", Action::ToggleGroup),
     ("+", Action::BeginPromptProject),
     ("c", Action::BeginPromptContext),
     ("[", Action::ToggleLeftPane),
@@ -791,6 +795,35 @@ mod tests {
         }
         assert_eq!(bindings.keys_label(Action::CycleTheme), "");
         assert_eq!(bindings.keys_label(Action::BeginPromptProject), "+");
+    }
+
+    #[test]
+    fn grouping_bindings_respect_custom_leaders_suffixes_and_aliases() {
+        let defaults = KeyBindings::default();
+        assert_eq!(defaults.keys_label(Action::PickGrouping), "fg");
+        assert_eq!(defaults.keys_label(Action::ToggleGroup), "Enter");
+        assert_eq!(
+            dispatch_sequence(&defaults, "fg"),
+            Some(Action::PickGrouping)
+        );
+        for source in [
+            "open_help = \"f\"",
+            "open_help = \"g\"",
+            "open_help = \"fg\"",
+        ] {
+            let bindings = KeyBindings::parse(&format!(
+                "[normal]\n{source}\npick_grouping = \"z\"\ntoggle_group = \"Tab\""
+            ));
+            assert_eq!(bindings.keys_label(Action::PickGrouping), "z");
+            assert_eq!(
+                dispatch_sequence(&bindings, "z"),
+                Some(Action::PickGrouping)
+            );
+            assert_eq!(
+                dispatch_sequence(&bindings, "Tab"),
+                Some(Action::ToggleGroup)
+            );
+        }
     }
 
     #[test]

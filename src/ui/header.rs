@@ -31,6 +31,7 @@ pub struct HeaderProps<'a> {
     pub title: Option<&'a str>,
     // pub file: &'a str,
     pub count: usize,
+    pub hidden: usize,
     pub sort: &'a str,
     pub filter: Option<&'a str>,
 }
@@ -57,7 +58,11 @@ pub fn render(frame: &mut Frame, area: Rect, theme: &Theme, props: HeaderProps<'
         // Span::styled(props.file.to_string(), Style::default().fg(theme.dim)),
         Span::styled("  •  ", Style::default().fg(theme.dim)),
         Span::styled(
-            format!("{} tasks", props.count),
+            if props.hidden > 0 {
+                format!("{} tasks ({} collapsed)", props.count, props.hidden)
+            } else {
+                format!("{} tasks", props.count)
+            },
             Style::default().fg(theme.dim),
         ),
         Span::styled("  •  ", Style::default().fg(theme.dim)),

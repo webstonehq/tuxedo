@@ -43,6 +43,7 @@ pub enum Mode {
     /// Theme picker dialog — j/k to preview themes, Enter to accept,
     /// Esc to revert.
     PickTheme,
+    PickGrouping,
     /// First-run welcome prompt, shown when `tuxedo` is launched with no
     /// target and no `./todo.txt` exists. `c` creates `./todo.txt`, `s`
     /// opens the bundled sample, `q`/`Esc` quits without creating anything.

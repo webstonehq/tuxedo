@@ -11,7 +11,10 @@ impl App {
             return;
         }
         let indices: Vec<usize> = self.selection.iter().collect();
-        if indices.iter().any(|i| !self.visible_indices().contains(i)) {
+        if indices
+            .iter()
+            .any(|i| !self.navigable_indices().any(|abs| abs == *i))
+        {
             self.flash("selection includes hidden tasks");
             return;
         }
@@ -43,7 +46,10 @@ impl App {
             return;
         }
         let indices: Vec<usize> = self.selection.iter().collect();
-        if indices.iter().any(|i| !self.visible_indices().contains(i)) {
+        if indices
+            .iter()
+            .any(|i| !self.navigable_indices().any(|abs| abs == *i))
+        {
             self.flash("selection includes hidden tasks");
             return;
         }

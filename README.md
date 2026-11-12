@@ -298,11 +298,13 @@ begin_prompt_project = "+"
 
 # Filtering, sort, view
 begin_search        = "/"
-arm_f               = "f"        # leader for the fp / fc / ff / fs chords
+arm_f               = "f"        # leader for the fp / fc / ff / fs / fg chords
 pick_project        = "fp"
 pick_context        = "fc"
 pick_saved_filter   = "ff"
 save_current_filter = "fs"
+pick_grouping       = "fg"
+toggle_group        = "Enter"
 cycle_sort          = "S"
 toggle_visual       = "v"
 toggle_selected     = "space"
@@ -368,10 +370,10 @@ chord here is ignored rather than bound to a key that could never fire.
 
 | Key | Action |
 | --- | --- |
-| `j` / `↓` | next task |
-| `k` / `↑` | previous task |
-| `gg` | first task |
-| `G` | last task |
+| `j` / `↓` | next task or group header |
+| `k` / `↑` | previous task or group header |
+| `gg` | first row |
+| `G` | last row |
 | `Ctrl-d` / `Ctrl-u` | half-page down / up |
 
 ### Editing
@@ -393,8 +395,9 @@ chord here is ignored rather than bound to a key that could never fire.
 
 Movement preserves the active sort: priority mode requires matching priority
 and due date, due mode requires matching due date, and file mode allows
-unrestricted movement. Visual selections move in one undoable operation and
-must be fully visible within one sort tie.
+movement within the current group (or the whole flat list). Visual selections
+move in one undoable operation and must be fully visible within one group and
+sort tie.
 
 ### Edit dialog
 
@@ -437,6 +440,8 @@ The modal keys below apply in Normal mode:
 | `ff` | pick a saved search (`j` / `k` cycles, `Enter` keeps, `Esc` reverts) |
 | `fs` | save the active `/`-search as a named filter |
 | `S` | cycle sort: priority → due → file order |
+| `fg` | choose grouping: Follow sort / None / Priority / Due date |
+| `Enter` on a group header | collapse / expand its tasks |
 | `v` | enter visual / multi-select; `space` toggles a row |
 | `x` / `dd` (in visual) | bulk-complete / bulk-delete the selection |
 | `yy` / `yb` (in visual) | copy selected lines / bodies |
@@ -478,7 +483,7 @@ backspace to drop them. A `/`-search filter seeds nothing.
 | `,` | settings overlay |
 | `q` | quit |
 
-Two-key chord prompts (`gg`, `dd`, `yy`, `yb`, `fp`, `fc`, `ff`, `fs`) show
+Two-key chord prompts (`gg`, `dd`, `yy`, `yb`, `fp`, `fc`, `ff`, `fs`, `fg`) show
 a `g…` / `d…` / `y…` / `f…` indicator in the status-bar mode chip while the
 leader is armed; the window is 600 ms.
 
@@ -613,7 +618,7 @@ if a producer must be serialized with the TUI drain.
 ## Configuration
 
 Persisted to `${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/config.toml`. Cycling
-theme, density, or sort, and toggling sidebars / line-numbers / done-visibility
+theme, density, sort, or grouping, and toggling sidebars / line-numbers / done-visibility
 all update the file. Unknown keys are ignored, so older binaries don't break
 on newer files.
 
@@ -677,7 +682,25 @@ A through Z, then NO PRIORITY. Due sections run OVERDUE, TODAY, THIS WEEK,
 NEXT WEEK, LATER, then NO DUE DATE, using the configured week start.
 Completed tasks appear only in DONE when grouping is enabled and done tasks
 are shown. Grouping never reorders the task file and does not affect CLI lists.
+Press `fg` to open the grouping picker, also available in settings and the
+command palette as `pick_grouping`. Use `j`/`k` or arrows to choose; Enter
+commits and Escape cancels without changing grouping or selections. The marker
+`[x]` identifies the saved choice. Help and settings show effective keys if you
+customize bindings.
+
 Headers have their own cursor positions; task actions on a header show a notice.
+On a header, Enter (`toggle_group`) collapses or expands its matching tasks:
+`[-]` means expanded and `[+]` means collapsed. Counts include matching members
+inside collapsed groups; the list total also reports how many are collapsed.
+All headers remain reachable even when every group is collapsed.
+
+Collapse clears selections only among the members it hides and reports the
+cleared count. Other expanded-group selections remain, and expansion does not
+restore cleared selections. Explicit bulk actions never target collapsed tasks.
+Existing filter-hidden selections cause bulk actions to stop with a notice.
+Collapse lasts for the session: choosing a different grouping expands it, while
+changing sort retains collapse when the effective grouping stays the same.
+Archive date sections keep their separate behavior.
 
 ### Hiding `key:value` tags
 

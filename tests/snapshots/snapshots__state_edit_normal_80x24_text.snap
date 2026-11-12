@@ -4,10 +4,10 @@ expression: buffer_to_text(buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL       
                                                                                 
- PROJECTS                  (2)  PRIORITY A  ────────────────────── priority  (A)
+ PROJECTS                  [-] (2)  PRIORITY A  ────────────────── priority  (A)
    +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   202
    +health           3      2   (A) Call dentist to reschedule cle due       202
-   +finance          2     (3)  PRIORITY B  ────────────────────── projects  +wo
+   +finance          2     [-] (3)  PRIORITY B  ────────────────── projects  +wo
    +home             1      3   (B) Review pull requests for auth  contexts  @la
    +learning         1      4   (B) Renew passport before summer t              
    +personal        ┌ EDIT TASK · Vim · Normal ────────────┐senior RAW          

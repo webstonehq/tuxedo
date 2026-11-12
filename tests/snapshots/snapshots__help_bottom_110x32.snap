@@ -4,10 +4,10 @@ expression: buffer_to_text(terminal.backend().buffer())
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tasks  •  sor DETAIL                           
      ┌ tuxedo · HELP ──────────────────────────────────────────────────────────────────────────────────┐      
- PROJ│ v                enter / leave selection         ? / ,      help / settings                     │      
-   +w│ Space            toggle selected row             s          phone capture QR                    │      
-   +h│                                                  Esc        cancel / clear                      │      
-   +f│                                                  q, Ctrl-c  quit                                │      
+ PROJ│                                                  ? / ,      help / settings                     │      
+   +w│ TASK SELECTION                                   s          phone capture QR                    │      
+   +h│ v                enter / leave selection         Esc        cancel / clear                      │      
+   +f│ Space            toggle selected row             q, Ctrl-c  quit                                │      
    +h│                                                                                                 │      
    +l│ ─────────────────────────────────────────────────────────────────────────────────────────────── │      
    +p│                                                                                                 │      

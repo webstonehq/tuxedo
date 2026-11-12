@@ -206,3 +206,210 @@ fn grouped_file_movement_respects_headers_groups_and_history() {
     assert_eq!(app.flash_active(), Some("selection spans sort groups"));
     assert!(app.store.history.is_empty());
 }
+
+fn focus_header(app: &mut App, key: GroupKey) {
+    app.cursor = app
+        .display_rows()
+        .iter()
+        .position(|r| matches!(r, DisplayRow::Header { key: k, .. } if *k == key))
+        .expect("header");
+}
+
+#[test]
+fn collapse_prunes_only_its_members_and_next_bulk_matches_count() {
+    let raw = "(A) first\n(B) other\n(A) second\n";
+    let mut app = build_app(raw);
+    app.prefs.group_by = GroupBy::Priority;
+    app.recompute_visible();
+    for i in 0..3 {
+        app.selection.toggle(i);
+    }
+    app.mode = Mode::Visual;
+    focus_header(&mut app, GroupKey::ListPriority(Some('A')));
+    app.toggle_group();
+    assert!(app.focused_header().is_some());
+    assert_eq!(app.cur_abs(), None);
+    assert_eq!(app.navigable_indices().collect::<Vec<_>>(), [1]);
+    assert_eq!(app.visible_indices().len(), 3);
+    assert_eq!(app.hidden_by_collapse(), 2);
+    assert_eq!(app.selection.len(), 1);
+    assert!(app.selection.is_selected(1));
+    assert_eq!(app.flash_active(), Some("cleared 2 hidden selected tasks"));
+    assert_eq!(
+        std::fs::read_to_string(&app.file_path).expect("fixture"),
+        raw
+    );
+    assert!(app.store.history.is_empty());
+    app.toggle_group();
+    assert_eq!(app.selection.len(), 1, "expansion never restores selection");
+    app.toggle_group();
+    app.complete_selected();
+    assert!(app.tasks()[1].done);
+    assert!(!app.tasks()[0].done && !app.tasks()[2].done);
+    app.undo();
+    assert_eq!(
+        std::fs::read_to_string(&app.file_path).expect("fixture"),
+        raw
+    );
+    assert!(app.group_collapsed(&GroupKey::ListPriority(Some('A'))));
+}
+
+#[test]
+fn all_collapsed_headers_remain_and_mode_changes_expand() {
+    let mut app = build_app("(A) a\n(B) b\nplain\n");
+    app.prefs.group_by = GroupBy::Priority;
+    app.recompute_visible();
+    for key in [
+        GroupKey::ListPriority(Some('A')),
+        GroupKey::ListPriority(Some('B')),
+        GroupKey::ListPriority(None),
+    ] {
+        focus_header(&mut app, key);
+        app.toggle_group();
+    }
+    assert_eq!(app.display_rows().len(), 3);
+    assert_eq!(app.hidden_by_collapse(), 3);
+    assert_eq!(app.navigable_indices().count(), 0);
+    app.cycle_sort();
+    assert_eq!(
+        app.hidden_by_collapse(),
+        3,
+        "explicit grouping retains collapse across sort"
+    );
+    app.set_view(View::Archive);
+    assert!(app.display_rows().is_empty());
+    app.set_view(View::List);
+    assert_eq!(app.hidden_by_collapse(), 3);
+    app.toggle_group();
+    assert_eq!(app.hidden_by_collapse(), 2);
+    app.prefs.group_by = GroupBy::Auto;
+    app.recompute_visible();
+    assert_eq!(app.hidden_by_collapse(), 0);
+    focus_header(&mut app, GroupKey::ListDue(ListDueBucket::NoDue));
+    app.toggle_group();
+    app.cycle_sort(); // due -> file changes effective grouping
+    assert_eq!(app.hidden_by_collapse(), 0);
+    assert!(
+        app.display_rows()
+            .iter()
+            .all(|r| matches!(r, DisplayRow::Task(_)))
+    );
+}
+
+#[test]
+fn grouping_picker_cancel_preserves_every_view_state_and_commit_persists() {
+    let mut app = build_app("(A) a\n(B) b\n");
+    focus_header(&mut app, GroupKey::ListPriority(Some('A')));
+    app.toggle_group();
+    app.selection.toggle(1);
+    app.mode = Mode::Visual;
+    let rows = app.display_rows().to_vec();
+    let cursor = app.cursor;
+    app.enter_pick_grouping();
+    app.pick_grouping_step(true);
+    app.pick_grouping_cancel();
+    assert_eq!(app.mode, Mode::Visual);
+    assert_eq!(app.prefs.group_by, GroupBy::Auto);
+    assert_eq!(app.display_rows(), rows);
+    assert_eq!(app.cursor, cursor);
+    assert!(app.selection.is_selected(1));
+    assert!(app.group_collapsed(&GroupKey::ListPriority(Some('A'))));
+    app.enter_pick_grouping();
+    app.pick_grouping_step(true);
+    app.pick_grouping_accept();
+    assert_eq!(app.prefs.group_by, GroupBy::None);
+    assert_eq!(app.hidden_by_collapse(), 0);
+    assert!(app.selection.is_selected(1));
+    let cfg = Config::load_from(app.config_path.as_ref().expect("config path"));
+    assert_eq!(cfg.group_by, Some(GroupBy::None));
+    assert_eq!(cfg.sort, Some(Sort::Priority));
+    assert!(app.store.history.is_empty());
+}
+
+#[test]
+fn selected_task_entering_collapsed_group_is_pruned_and_header_followed() {
+    let mut app = build_app("(A) a\nplain\n");
+    focus_header(&mut app, GroupKey::ListPriority(Some('A')));
+    app.toggle_group();
+    app.follow_cursor(1);
+    app.selection.toggle(1);
+    app.cycle_priority(1); // none -> A
+    assert!(app.selection.is_empty());
+    assert_eq!(app.flash_active(), Some("cleared 1 hidden selected task"));
+    assert_eq!(
+        app.focused_header(),
+        Some(&GroupKey::ListPriority(Some('A')))
+    );
+    app.undo();
+    assert_eq!(app.navigable_indices().collect::<Vec<_>>(), [1]);
+    assert!(app.selection.is_empty());
+    // Existing external-reload contract clears selections rather than trying
+    // to infer identity from changed line positions; feedback includes count.
+    app.selection.toggle(1);
+    std::fs::write(&app.file_path, "(A) a\n(A) external\n").expect("fixture");
+    assert!(!app.check_external_changes());
+    assert_eq!(app.hidden_by_collapse(), 2);
+    assert!(app.selection.is_empty());
+    assert!(app.flash_active().expect("notice").contains("cleared 1"));
+}
+
+#[test]
+fn collapsed_tasks_cannot_be_bulk_targets_even_with_invalid_explicit_selection() {
+    for delete in [false, true] {
+        let raw = "(A) hidden\n(B) visible\n";
+        let mut app = build_app(raw);
+        focus_header(&mut app, GroupKey::ListPriority(Some('A')));
+        app.toggle_group();
+        app.selection.toggle(0); // deliberately inject invalid stale selection
+        if delete {
+            app.delete_selected();
+        } else {
+            app.complete_selected();
+        }
+        assert_eq!(
+            std::fs::read_to_string(&app.file_path).expect("fixture"),
+            raw
+        );
+        assert_eq!(app.flash_active(), Some("selection includes hidden tasks"));
+        app.mode = Mode::Visual;
+        app.move_tasks(true);
+        assert_eq!(
+            std::fs::read_to_string(&app.file_path).expect("fixture"),
+            raw
+        );
+        assert!(app.store.history.is_empty());
+    }
+}
+
+#[test]
+fn selection_follows_task_identity_after_delete_recurring_insert_and_archive() {
+    // Selection may persist after leaving Visual mode; subsequent writes must
+    // remap identities before recompute can prune collapsed memberships.
+    let mut app = build_app("(A) first\n(B) selected\n(C) last\n");
+    app.selection.toggle(1);
+    app.delete(0);
+    assert!(app.selection.is_selected(0));
+    assert!(!app.selection.is_selected(1));
+    app.mode = Mode::Visual;
+    app.delete_selected();
+    assert_eq!(app.tasks()[0].raw, "(C) last");
+
+    let mut app = build_app("(A) recurring rec:1d\n(B) selected\n(C) last\n");
+    app.selection.toggle(1);
+    app.toggle_complete(0);
+    assert!(app.selection.is_selected(2));
+    assert_eq!(app.tasks()[2].raw, "(B) selected");
+    app.mode = Mode::Visual;
+    app.delete_selected();
+    assert!(app.tasks().iter().any(|t| t.raw == "(C) last"));
+    assert!(!app.tasks().iter().any(|t| t.raw == "(B) selected"));
+
+    let mut app = build_app("x 2026-05-01 done\n(B) selected\n(C) last\n");
+    app.selection.toggle(1);
+    app.archive_completed();
+    assert!(app.selection.is_selected(0));
+    assert_eq!(app.tasks()[0].raw, "(B) selected");
+    app.mode = Mode::Visual;
+    app.delete_selected();
+    assert_eq!(app.tasks()[0].raw, "(C) last");
+}

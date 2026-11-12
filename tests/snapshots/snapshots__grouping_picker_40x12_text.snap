@@ -1,0 +1,16 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(terminal.backend().buffer())
+---
+ ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas
+┌ Group tasks ─────────────────────────┐
+│   [x] Follow sort                    │
+│ ▶ [ ] None                           │
+│   [ ] Priority                       │
+│   [ ] Due date                       │
+│                                      │
+│j/k move · Enter select · Esc cancel  │
+└──────────────────────────────────────┘
+ [-] (2)  PRIORITY C  ──────────────────
+  6   (C) Pay quarterly estimated taxes 
+ PICK GROUPING  · 15 open · 2026-05-06

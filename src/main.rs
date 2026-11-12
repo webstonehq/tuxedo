@@ -261,13 +261,14 @@ fn run(
 /// apply it to the app. Returns `true` when a reload was attempted (whether
 /// successful or not) so the caller can trigger a redraw.
 ///
-/// Deferred while `Mode::PickTheme` is open: its live preview
+/// Deferred while a theme or grouping picker is open so its snapshot and
+/// cancellation contract remain intact. Theme live preview
 /// (`pick_theme_step`) mutates `prefs.theme_idx` in memory without saving,
 /// so an unrelated reload landing mid-preview would silently clobber it
 /// back to whatever's on disk. The signal stays queued in `rx` and is
 /// applied on the first poll after the picker closes.
 fn poll_config_reload(app: &mut App, rx: &Option<mpsc::Receiver<()>>) -> bool {
-    if app.mode == Mode::PickTheme {
+    if matches!(app.mode, Mode::PickTheme | Mode::PickGrouping) {
         return false;
     }
     let rx = match rx {
@@ -283,8 +284,17 @@ fn poll_config_reload(app: &mut App, rx: &Option<mpsc::Receiver<()>>) -> bool {
     };
     match Config::load_strict(path) {
         Ok(new_cfg) => {
+            let selected = app.selection.len();
             app.reload_config(new_cfg);
-            app.flash("config reloaded");
+            let cleared = selected - app.selection.len();
+            if cleared > 0 {
+                app.flash(format!(
+                    "config reloaded; cleared {cleared} hidden selected task{}",
+                    if cleared == 1 { "" } else { "s" }
+                ));
+            } else {
+                app.flash("config reloaded");
+            }
             true
         }
         Err(e) => {
@@ -351,6 +361,13 @@ fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
         | Mode::PromptSaveFilter => handle_prompt(app, key),
         Mode::PickProject | Mode::PickContext | Mode::PickSavedFilter => handle_pick(app, key),
         Mode::PickTheme => handle_pick_theme(app, key),
+        Mode::PickGrouping => match key.code {
+            KeyCode::Char('j') | KeyCode::Down => app.pick_grouping_step(true),
+            KeyCode::Char('k') | KeyCode::Up => app.pick_grouping_step(false),
+            KeyCode::Enter => app.pick_grouping_accept(),
+            KeyCode::Esc => app.pick_grouping_cancel(),
+            _ => {}
+        },
         Mode::CommandPalette => handle_command_palette(app, key),
         Mode::Share => handle_share(app, key),
         Mode::Welcome => handle_welcome(app, key),
@@ -828,21 +845,22 @@ fn handle_help(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_settings(app: &mut App, key: KeyEvent) {
-    if is_exit_key(key) {
-        app.mode = Mode::Normal;
-        return;
-    }
-
-    match key.code {
-        KeyCode::Esc | KeyCode::Char(',') => app.mode = Mode::Normal,
-        KeyCode::Char('T') => apply_action(app, Action::CycleTheme),
-        KeyCode::Char('D') => apply_action(app, Action::CycleDensity),
-        KeyCode::Char('L') => apply_action(app, Action::ToggleLineNum),
-        KeyCode::Char('[') => apply_action(app, Action::ToggleLeftPane),
-        KeyCode::Char(']') => apply_action(app, Action::ToggleRightPane),
-        KeyCode::Char('H') => apply_action(app, Action::ToggleShowDone),
-        KeyCode::Char('F') => apply_action(app, Action::ToggleShowFuture),
-        KeyCode::Char('S') => apply_action(app, Action::CycleSort),
+    let bindings = app.keybinds.clone();
+    match bindings.resolve_action(key, &mut app.chord) {
+        Some(Action::PickGrouping) => apply_action(app, Action::PickGrouping),
+        Some(Action::OpenHelp) => apply_action(app, Action::OpenHelp),
+        Some(Action::ArmF) => app.chord.arm('f'),
+        Some(Action::OpenThemePicker | Action::CycleTheme) => apply_action(app, Action::CycleTheme),
+        Some(
+            action @ (Action::CycleDensity
+            | Action::ToggleLineNum
+            | Action::ToggleLeftPane
+            | Action::ToggleRightPane
+            | Action::ToggleShowDone
+            | Action::ToggleShowFuture
+            | Action::CycleSort),
+        ) => apply_action(app, action),
+        Some(Action::EscapeStack | Action::OpenSettings | Action::Quit) => app.mode = Mode::Normal,
         _ => {}
     }
 }
@@ -1039,6 +1057,8 @@ fn apply_action(app: &mut App, action: Action) {
             | Action::PickSavedFilter
             | Action::SaveCurrentFilter
             | Action::CycleSort
+            | Action::PickGrouping
+            | Action::ToggleGroup
             | Action::ToggleShowDone
             | Action::ToggleShowFuture
             | Action::Undo => {
@@ -1215,6 +1235,8 @@ fn apply_action(app: &mut App, action: Action) {
             }
         }
         Action::CycleSort => app.cycle_sort(),
+        Action::PickGrouping => app.enter_pick_grouping(),
+        Action::ToggleGroup => app.toggle_group(),
         Action::BeginPromptProject => {
             app.mode = Mode::PromptProject;
             app.draft_clear();
@@ -1341,10 +1363,9 @@ fn copy_payload(app: &App, body_only: bool) -> Option<String> {
     };
     if app.view() == View::List && app.mode == Mode::Visual && !app.selection.is_empty() {
         let lines: Vec<_> = app
-            .visible_indices()
-            .iter()
-            .filter(|&&abs| app.selection.is_selected(abs))
-            .map(|&abs| format(&app.tasks()[abs].raw))
+            .navigable_indices()
+            .filter(|&abs| app.selection.is_selected(abs))
+            .map(|abs| format(&app.tasks()[abs].raw))
             .collect();
         return (lines.len() == app.selection.len()).then(|| lines.join("\n"));
     }
@@ -1574,6 +1595,104 @@ mod tests {
             poll_config_reload(&mut app, &rx),
             "the queued signal must still be applied once the picker closes"
         );
+    }
+
+    #[test]
+    fn grouping_settings_custom_chord_does_not_trigger_its_fixed_prefix() {
+        let mut app = build_app();
+        let theme = app.prefs.theme_idx();
+        app.mode = Mode::Settings;
+        app.keybinds = KeyBindings::parse("[normal]\npick_grouping = \"Tg\"");
+        handle_settings(&mut app, key('T'));
+        assert_eq!(app.prefs.theme_idx(), theme);
+        assert_eq!(app.mode, Mode::Settings);
+        handle_settings(&mut app, key('g'));
+        assert_eq!(app.mode, Mode::PickGrouping);
+        app.pick_grouping_cancel();
+        app.keybinds = KeyBindings::parse("[normal]\npick_grouping = \"q\"");
+        handle_settings(&mut app, key('q'));
+        assert_eq!(app.mode, Mode::PickGrouping);
+    }
+
+    #[test]
+    fn hot_reload_preserves_collapsed_selection_clear_count() {
+        let mut app = build_app_with_archive("this due:2026-05-08\nnext due:2026-05-10\n", None);
+        app.prefs.group_by = tuxedo::app::GroupBy::Due;
+        app.recompute_visible();
+        app.cursor = 0;
+        app.toggle_group();
+        app.selection.toggle(1);
+        std::fs::write(
+            app.config_path.as_ref().expect("config path"),
+            "group_by = due\nweek_start = monday\n",
+        )
+        .expect("config fixture");
+        let (tx, rx) = mpsc::channel();
+        tx.send(()).expect("reload signal");
+        assert!(poll_config_reload(&mut app, &Some(rx)));
+        assert!(app.selection.is_empty());
+        assert_eq!(
+            app.flash_active(),
+            Some("config reloaded; cleared 1 hidden selected task")
+        );
+    }
+
+    #[test]
+    fn grouping_picker_settings_keys_and_display_navigation() {
+        let mut app = build_app();
+        app.mode = Mode::Settings;
+        handle_settings(&mut app, key('f'));
+        handle_settings(&mut app, key('g'));
+        assert_eq!(app.mode, Mode::PickGrouping);
+        app.pick_grouping_cancel();
+        assert_eq!(app.mode, Mode::Settings);
+        app.keybinds = KeyBindings::parse("[normal]\npick_grouping = \"z\"");
+        handle_settings(&mut app, key('z'));
+        assert_eq!(app.mode, Mode::PickGrouping);
+        app.pick_grouping_cancel();
+        app.mode = Mode::Normal;
+        app.prefs.group_by = tuxedo::app::GroupBy::Priority;
+        app.recompute_visible();
+        apply_action(&mut app, Action::CursorTop);
+        assert!(app.focused_header().is_some());
+        apply_action(&mut app, Action::ToggleGroup);
+        assert_eq!(app.display_rows().len(), 1);
+        for action in [
+            Action::CursorDown,
+            Action::CursorUp,
+            Action::CursorTop,
+            Action::CursorBottom,
+            Action::HalfPageDown,
+            Action::HalfPageUp,
+        ] {
+            apply_action(&mut app, action);
+            assert_eq!(app.cursor, 0);
+            assert!(app.focused_header().is_some());
+        }
+        assert_eq!(
+            resolve(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Some(Action::ToggleGroup)
+        );
+        apply_action(&mut app, Action::ToggleGroup);
+        apply_action(&mut app, Action::CursorDown);
+        assert_eq!(app.cur_abs(), Some(0));
+        apply_action(&mut app, Action::CursorBottom);
+        assert_eq!(app.cur_abs(), Some(2));
+    }
+
+    #[test]
+    fn header_focus_bulk_copy_uses_only_remaining_explicit_visible_selection() {
+        let mut app = build_app_with_archive("(A) hidden\n(B) remaining\n", None);
+        app.prefs.group_by = tuxedo::app::GroupBy::Priority;
+        app.recompute_visible();
+        app.mode = Mode::Visual;
+        app.selection.toggle(0);
+        app.selection.toggle(1);
+        app.cursor = 0;
+        app.toggle_group();
+        assert_eq!(copy_payload(&app, false).as_deref(), Some("(B) remaining"));
+        app.selection.toggle(0); // Deliberately invalid stale hidden target.
+        assert!(copy_payload(&app, false).is_none());
     }
 
     #[test]

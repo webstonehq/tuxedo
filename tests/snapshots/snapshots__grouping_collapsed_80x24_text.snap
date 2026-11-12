@@ -1,0 +1,28 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(terminal.backend().buffer())
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tasks (2 collapse
+                                                                                
+ PROJECTS                 ▶[+] (2)  PRIORITY A  ────────────────────────────────
+   +work             4     [-] (3)  PRIORITY B  ────────────────────────────────
+   +health           3      1 [x]   (B) Review pull requests for auth refactor +
+   +finance          2      2 [ ]   (B) Renew passport before summer trip +trave
+   +home             1      3 [ ]   (B) Draft hiring rubric for senior eng +work
+   +learning         1     [-] (2)  PRIORITY C  ────────────────────────────────
+   +personal         1      4 [ ]   (C) Pay quarterly estimated taxes @home +fin
+   +travel           1      5 [ ]   (C) Order new running shoes +health @errands
+                           [-] (8)  NO PRIORITY  ───────────────────────────────
+ CONTEXTS                   6 [ ]       Migrate analytics to new pipeline +work 
+   @errands          4      7 [ ]       Pay rent due:2026-05-15 rec:+1m +finance
+   @home             4      8 [ ]       Pick up dry cleaning @errands           
+   @laptop           4      9 [ ]       Schedule annual physical @phone +health 
+   @phone            3     10 [ ]       Read "Designing Data-Intensive Applicati
+                           11 [ ]       Send thank-you note to mentor @home     
+                           12 [ ]       Plan Saturday hike with K. @phone +perso
+                           13 [ ]       Replace bathroom faucet washer +home @er
+                                                                                
+                                                                                
+                                                                                
+ TASK SELECT · 1 tasks selected · Esc cancel · Space toggle · x complete        
+Notice: cleared 1 hidden selected task

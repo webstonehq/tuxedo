@@ -30,6 +30,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             // title: None,
             // file: &display_path(&app.file_path),
             count: app.visible_indices().len(),
+            hidden: app.hidden_by_collapse(),
             sort: app.sort_label(),
             filter: filter_label.as_deref(),
         },
@@ -54,6 +55,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let mut lines: Vec<Line> = Vec::new();
     let mut cursor_line = None;
+    let mut first_member_header = None;
+    let mut last_header_line = 0;
     if app.visible_indices().is_empty() {
         lines.push(Line::from(Span::styled(
             "   no tasks match",
@@ -72,11 +75,23 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                     if row == app.cursor {
                         cursor_line = Some(lines.len());
                     }
-                    lines.push(group_header(theme, key, *count, focused));
+                    last_header_line = lines.len();
+                    lines.push(group_header(
+                        theme,
+                        key,
+                        *count,
+                        focused,
+                        app.group_collapsed(key),
+                    ));
                 }
                 DisplayRow::Task(abs) => {
                     if row == app.cursor {
                         cursor_line = Some(lines.len());
+                        if row > 0
+                            && matches!(app.display_rows()[row - 1], DisplayRow::Header { .. })
+                        {
+                            first_member_header = Some(last_header_line);
+                        }
                     }
                     let opts = task_row::RowOpts {
                         idx_label: task_number,
@@ -102,12 +117,17 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let scroll_cell = &app.view_scroll[View::List.idx()];
-    let scroll = keep_cursor_visible(
+    let mut scroll = keep_cursor_visible(
         scroll_cell.get(),
         cursor_line,
         body_area.height,
         lines.len(),
     );
+    if let (Some(header), Some(cursor)) = (first_member_header, cursor_line)
+        && cursor - header < usize::from(body_area.height)
+    {
+        scroll = scroll.min(header as u16);
+    }
     scroll_cell.set(scroll);
 
     let para = Paragraph::new(lines)
@@ -125,7 +145,13 @@ fn display_path(p: &std::path::Path) -> String {
     p.display().to_string()
 }
 
-fn group_header<'a>(theme: &Theme, gk: &GroupKey, count: usize, focused: bool) -> Line<'a> {
+fn group_header<'a>(
+    theme: &Theme,
+    gk: &GroupKey,
+    count: usize,
+    focused: bool,
+    collapsed: bool,
+) -> Line<'a> {
     let (label, color) = match gk {
         GroupKey::ListPriority(Some(c)) => (format!("PRIORITY {c}"), theme.priority_color(*c)),
         GroupKey::ListPriority(None) => ("NO PRIORITY".to_string(), theme.dim),
@@ -140,7 +166,11 @@ fn group_header<'a>(theme: &Theme, gk: &GroupKey, count: usize, focused: bool) -
     let divider_length = 80 - char_count;
 
     let line = Line::from(vec![
-        Span::raw(if focused { "▸" } else { " " }),
+        Span::raw(if focused { "▶" } else { " " }),
+        Span::styled(
+            if collapsed { "[+] " } else { "[-] " },
+            Style::default().fg(color),
+        ),
         Span::styled(format!("({})", count), Style::default().fg(theme.dim)),
         Span::raw("  "),
         Span::styled(

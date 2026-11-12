@@ -4,7 +4,7 @@ expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL                           
                                                                                                     
- PROJECTS                  (2)  PRIORITY A  ────────────────────── priority  (A)                    
+ PROJECTS                  [-] (2)  PRIORITY A  ────────────────── priority  (A)                    
    +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   2026-05-01             
    +health           3      2   (A) Call dentist to reschedule cle due       2026-05-06  today      
    +finance         ┌ tuxedo · command ────────────────────────────────────────┐rk                  

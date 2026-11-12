@@ -31,6 +31,7 @@ impl App {
                 self.after_mutation(abs);
             }
             CompleteOutcome::CompletedSpawned { next, .. } => {
+                self.selection.insert_index(next);
                 self.flash("completed +next");
                 self.after_mutation(next);
             }
@@ -54,14 +55,21 @@ impl App {
     }
 
     pub fn move_tasks(&mut self, down: bool) {
+        let visible: Vec<_> = self.navigable_indices().collect();
+        let group_lookup: std::collections::HashMap<_, _> = self
+            .visible_cache
+            .iter()
+            .copied()
+            .zip(self.visible_groups.iter().cloned())
+            .collect();
+        let groups: Vec<_> = visible.iter().map(|abs| &group_lookup[abs]).collect();
         let current = self.cur_abs();
         let moving_selection = self.mode == Mode::Visual && !self.selection.is_empty();
         if !moving_selection && self.task_action_on_header() {
             return;
         }
         if moving_selection {
-            let visible_selected = self
-                .visible_cache
+            let visible_selected = visible
                 .iter()
                 .filter(|&&abs| self.selection.is_selected(abs))
                 .count();
@@ -73,15 +81,7 @@ impl App {
                 let mut selected = self.selection.iter();
                 selected.next().is_some_and(|first| {
                     selected.any(|abs| {
-                        self.visible_cache
-                            .iter()
-                            .position(|i| *i == first)
-                            .map(|p| &self.visible_groups[p])
-                            != self
-                                .visible_cache
-                                .iter()
-                                .position(|i| *i == abs)
-                                .map(|p| &self.visible_groups[p])
+                        group_lookup[&first] != group_lookup[&abs]
                             || !same_sort_key(
                                 self.prefs.sort,
                                 &self.store.tasks()[first],
@@ -95,8 +95,7 @@ impl App {
                 return;
             }
         }
-        let mut moving: Vec<bool> = self
-            .visible_cache
+        let mut moving: Vec<bool> = visible
             .iter()
             .map(|&abs| {
                 if moving_selection {
@@ -111,14 +110,14 @@ impl App {
             for cursor in (0..moving.len().saturating_sub(1)).rev() {
                 if moving[cursor]
                     && !moving[cursor + 1]
-                    && self.visible_groups[cursor] == self.visible_groups[cursor + 1]
+                    && groups[cursor] == groups[cursor + 1]
                     && same_sort_key(
                         self.prefs.sort,
-                        &self.store.tasks()[self.visible_cache[cursor]],
-                        &self.store.tasks()[self.visible_cache[cursor + 1]],
+                        &self.store.tasks()[visible[cursor]],
+                        &self.store.tasks()[visible[cursor + 1]],
                     )
                 {
-                    swaps.push((self.visible_cache[cursor], self.visible_cache[cursor + 1]));
+                    swaps.push((visible[cursor], visible[cursor + 1]));
                     moving.swap(cursor, cursor + 1);
                 }
             }
@@ -126,14 +125,14 @@ impl App {
             for cursor in 1..moving.len() {
                 if moving[cursor]
                     && !moving[cursor - 1]
-                    && self.visible_groups[cursor] == self.visible_groups[cursor - 1]
+                    && groups[cursor] == groups[cursor - 1]
                     && same_sort_key(
                         self.prefs.sort,
-                        &self.store.tasks()[self.visible_cache[cursor]],
-                        &self.store.tasks()[self.visible_cache[cursor - 1]],
+                        &self.store.tasks()[visible[cursor]],
+                        &self.store.tasks()[visible[cursor - 1]],
                     )
                 {
-                    swaps.push((self.visible_cache[cursor], self.visible_cache[cursor - 1]));
+                    swaps.push((visible[cursor], visible[cursor - 1]));
                     moving.swap(cursor, cursor - 1);
                 }
             }
@@ -172,6 +171,7 @@ impl App {
     pub fn delete(&mut self, abs: usize) {
         match self.store.delete(abs) {
             DeleteOutcome::Deleted { .. } => {
+                self.selection.remove_indices(&[abs]);
                 self.flash("deleted");
                 self.recompute_visible();
                 self.clamp_cursor();
@@ -408,11 +408,26 @@ impl App {
     }
 
     pub fn archive_completed(&mut self) {
+        let removed: Vec<_> = self
+            .tasks()
+            .iter()
+            .enumerate()
+            .filter_map(|(i, task)| task.done.then_some(i))
+            .collect();
+        let focused = self
+            .cur_abs()
+            .filter(|i| !removed.contains(i))
+            .map(|i| i - removed.iter().filter(|&&r| r < i).count());
         match self.store.archive_completed() {
             ArchiveOutcome::Archived { count } => {
+                self.selection.remove_indices(&removed);
                 self.flash(format!("archived {count}"));
                 self.recompute_visible();
-                self.clamp_cursor();
+                if let Some(abs) = focused {
+                    self.follow_cursor(abs);
+                } else {
+                    self.clamp_cursor();
+                }
             }
             ArchiveOutcome::Nothing => self.flash("nothing to archive"),
             ArchiveOutcome::Aborted(r) => self.handle_reconcile_abort(r),

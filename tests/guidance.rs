@@ -277,3 +277,20 @@ fn calendar_controls_survive_full_draw_for_both_targets_and_status_settings() {
         }
     }
 }
+
+#[test]
+fn settings_hints_follow_shared_dispatch_keys() {
+    let mut app = app();
+    app.mode = Mode::Settings;
+    app.keybinds = KeyBindings::parse(
+        "[normal]\ncycle_density = \"z\"\nopen_help = \"D\"\npick_grouping = \"Tg\"\n",
+    );
+    let text = screen(&app, 110, 32);
+    assert!(text.contains("z to cycle"));
+    assert!(!text.contains("D to cycle"));
+    assert!(text.contains("Tg to choose"));
+    assert!(
+        text.contains("palette to cycle"),
+        "stolen T must not advertise theme cycle"
+    );
+}

@@ -96,6 +96,7 @@ pub struct App {
     pub(crate) view: View,
     pub mode: Mode,
     pub prefs: Prefs,
+    /// Focus index into display_rows; never an absolute task identity.
     pub cursor: usize,
     /// Per-view saved cursor, indexed by `View::idx()`. `set_view` snapshots
     /// the outgoing view's cursor here and restores the incoming view's, so
@@ -121,6 +122,10 @@ pub struct App {
     pub should_quit: bool,
     visible_cache: Vec<usize>,
     display_rows: Vec<DisplayRow>,
+    collapsed_groups: std::collections::HashSet<GroupKey>,
+    grouping_state: (GroupBy, GroupBy),
+    pub grouping_pick_idx: usize,
+    grouping_pick_prior: Mode,
     /// Matching task group keys, parallel to the task-only cache.
     visible_groups: Vec<crate::app::visibility::GroupKey>,
     /// Latest known release tag, populated asynchronously by the update
@@ -214,6 +219,10 @@ impl App {
             should_quit: false,
             visible_cache: Vec::new(),
             display_rows: Vec::new(),
+            collapsed_groups: std::collections::HashSet::new(),
+            grouping_state: (GroupBy::Auto, GroupBy::Priority),
+            grouping_pick_idx: 0,
+            grouping_pick_prior: Mode::Normal,
             visible_groups: Vec::new(),
             latest_version: None,
             update_check: None,
@@ -539,7 +548,7 @@ impl App {
         self.clamp_cursor();
     }
 
-    /// Set the search-filter text. Cursor resets and the cache is recomputed.
+    /// Set search text and rebuild the view, retaining valid focus.
     /// Typing into the search prompt calls this on every keystroke.
     pub fn set_search(&mut self, search: String) {
         self.filter.search = search;
@@ -603,11 +612,18 @@ impl App {
     /// transient input state and refresh the view, matching the old
     /// `apply_external_state` behavior.
     pub(crate) fn on_reload(&mut self) {
+        let cleared = self.selection.len();
         self.selection.clear();
         self.selection.exit_edit();
         self.recompute_visible();
         self.clamp_cursor();
-        self.flash("file changed on disk — reloaded");
+        if cleared > 0 {
+            self.flash(format!(
+                "file changed on disk — reloaded; cleared {cleared} selected tasks"
+            ));
+        } else {
+            self.flash("file changed on disk — reloaded");
+        }
     }
 
     /// Map a store reconcile result to the matching flash + view refresh for a

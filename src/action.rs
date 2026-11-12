@@ -40,6 +40,8 @@ pub enum Action {
     /// `fs` — name the active `/`-search and persist it.
     SaveCurrentFilter,
     CycleSort,
+    PickGrouping,
+    ToggleGroup,
     BeginPromptProject,
     BeginPromptContext,
     ToggleLeftPane,
@@ -99,6 +101,8 @@ impl Action {
             "pick_saved_filter" => Some(Self::PickSavedFilter),
             "save_current_filter" => Some(Self::SaveCurrentFilter),
             "cycle_sort" => Some(Self::CycleSort),
+            "pick_grouping" => Some(Self::PickGrouping),
+            "toggle_group" => Some(Self::ToggleGroup),
             "begin_prompt_project" | "prompt_project" => Some(Self::BeginPromptProject),
             "begin_prompt_context" | "prompt_context" => Some(Self::BeginPromptContext),
             "toggle_left_pane" => Some(Self::ToggleLeftPane),

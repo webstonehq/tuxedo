@@ -85,11 +85,11 @@ pub const ENTRIES: &[PaletteEntry] = &[
         action: Action::CursorUp,
     },
     PaletteEntry {
-        label: "jump to first task",
+        label: "jump to first row",
         action: Action::CursorTop,
     },
     PaletteEntry {
-        label: "jump to last task",
+        label: "jump to last row",
         action: Action::CursorBottom,
     },
     PaletteEntry {
@@ -119,6 +119,14 @@ pub const ENTRIES: &[PaletteEntry] = &[
     PaletteEntry {
         label: "save search as filter",
         action: Action::SaveCurrentFilter,
+    },
+    PaletteEntry {
+        label: "pick task grouping",
+        action: Action::PickGrouping,
+    },
+    PaletteEntry {
+        label: "collapse / expand focused group",
+        action: Action::ToggleGroup,
     },
     PaletteEntry {
         label: "cycle sort",
@@ -495,6 +503,8 @@ mod tests {
             Action::PickProject,
             Action::PickContext,
             Action::CycleSort,
+            Action::PickGrouping,
+            Action::ToggleGroup,
             Action::BeginPromptProject,
             Action::BeginPromptContext,
             Action::ToggleLeftPane,

@@ -33,6 +33,7 @@ fn mode_label(app: &App) -> &'static str {
         Mode::CommandPalette => "COMMAND",
         Mode::Share => "SHARE",
         Mode::PickTheme => "PICK THEME",
+        Mode::PickGrouping => "PICK GROUPING",
         Mode::Welcome => "WELCOME",
     }
 }
@@ -58,6 +59,14 @@ fn hints(app: &App) -> Vec<String> {
             (Action::ToggleComplete, "restore"),
             (Action::Delete, "delete"),
             (Action::Quit, "quit"),
+        ]
+        .into_iter()
+        .filter_map(|(action, label)| action_hint(app, action, label))
+        .collect(),
+        Mode::Normal if app.focused_header().is_some() => [
+            (Action::ToggleGroup, "collapse / expand"),
+            (Action::PickGrouping, "grouping"),
+            (Action::OpenHelp, "help"),
         ]
         .into_iter()
         .filter_map(|(action, label)| action_hint(app, action, label))
@@ -99,6 +108,7 @@ fn hints(app: &App) -> Vec<String> {
         Mode::CommandPalette => vec!["Enter run · Esc cancel".into()],
         Mode::Share => vec!["any key dismisses".into()],
         Mode::PickTheme => vec!["Enter keep · Esc revert".into()],
+        Mode::PickGrouping => vec!["Enter select · Esc cancel".into()],
         Mode::Welcome => vec!["c create · s sample · q quit".into()],
         Mode::Search => Vec::new(),
     }
@@ -148,7 +158,15 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         let count = if app.view() == View::Archive {
             format!("{} archived", app.archive().len())
         } else {
-            format!("{} open", app.visible_indices().len())
+            if app.hidden_by_collapse() > 0 {
+                format!(
+                    "{} matching · {} collapsed",
+                    app.visible_indices().len(),
+                    app.hidden_by_collapse()
+                )
+            } else {
+                format!("{} open", app.visible_indices().len())
+            }
         };
         append(count, theme.dim);
         append(app.today().into(), theme.dim);

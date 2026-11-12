@@ -11,6 +11,7 @@ pub mod detail;
 pub mod dialog;
 pub mod empty;
 pub mod filters;
+mod grouping_picker;
 pub mod header;
 pub mod help;
 pub mod hyperlinks;
@@ -176,6 +177,11 @@ pub fn draw(frame: &mut Frame, app: &App) {
             let r = centered_in(body_area, w, h);
             frame.render_widget(Clear, r);
             share::render(frame, r, app);
+        }
+        Mode::PickGrouping => {
+            let r = centered_in(body_area, 48, 8);
+            frame.render_widget(Clear, r);
+            grouping_picker::render(frame, r, app);
         }
         Mode::PickTheme => {
             let h: u16 = area.height.saturating_sub(4).min(PALETTE_MAX_H);

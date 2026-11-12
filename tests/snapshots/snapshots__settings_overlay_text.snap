@@ -20,10 +20,10 @@ expression: buffer_to_text(&buf)
                                                                                                     
  BEHAVIOR                                                                                           
    default sort                priority (S to cycle)                                                
+   grouping                    Follow sort (fg to choose)                                           
                                                                                                     
  KEYBINDINGS                                                                                        
                                press ? for the full list                                            
-                                                                                                    
                                                                                                     
                                                                                                     
                                                                                                     

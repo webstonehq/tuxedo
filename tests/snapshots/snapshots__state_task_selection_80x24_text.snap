@@ -4,17 +4,17 @@ expression: buffer_to_text(buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL       
                                                                                 
- PROJECTS                  (2)  PRIORITY A  ────────────────────── priority  (A)
+ PROJECTS                  [-] (2)  PRIORITY A  ────────────────── priority  (A)
    +work             4      1 [x] ▸ (A) Finish Q2 board deck +work created   202
    +health           3      2 [x]   (A) Call dentist to reschedule due       202
-   +finance          2     (3)  PRIORITY B  ────────────────────── projects  +wo
+   +finance          2     [-] (3)  PRIORITY B  ────────────────── projects  +wo
    +home             1      3 [ ]   (B) Review pull requests for a contexts  @la
    +learning         1      4 [ ]   (B) Renew passport before summ              
    +personal         1      5 [ ]   (B) Draft hiring rubric for se RAW          
-   +travel           1     (2)  PRIORITY C  ──────────────────────              
+   +travel           1     [-] (2)  PRIORITY C  ──────────────────              
                             6 [ ]   (C) Pay quarterly estimated ta (A) 2026-05-0
  CONTEXTS                   7 [ ]   (C) Order new running shoes +h Finish Q2 boa
-   @errands          4     (8)  NO PRIORITY  ───────────────────── deck +work   
+   @errands          4     [-] (8)  NO PRIORITY  ───────────────── deck +work   
    @home             4      8 [ ]       Migrate analytics to new p @laptop      
    @laptop           4      9 [ ]       Pay rent due:2026-05-15 re due:2026-05-0
    @phone            3     10 [ ]       Pick up dry cleaning @erra              

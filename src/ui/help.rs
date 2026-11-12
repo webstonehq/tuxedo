@@ -58,9 +58,11 @@ fn sections(app: &App) -> (Vec<Section>, Vec<Section>) {
         Section {
             title: "NAVIGATION",
             entries: vec![
-                pair(app, CursorDown, CursorUp, "next / previous task"),
-                pair(app, CursorTop, CursorBottom, "first / last task"),
+                pair(app, CursorDown, CursorUp, "next / previous row"),
+                pair(app, CursorTop, CursorBottom, "first / last row"),
                 pair(app, HalfPageDown, HalfPageUp, "page down / up"),
+                action(app, PickGrouping, "group tasks"),
+                action(app, ToggleGroup, "collapse / expand group"),
             ],
         },
         Section {

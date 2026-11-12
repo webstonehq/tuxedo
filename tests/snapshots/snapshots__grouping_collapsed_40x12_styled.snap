@@ -1,0 +1,16 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_styled(terminal.backend().buffer())
+---
+{bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}▶{/}{fg=#e07a7a bg=#1f232b}▮{/}{fg=#8aa9c9 bg=#1f232b}◀{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b mod=bold}/tmp/tuxedo-snapshot.txt{/}{fg=#6b7280 bg=#1f232b}  •  15 tas{/}
+{bg=#1a1d23}                                        {/}
+{fg=#c8ccd4 bg=#3a4150}▶{/}{fg=#e07a7a bg=#3a4150}[+] {/}{fg=#6b7280 bg=#3a4150}(2){/}{fg=#c8ccd4 bg=#3a4150}  {/}{fg=#e07a7a bg=#3a4150 mod=bold}PRIORITY A{/}{fg=#c8ccd4 bg=#3a4150}  {/}{fg=#2a2f38 bg=#3a4150}──────────────────{/}
+{fg=#c8ccd4 bg=#1a1d23} {/}{fg=#d4b06a bg=#1a1d23}[-] {/}{fg=#6b7280 bg=#1a1d23}(3){/}{fg=#c8ccd4 bg=#1a1d23}  {/}{fg=#d4b06a bg=#1a1d23 mod=bold}PRIORITY B{/}{fg=#c8ccd4 bg=#1a1d23}  {/}{fg=#2a2f38 bg=#1a1d23}──────────────────{/}
+{fg=#6b7280 bg=#2f3947}  1 {/}{fg=#8aa9c9 bg=#2f3947}[x]   {/}{fg=#d4b06a bg=#2f3947 mod=bold}(B) {/}{fg=#c8ccd4 bg=#2f3947}Review pull requests for a{/}
+{fg=#6b7280 bg=#1a1d23}  2 [ ] {/}{fg=#8aa9c9 bg=#1a1d23}  {/}{fg=#d4b06a bg=#1a1d23 mod=bold}(B) {/}{fg=#c8ccd4 bg=#1a1d23}Renew passport before summ{/}
+{fg=#6b7280 bg=#1a1d23}  3 [ ] {/}{fg=#8aa9c9 bg=#1a1d23}  {/}{fg=#d4b06a bg=#1a1d23 mod=bold}(B) {/}{fg=#c8ccd4 bg=#1a1d23}Draft hiring rubric for se{/}
+{fg=#c8ccd4 bg=#1a1d23} {/}{fg=#7aa67a bg=#1a1d23}[-] {/}{fg=#6b7280 bg=#1a1d23}(2){/}{fg=#c8ccd4 bg=#1a1d23}  {/}{fg=#7aa67a bg=#1a1d23 mod=bold}PRIORITY C{/}{fg=#c8ccd4 bg=#1a1d23}  {/}{fg=#2a2f38 bg=#1a1d23}──────────────────{/}
+{fg=#6b7280 bg=#1a1d23}  4 [ ] {/}{fg=#8aa9c9 bg=#1a1d23}  {/}{fg=#7aa67a bg=#1a1d23 mod=bold}(C) {/}{fg=#c8ccd4 bg=#1a1d23}Pay quarterly estimated ta{/}
+{fg=#6b7280 bg=#1a1d23}  5 [ ] {/}{fg=#8aa9c9 bg=#1a1d23}  {/}{fg=#7aa67a bg=#1a1d23 mod=bold}(C) {/}{fg=#c8ccd4 bg=#1a1d23}Order new running shoes {/}{fg=#7fb3a8 bg=#1a1d23}+h{/}
+{fg=#1a1d23 bg=#8aa9c9 mod=bold} TASK SELECT {/}{fg=#8aa9c9 bg=#252a33}· 1 tasks selected{/}{bg=#252a33}         {/}
+{fg=#8aa9c9 bg=#1f232b}Notice: cleared 1 hidden selected task  {/}

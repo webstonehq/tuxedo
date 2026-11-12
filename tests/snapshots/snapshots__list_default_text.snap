@@ -4,17 +4,17 @@ expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL                           
                                                                                                     
- PROJECTS                  (2)  PRIORITY A  ────────────────────── priority  (A)                    
+ PROJECTS                  [-] (2)  PRIORITY A  ────────────────── priority  (A)                    
    +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   2026-05-01             
    +health           3      2   (A) Call dentist to reschedule cle due       2026-05-06  today      
-   +finance          2     (3)  PRIORITY B  ────────────────────── projects  +work                  
+   +finance          2     [-] (3)  PRIORITY B  ────────────────── projects  +work                  
    +home             1      3   (B) Review pull requests for auth  contexts  @laptop                
    +learning         1      4   (B) Renew passport before summer t                                  
    +personal         1      5   (B) Draft hiring rubric for senior RAW                              
-   +travel           1     (2)  PRIORITY C  ──────────────────────                                  
+   +travel           1     [-] (2)  PRIORITY C  ──────────────────                                  
                             6   (C) Pay quarterly estimated taxes  (A) 2026-05-01 Finish Q2 board   
  CONTEXTS                   7   (C) Order new running shoes +healt deck +work @laptop               
-   @errands          4     (8)  NO PRIORITY  ───────────────────── due:2026-05-06                   
+   @errands          4     [-] (8)  NO PRIORITY  ───────────────── due:2026-05-06                   
    @home             4      8       Migrate analytics to new pipel                                  
    @laptop           4      9       Pay rent due:2026-05-15 rec:+1                                  
    @phone            3     10       Pick up dry cleaning @errands                                   

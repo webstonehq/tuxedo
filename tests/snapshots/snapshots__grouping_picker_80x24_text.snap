@@ -1,0 +1,28 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(terminal.backend().buffer())
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tasks  •  sort:pr
+                                                                                
+ PROJECTS                  [-] (2)  PRIORITY A  ────────────────────────────────
+   +work             4      1 ▸ (A) Finish Q2 board deck +work @laptop due:2026-
+   +health           3      2   (A) Call dentist to reschedule cleaning @phone +
+   +finance          2     [-] (3)  PRIORITY B  ────────────────────────────────
+   +home             1      3   (B) Review pull requests for auth refactor +work
+   +learning    ┌ Group tasks ─────────────────────────────────┐ trip +travel @e
+   +personal    │   [x] Follow sort                            │or eng +work @la
+   +travel      │ ▶ [ ] None                                   │────────────────
+                │   [ ] Priority                               │s @home +finance
+ CONTEXTS       │   [ ] Due date                               │lth @errands    
+   @errands     │                                              │────────────────
+   @home        │j/k move · Enter select · Esc cancel          │eline +work @lap
+   @laptop      └──────────────────────────────────────────────┘+1m +finance @ho
+   @phone            3     10       Pick up dry cleaning @errands               
+                           11       Schedule annual physical @phone +health     
+                           12       Read "Designing Data-Intensive Applications"
+                           13       Send thank-you note to mentor @home         
+                           14       Plan Saturday hike with K. @phone +personal 
+                           15       Replace bathroom faucet washer +home @errand
+                                                                                
+                                                                                
+ PICK GROUPING  · Enter select · Esc cancel · 15 open · 2026-05-06

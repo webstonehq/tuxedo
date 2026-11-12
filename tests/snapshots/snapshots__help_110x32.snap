@@ -5,26 +5,26 @@ expression: buffer_to_text(terminal.backend().buffer())
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tasks  •  sor DETAIL                           
      ┌ tuxedo · HELP ──────────────────────────────────────────────────────────────────────────────────┐      
  PROJ│ NAVIGATION                                       FILTER & VIEW                                  │      
-   +w│ j, ↓ / k, ↑      next / previous task            /          search tasks                        │      
-   +h│ gg / G           first / last task               fp / fc    filter project / context            │      
+   +w│ j, ↓ / k, ↑      next / previous row             /          search tasks                        │      
+   +h│ gg / G           first / last row                fp / fc    filter project / context            │      
    +f│ Ctrl-d / Ctrl-u  page down / up                  ff / fs    saved filter: pick / save           │      
-   +h│                                                  S          cycle sort                          │      
-   +l│ TASK EDITING                                     l / a      list / archive view                 │      
-   +p│ n                new task                        A          archive completed                   │      
-   +t│ e / i            edit: normal / insert           H / F      show done / future                  │      
-     │ x / dd           complete / delete                                                              │ard   
- CONT│ r / p            reschedule / priority           LAYOUT & APPEARANCE                            │      
-   @e│ J / K            move down / up                  [ / ]      filter / detail pane                │      
-   @h│ + / c            project / context               T / D      theme / density                     │      
-   @l│ yy / yb          copy line / body                L / W      line numbers / week start           │      
-   @p│ o / O            open / create note              palette    cycle theme                         │      
-     │ u                undo task change                                                               │      
-     │                                                  SYSTEM                                         │      
-     │ TASK SELECTION                                   :, Ctrl-p  command palette                     │      
-     │ v                enter / leave selection         ? / ,      help / settings                     │      
-     │ Space            toggle selected row             s          phone capture QR                    │      
-     │                                                  Esc        cancel / clear                      │      
-     │                                                  q, Ctrl-c  quit                                │      
+   +h│ fg               group tasks                     S          cycle sort                          │      
+   +l│ Enter            collapse / expand group         l / a      list / archive view                 │      
+   +p│                                                  A          archive completed                   │      
+   +t│ TASK EDITING                                     H / F      show done / future                  │      
+     │ n                new task                                                                       │ard   
+ CONT│ e / i            edit: normal / insert           LAYOUT & APPEARANCE                            │      
+   @e│ x / dd           complete / delete               [ / ]      filter / detail pane                │      
+   @h│ r / p            reschedule / priority           T / D      theme / density                     │      
+   @l│ J / K            move down / up                  L / W      line numbers / week start           │      
+   @p│ + / c            project / context               palette    cycle theme                         │      
+     │ yy / yb          copy line / body                                                               │      
+     │ o / O            open / create note              SYSTEM                                         │      
+     │ u                undo task change                :, Ctrl-p  command palette                     │      
+     │                                                  ? / ,      help / settings                     │      
+     │ TASK SELECTION                                   s          phone capture QR                    │      
+     │ v                enter / leave selection         Esc        cancel / clear                      │      
+     │ Space            toggle selected row             q, Ctrl-c  quit                                │      
      │                                                                                                 │      
      │ ─────────────────────────────────────────────────────────────────────────────────────────────── │      
      │                                                                                                 │      

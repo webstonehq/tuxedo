@@ -651,3 +651,89 @@ fn calendar_controls_required_layouts() {
         }
     }
 }
+
+#[test]
+fn grouping_picker_and_collapsed_headers_required_sizes() {
+    for (w, h) in [(110, 32), (80, 24), (40, 12)] {
+        let mut app = make_app();
+        app.prefs.layout.right = false;
+        app.enter_pick_grouping();
+        app.pick_grouping_step(true);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).expect("terminal");
+        terminal.draw(|f| ui::draw(f, &app)).expect("draw");
+        let name = format!("grouping_picker_{w}x{h}");
+        insta::assert_snapshot!(
+            format!("{name}_text"),
+            buffer_to_text(terminal.backend().buffer())
+        );
+        insta::assert_snapshot!(
+            format!("{name}_styled"),
+            buffer_to_styled(terminal.backend().buffer())
+        );
+        app.pick_grouping_cancel();
+        app.prefs.layout.status_bar = false;
+        app.selection.toggle(0);
+        app.selection.toggle(2);
+        app.mode = Mode::Visual;
+        app.cursor = 0;
+        app.toggle_group();
+        terminal.draw(|f| ui::draw(f, &app)).expect("draw");
+        let name = format!("grouping_collapsed_{w}x{h}");
+        insta::assert_snapshot!(
+            format!("{name}_text"),
+            buffer_to_text(terminal.backend().buffer())
+        );
+        insta::assert_snapshot!(
+            format!("{name}_styled"),
+            buffer_to_styled(terminal.backend().buffer())
+        );
+    }
+}
+
+#[test]
+fn first_member_scroll_includes_its_header_and_all_collapsed_is_not_empty() {
+    let raw = format!(
+        "{}(B) first-b\n(B) second-b\n",
+        (0..25)
+            .map(|i| format!("(A) row-{i}\n"))
+            .collect::<String>()
+    );
+    let mut app = App::new(
+        PathBuf::from("/tmp/grouping-render-unused.txt"),
+        raw,
+        "2026-05-06".into(),
+        Config::default(),
+    );
+    app.prefs.layout.left = false;
+    app.prefs.layout.right = false;
+    app.prefs.density = Density::Compact;
+    // Start lower down, then move upward to the first B member.
+    app.cursor = app.display_rows().len() - 1;
+    render_text(&app, 80, 12);
+    app.cursor -= 1;
+    let text = render_text(&app, 80, 12);
+    assert!(
+        text.contains("PRIORITY B") && text.contains("first-b"),
+        "{text}"
+    );
+    let header_rows: Vec<_> = app
+        .display_rows()
+        .iter()
+        .filter_map(|r| match r {
+            tuxedo::app::DisplayRow::Header { key, .. } => Some(key.clone()),
+            _ => None,
+        })
+        .collect();
+    for group in header_rows {
+        app.cursor = app
+            .display_rows()
+            .iter()
+            .position(|r| matches!(r, tuxedo::app::DisplayRow::Header {key, ..} if *key == group))
+            .expect("header");
+        app.toggle_group();
+    }
+    let text = render_text(&app, 80, 12);
+    assert!(text.contains("PRIORITY A") && text.contains("PRIORITY B"));
+    assert!(!text.contains("no tasks match"));
+    assert!(text.contains("27 collapsed"));
+}

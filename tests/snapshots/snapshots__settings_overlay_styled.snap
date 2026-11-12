@@ -20,10 +20,10 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}BEHAVIOR{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                           {/}
 {fg=#c8ccd4 bg=#1a1d23}   default sort                {/}{fg=#6b7280 bg=#1a1d23}priority (S to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                                {/}
+{fg=#c8ccd4 bg=#1a1d23}   grouping                    {/}{fg=#6b7280 bg=#1a1d23}Follow sort (fg to choose){/}{fg=#c8ccd4 bg=#1a1d23}                                           {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}KEYBINDINGS{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                        {/}
 {fg=#c8ccd4 bg=#1a1d23}                               {/}{fg=#6b7280 bg=#1a1d23}press ? for the full list{/}{fg=#c8ccd4 bg=#1a1d23}                                            {/}
-{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}

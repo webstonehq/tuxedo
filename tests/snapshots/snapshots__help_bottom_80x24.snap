@@ -22,7 +22,7 @@ expression: buffer_to_text(terminal.backend().buffer())
   │                                                                          │  
   │ Commas separate aliases; / pairs keys with actions. 'palette' means      │  
   │ command palette only.                                                    │  
-  │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 53/53                          │  
+  │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 55/55                          │  
   └──────────────────────────────────────────────────────────────────────────┘  
                                                                                 
  HELP  · Esc close · j/k scroll · 15 open · 2026-05-06 · tuxedo 2026.8.1

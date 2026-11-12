@@ -9,7 +9,6 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1f232b}                          {/}{bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
 {fg=#c89a6e bg=#1f232b mod=bold} CONTEXTS{/}{fg=#c8ccd4 bg=#1f232b}                 {/}{bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
 {fg=#c8ccd4 bg=#1f232b}   {/}{fg=#6b7280 bg=#1f232b}tag with {/}{fg=#c89a6e bg=#1f232b}@context{/}{fg=#c8ccd4 bg=#1f232b}      {/}{bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
-{fg=#c8ccd4 bg=#1f232b}                          {/}{bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
 {fg=#c8ccd4 bg=#1f232b}                      {/}{fg=#2a2f38 bg=#1f232b}┌ {/}{fg=#8aa9c9 bg=#1f232b mod=bold}tuxedo{/}{fg=#6b7280 bg=#1f232b} · welcome {/}{fg=#2a2f38 bg=#1f232b}────────────────────────────────────┐{/}{fg=#c8ccd4 bg=#1f232b}                      {/}
 {fg=#c8ccd4 bg=#1f232b}                      {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1f232b}                    {/}{fg=#8aa9c9 bg=#1f232b}██{/}{fg=#c8ccd4 bg=#1f232b}          {/}{fg=#8aa9c9 bg=#1f232b}██{/}{fg=#c8ccd4 bg=#1f232b}                    {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1f232b}                      {/}
 {fg=#c8ccd4 bg=#1f232b}                      {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1f232b}                    {/}{fg=#8aa9c9 bg=#1f232b}████{/}{fg=#c8ccd4 bg=#1f232b}  {/}{fg=#e07a7a bg=#1f232b}██{/}{fg=#c8ccd4 bg=#1f232b}  {/}{fg=#8aa9c9 bg=#1f232b}████{/}{fg=#c8ccd4 bg=#1f232b}                    {/}{fg=#2a2f38 bg=#1f232b}│{/}{fg=#c8ccd4 bg=#1f232b}                      {/}
@@ -33,4 +32,5 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1f232b}                          {/}{bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
 {fg=#c8ccd4 bg=#1f232b}                          {/}{bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
 {fg=#c8ccd4 bg=#1f232b}                          {/}{bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
-{fg=#1a1d23 bg=#8aa9c9 mod=bold} WELCOME {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}c create ./todo.txt · s open sample · q quit{/}{bg=#252a33}       {/}{fg=#6b7280 bg=#252a33}0 open · 2026-05-06 · tuxedo 2026.8.1 {/}
+{fg=#c8ccd4 bg=#1f232b}                          {/}{bg=#1a1d23}                                        {/}{fg=#c8ccd4 bg=#1f232b}                                  {/}
+{fg=#1a1d23 bg=#8aa9c9 mod=bold} WELCOME {/}{fg=#a8b0bc bg=#252a33} · c create · s sample · q quit{/}{fg=#6b7280 bg=#252a33} · 0 open · 2026-05-06 · tuxedo 2026.8.1{/}{bg=#252a33}                    {/}

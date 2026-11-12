@@ -103,7 +103,14 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 let abs = start + i;
                 let is_sel = abs == cursor;
                 let entry = ENTRIES[hit.entry_idx];
-                render_row(entry, &hit.match_positions, is_sel, list_area.width, theme)
+                render_row(
+                    entry,
+                    app.keybinds.effective_keys(entry.action),
+                    &hit.match_positions,
+                    is_sel,
+                    list_area.width,
+                    theme,
+                )
             })
             .collect();
         frame.render_widget(Paragraph::new(lines).style(bg), list_area);
@@ -133,6 +140,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
 fn render_row<'a>(
     entry: palette::PaletteEntry,
+    keys: Vec<String>,
     match_positions: &[usize],
     selected: bool,
     width: u16,
@@ -168,7 +176,31 @@ fn render_row<'a>(
     // Label with per-byte match highlighting. `entry.label` is `&'static
     // str`, so all of these slices are `&'static str` and the spans borrow
     // them — no allocation per row.
-    let label = entry.label;
+    let total = usize::from(width);
+    // Keep a complete key visible before spending space on a long label.
+    // Help retains the full alias list when the palette cannot fit it.
+    let all_keys = keys.join(" / ");
+    let keys = if Line::raw(all_keys.as_str()).width() <= total.saturating_sub(12) {
+        all_keys
+    } else {
+        keys.into_iter()
+            .find(|key| Line::raw(key.as_str()).width() <= total.saturating_sub(8))
+            .unwrap_or_default()
+    };
+    let keys_cols = Line::raw(keys.as_str()).width() + 1;
+    let label_budget = total.saturating_sub(keys_cols + 4);
+    let mut label_end = 0;
+    let mut label_width = 0;
+    for (offset, ch) in entry.label.char_indices() {
+        let char_width = Span::raw(ch.to_string()).width();
+        if label_width + char_width > label_budget {
+            break;
+        }
+        label_width += char_width;
+        label_end = offset + ch.len_utf8();
+    }
+    let label = &entry.label[..label_end];
+    let truncated = label_end < entry.label.len();
     let mut cursor = 0usize;
     for &p in match_positions {
         if p < cursor || p >= label.len() {
@@ -186,17 +218,18 @@ fn render_row<'a>(
         spans.push(Span::styled(&label[cursor..], label_style));
     }
 
-    // Pad to right-align the keys.
-    let label_cols = label.chars().count() + 3; // 3 = sigil width above
-    let keys_cols = entry.keys.chars().count() + 1; // trailing space
-    let total = usize::from(width);
+    if truncated {
+        spans.push(Span::styled("…", label_style));
+    }
+    // Pad to right-align the complete keys.
+    let label_cols = label_width + usize::from(truncated) + 3;
     if label_cols + keys_cols < total {
         spans.push(Span::styled(
             " ".repeat(total - label_cols - keys_cols),
             Style::default().bg(bg),
         ));
     }
-    spans.push(Span::styled(entry.keys, Style::default().fg(dim_fg).bg(bg)));
+    spans.push(Span::styled(keys, Style::default().fg(dim_fg).bg(bg)));
     spans.push(Span::styled(" ", Style::default().bg(bg)));
 
     Line::from(spans).style(Style::default().bg(bg))

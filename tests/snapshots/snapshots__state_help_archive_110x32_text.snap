@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(buf)
+---
+ FILTERS                   ▶▮◀ done.txt  •  0 tasks  •  sort:completion-date DETAIL                           
+     ┌ tuxedo · HELP ──────────────────────────────────────────────────────────────────────────────────┐      
+ PROJ│ NAVIGATION                                       FILTER & VIEW                                  │      
+   +w│ j, ↓ / k, ↑      next / previous task            /          search tasks                        │      
+   +h│ gg / G           first / last task               fp / fc    filter project / context            │      
+   +f│ Ctrl-d / Ctrl-u  page down / up                  ff / fs    saved filter: pick / save           │      
+   +h│                                                  S          cycle sort                          │      
+   +l│ TASK EDITING                                     l / a      list / archive view                 │      
+   +p│ n                new task                        A          archive completed                   │      
+   +t│ e / i            edit: normal / insert           H / F      show done / future                  │      
+     │ x / dd           complete / delete                                                              │      
+ CONT│ r / p            reschedule / priority           LAYOUT & APPEARANCE                            │      
+   @e│ J / K            move down / up                  [ / ]      filter / detail pane                │      
+   @h│ + / c            project / context               T / D      theme / density                     │      
+   @l│ yy / yb          copy line / body                L / W      line numbers / week start           │      
+   @p│ o / O            open / create note              palette    cycle theme                         │      
+     │ u                undo task change                                                               │      
+     │                                                  SYSTEM                                         │      
+     │ TASK SELECTION                                   :, Ctrl-p  command palette                     │      
+     │ v                enter / leave selection         ? / ,      help / settings                     │      
+     │ Space            toggle selected row             s          phone capture QR                    │      
+     │                                                  Esc        cancel / clear                      │      
+     │                                                  q, Ctrl-c  quit                                │      
+     │                                                                                                 │      
+     │ ─────────────────────────────────────────────────────────────────────────────────────────────── │      
+     │                                                                                                 │      
+     │ INLINE EDITOR · fixed keys                       RECURRENCE · rec: picker                       │      
+     │ Enter               review / save draft          j, ↓, Tab        next field                    │      
+     │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 1/18                                                  │      
+     └─────────────────────────────────────────────────────────────────────────────────────────────────┘      
+                                                                                                              
+ HELP  · Esc close · j/k scroll · 0 archived · 2026-05-06 · tuxedo 2026.8.1

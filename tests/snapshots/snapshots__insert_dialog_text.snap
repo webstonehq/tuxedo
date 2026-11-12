@@ -13,15 +13,15 @@ expression: buffer_to_text(&buf)
    +personal         1      5   (B) Draft hiring rubric for senior RAW                              
    +travel           1     (2)  PRIORITY C  ──────────────────────                                  
                             6   (C) Pay quarterly estimated taxes  (A) 2026-05-01 Finish Q2 board   
- CONTEXTS                   7   (C) Order new running shoes +healt deck +work @laptop               
-   @errands          4     (8)┌ ADD TASK ────────────────────────────┐:2026-05-06                   
-   @home             4      8 │                                      │                              
-   @laptop           4      9 │  › groceries @errands due:2026-05-10█│                              
-   @phone            3     10 │  ok · pri A · due 2026-05-10 · 1 +pro│                              
-                           11 │                                      │                              
-                           12 │  format: (A) Buy milk +shop @home due│                              
-                           13 │                                      │                              
-                           14 └──────────────────────────────────────┘                              
+ CONTEXTS                   7 ┌ ADD TASK · Vim · Insert ─────────────┐k +work @laptop               
+   @errands          4     (8)│                                      │:2026-05-06                   
+   @home             4      8 │  › oceries @errands due:2026-05-10█  │                              
+   @laptop           4      9 │  ok · pri A · due 2026-05-10 · 1 +pro│                              
+   @phone            3     10 │                                      │                              
+                           11 │  Enter save · Esc→Normal→cancel      │                              
+                           12 │                                      │                              
+                           13 └──────────────────────────────────────┘                              
+                           14       Plan Saturday hike with K. @ph                                  
                            15       Replace bathroom faucet washer                                  
                                                                                                     
                                                                                                     
@@ -33,4 +33,4 @@ expression: buffer_to_text(&buf)
                                                                                                     
                                                                                                     
                                                                                                     
- INSERT   Enter save · Esc normal                            15 open · 2026-05-06 · tuxedo 2026.8.1
+ Vim INSERT  · 15 open · 2026-05-06 · tuxedo 2026.8.1

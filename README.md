@@ -294,9 +294,7 @@ begin_prompt_context = "c"
 copy_line            = "yy"
 copy_body            = "yb"
 undo                 = "u"
-# begin_prompt_project defaults to "+", which can't be written here (the
-# parser reads "+" as a modifier separator). Pick another key to move it, e.g.
-# begin_prompt_project = "P"
+begin_prompt_project = "+"
 
 # Filtering, sort, view
 begin_search        = "/"
@@ -332,13 +330,15 @@ escape_stack         = "Esc"
 quit                 = "q"
 ```
 
-Custom bindings are checked before the defaults. The default bindings remain
-available unless the same key or two-key chord is bound to another action in
-the file. Action names are snake_case, matching the names in the command
-palette where possible: `toggle_complete`, `pick_project`,
-`open_theme_picker`, and so on. Key names can be single characters, two-key
-chords like `ZZ`, modifier forms like `Ctrl-n` / `Alt-x`, named keys like
-`Esc`, `Enter`, `Tab`, arrows, `Page-Up`, `Page-Down`, or `F1` through `F24`.
+Custom bindings take precedence over defaults, including chord prefixes and
+second keys. Help and command-palette labels show reachable bindings and
+aliases. Help and inline-editor controls use fixed bindings.
+
+Action names are snake_case, matching the command palette where possible:
+`toggle_complete`, `pick_project`, `open_theme_picker`, and so on. Key names
+can be single characters, two-key chords like `ZZ`, modifier forms like
+`Ctrl-n` / `Alt-x`, named keys like `Esc`, `Enter`, `Tab`, arrows,
+`Page-Up`, `Page-Down`, or `F1` through `F24`.
 
 ### Recurrence builder keys
 
@@ -394,10 +394,11 @@ must be fully visible within one sort tie.
 
 ### Edit dialog
 
-The edit dialog uses vim-style modal editing. Press `i` to edit the current task
-starting in **Insert mode** — start typing immediately. Press `e` to start in
-**Normal mode** so you can navigate before changing anything. The add prompt
-(`n`) also opens directly in Insert mode.
+The edit dialog uses Vim-style modal editing, with the profile and mode in
+its title. Press `i` to edit in **Insert mode**, or `e` for **Normal mode**.
+The add prompt (`n`) starts in Insert mode. Long drafts scroll to keep the
+cursor visible; mode and save/cancel controls also work with the status bar
+hidden.
 
 The modal keys below apply in Normal mode:
 
@@ -438,6 +439,9 @@ The modal keys below apply in Normal mode:
 | `o` | open the current task's existing `note:<path>` in `$VISUAL` / `$EDITOR` |
 | `O` | create the current task's note if needed, then open it |
 
+Selected tasks are checked and counted. Search input, selection counts,
+pending chords and notices remain visible with the status bar hidden.
+
 While a `+project` or `@context` filter is active, `n` seeds the add prompt
 with the matching tags so a task added under a filter stays in view —
 backspace to drop them. A `/`-search filter seeds nothing.
@@ -461,6 +465,9 @@ backspace to drop them. A `/`-search filter seeds nothing.
 | `?` | help overlay |
 | `,` | settings overlay |
 | `q` | quit |
+
+In help, scroll with `j` / `k`, arrows or Page Up / Page Down; close with
+`Esc`, `?` or `q`.
 
 Two-key chord prompts (`gg`, `dd`, `yy`, `yb`, `fp`, `fc`, `ff`, `fs`) show
 a `g…` / `d…` / `y…` / `f…` indicator in the status-bar mode chip while the

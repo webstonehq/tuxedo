@@ -13,24 +13,24 @@ expression: buffer_to_text(&buf)
    +personal         1      5   (B) Draft hiring rubric for senior RAW                              
    +travel           1     (2)  PRIORITY C  ──────────────────────                                  
                             6   (C) Pay quarterly estimated taxes  (A) 2026-05-01 Finish Q2 board   
- CONTEXTS                   7   (C) Order new running shoes +healt deck +work @laptop               
-   @errands          4     (8)┌ ADD TASK ────────────────────────────┐:2026-05-06                   
-   @home             4      8 │                                      │                              
-   @laptop           4      9 │  › Water the plants +home█           │                              
-   @phone            3     10 │  ok · 1 +project                     │                              
-                           11 │                                      │                              
-                           12 │  format: (A) Buy milk +shop @home due│                              
-                           13 │                                      │                              
-                           14 └──────────────────────────────────────┘                              
-                           15     ┌ ↻ REPEAT ────────────────────────────────────────────────┐      
-                                  │                                                          │      
+ CONTEXTS                   7 ┌ ADD TASK · Vim · Insert ─────────────┐k +work @laptop               
+   @errands          4     (8)│                                      │:2026-05-06                   
+   @home             4      8 │  › Water the plants +home█           │                              
+   @laptop           4      9 │  ok · 1 +project                     │                              
+   @phone            3     10 │                                      │                              
+                           11 │  Repeat picker: save/cancel below    │                              
+                           12 │                                      │                              
+                           13 └──────────────────────────────────────┘                              
+                           14     ┌ ↻ REPEAT ────────────────────────────────────────────────┐      
+                           15     │                                                          │      
                                   │  every  1    day  business  week  month  year            │      
                                   │                                                          │      
                                   │  mode   strict   after-complete        next: Wed May 13  │      
                                   │                                                          │      
                                   │  → writes rec:+1w                                        │      
                                   │                                                          │      
-                                  │  jk field · hl/+- change · Enter save · Esc cancel       │      
+                                  │ Enter save · Esc cancel · j/k field · l/h value          │      
                                   └──────────────────────────────────────────────────────────┘      
                                                                                                     
- INSERT   Enter save · Esc normal                            15 open · 2026-05-06 · tuxedo 2026.8.1
+                                                                                                    
+ Vim INSERT  · 15 open · 2026-05-06 · tuxedo 2026.8.1

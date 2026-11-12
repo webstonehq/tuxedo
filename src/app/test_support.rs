@@ -20,5 +20,8 @@ pub(crate) fn build_app(raw: &str) -> App {
 pub(crate) fn build_app_with_config(raw: &str, cfg: Config) -> App {
     let path = test_path();
     std::fs::write(&path, raw).unwrap();
-    App::new(path, raw.to_string(), "2026-05-06".into(), cfg)
+    let config_path = path.with_extension("config.toml");
+    let mut app = App::new(path, raw.to_string(), "2026-05-06".into(), cfg);
+    app.config_path = Some(config_path);
+    app
 }

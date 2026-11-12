@@ -107,10 +107,8 @@ pub struct App {
     flash_state: Flash,
     pub chord: Chord,
     pub file_path: PathBuf,
-    /// Resolved path of the on-disk config file. Set by the binary after
-    /// construction so the settings overlay can render a stable, real path
-    /// without the renderer having to reach into the environment itself.
-    /// `None` in tests/examples that don't care about the value.
+    /// Config path set by the binary, shared by preference saves, reloads and
+    /// the settings display. `None` uses the XDG default for preference saves.
     pub config_path: Option<PathBuf>,
     pub should_quit: bool,
     visible_cache: Vec<usize>,
@@ -355,11 +353,13 @@ impl App {
         self.prefs.sort_label()
     }
 
-    /// Persist preferences. On failure, flashes a short error so the user
-    /// sees the problem inside the TUI (writing to stderr would smash the
-    /// alt-screen).
+    /// Save preferences to `config_path` or the XDG default; flash any error.
     pub fn save_prefs(&mut self) {
-        if let Err(e) = self.prefs.save() {
+        let result = match &self.config_path {
+            Some(path) => self.prefs.save_to(path),
+            None => self.prefs.save(),
+        };
+        if let Err(e) = result {
             self.flash(format!("config save failed: {e}"));
         }
     }

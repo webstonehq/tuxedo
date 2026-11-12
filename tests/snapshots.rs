@@ -43,6 +43,13 @@ const FIXTURE_PATH: &str = "/tmp/tuxedo-snapshot.txt";
 /// the snapshot and break on any other machine (CI included).
 const FIXTURE_CONFIG_PATH: &str = "/tmp/tuxedo-snapshot.toml";
 
+fn scratch_config_path() -> PathBuf {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static N: AtomicUsize = AtomicUsize::new(0);
+    let n = N.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("tuxedo-snapshot-{}-{n}.toml", std::process::id()))
+}
+
 fn make_app() -> App {
     // Seed the fixture file on disk so any snapshot test that exercises a
     // mutation (which calls `check_external_changes` and compares disk vs
@@ -56,7 +63,7 @@ fn make_app() -> App {
         "2026-05-06".to_string(),
         Config::default(),
     );
-    app.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.config_path = Some(scratch_config_path());
     // Compact density keeps each scene dense and stable: blank-line counts
     // shift with density, which would churn snapshots without adding signal.
     app.prefs.density = Density::Compact;
@@ -280,7 +287,7 @@ fn list_sidebar_empty_hints() {
         "2026-05-06".to_string(),
         Config::default(),
     );
-    app.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
+    app.config_path = Some(scratch_config_path());
     app.prefs.density = Density::Compact;
     snapshot_app("list_sidebar_empty_hints", &app);
 }
@@ -302,6 +309,8 @@ fn help_overlay() {
 #[test]
 fn settings_overlay() {
     let mut app = make_app();
+    // Rendering only: keep the displayed path stable without saving to it.
+    app.config_path = Some(PathBuf::from(FIXTURE_CONFIG_PATH));
     app.mode = Mode::Settings;
     snapshot_app("settings_overlay", &app);
 }
@@ -518,6 +527,7 @@ fn list_scrolls_to_keep_cursor_visible_when_below_fold() {
         "2026-05-06".to_string(),
         Config::default(),
     );
+    app.config_path = Some(scratch_config_path());
     app.prefs.density = Density::Compact;
     app.prefs.layout.left = false;
     app.prefs.layout.right = false;

@@ -1,11 +1,9 @@
-//! Persisted UI preferences, located per the XDG Base Directory Specification.
+//! Persisted configuration, defaulting to
+//! `${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/config.toml`.
 //!
-//! Path: `${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/config.toml`
-//!
-//! Format: simple `key = value` lines. Lines starting with `#` and blank lines
-//! are ignored. Unknown keys are ignored so older binaries won't choke on
-//! newer files. Load failures fall back to defaults silently; save failures
-//! print to stderr but never panic.
+//! Uses simple `key = value` lines; comments, blank lines and unknown keys are
+//! ignored. Load failures use defaults; save methods return I/O errors.
+//! Explicit-path methods let callers use another destination.
 
 use std::fmt::Write as _;
 use std::fs;

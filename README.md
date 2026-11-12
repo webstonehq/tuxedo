@@ -401,9 +401,9 @@ starting in **Insert mode** — start typing immediately. Press `e` to start in
 **Normal mode** so you can navigate before changing anything. The add prompt
 (`n`) also opens directly in Insert mode.
 
-The dialog shows the **Vim** profile and **Normal** or **Insert** mode directly
-above the draft, with save and mode-specific Escape guidance inside the dialog.
-These remain visible when the status bar is hidden. Long drafts scroll to keep
+The dialog title shows **ADD TASK** or **EDIT TASK** beside the **Vim** profile
+and **Normal** or **Insert** mode. The padded draft and save/Escape guidance stay
+inside the dialog. These remain visible when the status bar is hidden. Long drafts scroll to keep
 the cursor visible.
 
 The modal keys below apply in Normal mode:

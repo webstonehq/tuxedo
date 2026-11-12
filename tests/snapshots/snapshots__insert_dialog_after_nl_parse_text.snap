@@ -13,12 +13,12 @@ expression: buffer_to_text(&buf)
    +personal         1      5   (B) Draft hiring rubric for senior RAW                              
    +travel           1     (2)  PRIORITY C  ──────────────────────                                  
                             6   (C) Pay quarterly estimated taxes  (A) 2026-05-01 Finish Q2 board   
- CONTEXTS                   7 ┌ ADD TASK ────────────────────────────┐k +work @laptop               
-   @errands          4     (8)│ Vim · Normal                         │:2026-05-06                   
-   @home             4      8 │  › bank due:2026-06-01 rec:+1m t:-3d█│                              
+ CONTEXTS                   7 ┌ ADD TASK · Vim · Normal ─────────────┐k +work @laptop               
+   @errands          4     (8)│                                      │:2026-05-06                   
+   @home             4      8 │  › nk due:2026-06-01 rec:+1m t:-3d█  │                              
    @laptop           4      9 │  ok · due 2026-06-01 · 1 +project 1 @│                              
    @phone            3     10 │                                      │                              
-                           11 │Enter review/save · Esc cancel        │                              
+                           11 │  Enter review/save · Esc cancel      │                              
                            12 │                                      │                              
                            13 └──────────────────────────────────────┘                              
                            14       Plan Saturday hike with K. @ph                                  

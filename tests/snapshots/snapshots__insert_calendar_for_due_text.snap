@@ -13,9 +13,9 @@ expression: buffer_to_text(&buf)
    +personal         1      5   (B) Draft hiring rubric for senior RAW                              
    +travel           1     (2)  PRIORITY C  ──────────────────────                                  
                             6   (C) Pay quarterly estimated taxes  (A) 2026-05-01 Finish Q2 board   
- CONTEXTS                   7 ┌ ADD TASK ────────────────────────────┐k +work @laptop               
-   @errands          4     (8)│ Vim · Insert                         │:2026-05-06                   
-   @home             4      8 │  › fore summer trip +travel @errands█│                              
+ CONTEXTS                   7 ┌ ADD TASK · Vim · Insert ─────────────┐k +work @laptop               
+   @errands          4     (8)│                                      │:2026-05-06                   
+   @home             4      8 │  › re summer trip +travel @errands█  │                              
    @laptop           4      9 │  ok · pri A · 1 +project 1 @context  │                              
    @phone            3     10 │                                      │                              
                            11 │                                      │                              

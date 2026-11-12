@@ -9,8 +9,8 @@ expression: buffer_to_text(buf)
    +health           3      2   (A) Call dentist to reschedule cle due       202
    +finance          2     (3)  PRIORITY B  ────────────────────── projects  +wo
    +home             1      3   (B) Review pull requests for auth  contexts  @la
-   +learning        ┌ ADD TASK ────────────────────────────┐mmer t              
-   +personal        │ Vim · Insert                         │senior RAW          
+   +learning        ┌ ADD TASK · Vim · Insert ─────────────┐mmer t              
+   +personal        │                                      │senior RAW          
    +travel          │  › Example t:█                       │──────              
                     │  o┌ THRESHOLD ─────────────────────────────────────┐6-05-0
  CONTEXTS           │   │  ‹  May 2026  ›                                │Q2 boa

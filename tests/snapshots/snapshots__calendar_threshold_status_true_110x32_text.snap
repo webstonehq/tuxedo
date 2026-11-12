@@ -13,8 +13,8 @@ expression: buffer_to_text(buf)
    +personal         1      5   (B) Draft hiring rubric for senior eng +work RAW                              
    +travel           1     (2)  PRIORITY C  ────────────────────────────────                                  
                             6   (C) Pay quarterly estimated taxes @home +fin (A) 2026-05-01 Finish Q2 board   
- CONTEXTS                   7   (C)┌ ADD TASK ────────────────────────────┐s deck +work @laptop               
-   @errands          4     (8)  NO │ Vim · Insert                         │─ due:2026-05-06                   
+ CONTEXTS                   7   (C)┌ ADD TASK · Vim · Insert ─────────────┐s deck +work @laptop               
+   @errands          4     (8)  NO │                                      │─ due:2026-05-06                   
    @home             4      8      │  › Example t:█                       │                                   
    @laptop           4      9      │  ok                                  │e                                  
    @phone            3     10      │                                      │                                   

@@ -10,8 +10,8 @@ expression: buffer_to_text(buf)
    +finance          2     (3)  PRIORITY B  ────────────────────── projects  +wo
    +home             1      3   (B) Review pull requests for auth  contexts  @la
    +learning         1      4   (B) Renew passport before summer t              
-   +personal        ┌ ADD TASK ────────────────────────────┐senior RAW          
-   +travel          │ Vim · Insert                         │──────              
+   +personal        ┌ ADD TASK · Vim · Insert ─────────────┐senior RAW          
+   +travel          │                                      │──────              
                     │  › Example due:█                     │taxes  (A) 2026-05-0
  CONTEXTS           │  o┌ DUE ───────────────────────────────────────────┐Q2 boa
    @errands         │   │  ‹  May 2026  ›                                │ork   

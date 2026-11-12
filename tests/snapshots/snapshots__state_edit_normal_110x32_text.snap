@@ -14,12 +14,12 @@ expression: buffer_to_text(buf)
    +travel           1     (2)  PRIORITY C  ────────────────────────────────                                  
                             6   (C) Pay quarterly estimated taxes @home +fin (A) 2026-05-01 Finish Q2 board   
  CONTEXTS                   7   (C) Order new running shoes +health @errands deck +work @laptop               
-   @errands          4     (8)  NO ┌ EDIT TASK ───────────────────────────┐─ due:2026-05-06                   
-   @home             4      8      │ Vim · Normal                         │                                   
-   @laptop           4      9      │  › w current interaction +demo @desk█│e                                  
+   @errands          4     (8)  NO ┌ EDIT TASK · Vim · Normal ────────────┐─ due:2026-05-06                   
+   @home             4      8      │                                      │                                   
+   @laptop           4      9      │  › current interaction +demo @desk█  │e                                  
    @phone            3     10      │  ok · pri A · 1 +project 1 @context  │                                   
                            11      │                                      │                                   
-                           12      │Enter save · Esc cancel               │i                                  
+                           12      │  Enter save · Esc cancel             │i                                  
                            13      │                                      │                                   
                            14      └──────────────────────────────────────┘o                                  
                            15       Replace bathroom faucet washer +home @er

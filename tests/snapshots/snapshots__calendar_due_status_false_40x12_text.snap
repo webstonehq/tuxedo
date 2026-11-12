@@ -4,8 +4,8 @@ expression: buffer_to_text(buf)
 ---
  ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas
                                         
-┌ ADD TASK ────────────────────────────┐
-│ Vim · Insert                         │
+┌ ADD TASK · Vim · Insert ─────────────┐
+│                                      │
 │  › Example due:█                     │
 ┌ DUE ─────────────────────────────────┐
 │    S   M   T   W   T   F   S         │

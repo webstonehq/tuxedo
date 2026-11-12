@@ -10,12 +10,12 @@ expression: buffer_to_text(buf)
    +finance          2     (3)  PRIORITY B  ────────────────────── projects  +wo
    +home             1      3   (B) Review pull requests for auth  contexts  @la
    +learning         1      4   (B) Renew passport before summer t              
-   +personal        ┌ EDIT TASK ───────────────────────────┐senior RAW          
-   +travel          │ Vim · Normal                         │──────              
-                    │  › w current interaction +demo @desk█│taxes  (A) 2026-05-0
+   +personal        ┌ EDIT TASK · Vim · Normal ────────────┐senior RAW          
+   +travel          │                                      │──────              
+                    │  › current interaction +demo @desk█  │taxes  (A) 2026-05-0
  CONTEXTS           │  ok · pri A · 1 +project 1 @context  │+healt Finish Q2 boa
    @errands         │                                      │────── deck +work   
-   @home            │Enter save · Esc cancel               │ pipel @laptop      
+   @home            │  Enter save · Esc cancel             │ pipel @laptop      
    @laptop          │                                      │rec:+1 due:2026-05-0
    @phone           └──────────────────────────────────────┘rands               
                            11       Schedule annual physical @phon              

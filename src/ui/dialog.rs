@@ -339,25 +339,36 @@ fn visible_highlighted_draft<'a>(app: &'a App, width: u16) -> Vec<Span<'a>> {
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
-    let title = if app.selection.editing().is_some() {
-        " EDIT TASK "
+    let action = if app.selection.editing().is_some() {
+        "EDIT TASK"
     } else {
-        " ADD TASK "
+        "ADD TASK"
     };
     let compact = area.height < 3 || area.width < 3;
+    let mode = app.draft.input_mode().label();
+    let profile = app.draft.editor_profile_label();
+    let short_action = if app.selection.editing().is_some() {
+        "EDIT"
+    } else {
+        "ADD"
+    };
+    let titles = [
+        format!(" {action} · {profile} · {mode} "),
+        format!(" {action} · {profile} {} ", &mode[..1]),
+        format!(" {short_action} · {profile} {} ", &mode[..1]),
+        format!(" {short_action} {} ", &mode[..1]),
+    ];
+    let title = titles
+        .into_iter()
+        .find(|title| {
+            Span::raw(title.as_str()).width() <= usize::from(area.width.saturating_sub(2))
+        })
+        .unwrap_or_default();
     let block = Block::default()
         .borders(if compact { Borders::NONE } else { Borders::ALL })
         .border_style(Style::default().fg(theme.border).bg(theme.panel))
         .title(Line::from(vec![Span::styled(
-            if area.height < 4 {
-                format!(
-                    " {} · {}",
-                    app.draft.editor_profile_label(),
-                    app.draft.input_mode().label()
-                )
-            } else {
-                title.to_string()
-            },
+            title,
             Style::default()
                 .fg(theme.accent)
                 .add_modifier(Modifier::BOLD),
@@ -378,10 +389,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .areas(inner);
         (mode, input, preview, hint)
     } else {
-        // Prioritize active input, mode and essential controls over preview.
-        let mode_h = u16::from(inner.height >= 2);
-        let hint_h = u16::from(inner.height >= 3);
-        let preview_h = u16::from(inner.height >= 4);
+        // The title owns the mode; only borderless panes need an interior label.
+        let mode_h = u16::from(compact && inner.height >= 2);
+        let hint_h = u16::from(inner.height >= 2 + mode_h);
+        let preview_h = u16::from(inner.height >= 3 + mode_h);
         let [mode, input, preview, hint] = Layout::vertical([
             Constraint::Length(mode_h),
             Constraint::Length(1),
@@ -391,35 +402,26 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .areas(inner);
         (mode, input, preview, hint)
     };
-    let mode_text = if mode_area.width >= 12 {
-        format!(
-            " {} · {}",
-            app.draft.editor_profile_label(),
-            app.draft.input_mode().label()
-        )
-    } else if mode_area.width >= 5 {
-        format!(
-            "{} {}",
-            app.draft.editor_profile_label(),
-            &app.draft.input_mode().label()[..1]
-        )
-    } else {
-        app.draft.input_mode().label()[..1].to_string()
-    };
-    frame.render_widget(
-        Paragraph::new(mode_text).style(
-            Style::default()
-                .fg(theme.mode_fg)
-                .bg(theme.mode_bg)
-                .add_modifier(Modifier::BOLD),
-        ),
-        mode_area,
-    );
+    if compact {
+        frame.render_widget(
+            Paragraph::new(format!("{profile} {}", &mode[..1])).style(
+                Style::default()
+                    .fg(theme.accent)
+                    .bg(theme.panel)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            mode_area,
+        );
+    }
 
     let prefix_width = if input_area.width >= 8 { 4 } else { 0 };
-    let [prefix_area, content_area] =
-        Layout::horizontal([Constraint::Length(prefix_width), Constraint::Min(0)])
-            .areas(input_area);
+    let right_pad = if input_area.width >= 12 { 2 } else { 0 };
+    let [prefix_area, content_area, _right_padding] = Layout::horizontal([
+        Constraint::Length(prefix_width),
+        Constraint::Min(0),
+        Constraint::Length(right_pad),
+    ])
+    .areas(input_area);
     frame.render_widget(
         Paragraph::new("  › ").style(
             Style::default()
@@ -439,6 +441,13 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(
         Paragraph::new(preview_line(app)).style(Style::default().bg(theme.panel)),
         preview_area,
+    );
+    let hint_pad = if hint_area.width >= 12 { 2 } else { 0 };
+    let hint_area = Rect::new(
+        hint_area.x + hint_pad,
+        hint_area.y,
+        hint_area.width.saturating_sub(hint_pad * 2),
+        hint_area.height,
     );
     frame.render_widget(
         Paragraph::new(editor_hint(app, hint_area.width))
@@ -1528,6 +1537,52 @@ mod tests {
                 assert!(text.contains("draft text█"));
                 assert!(text.contains("Enter"));
                 assert!(text.contains("Esc"));
+            }
+        }
+    }
+
+    #[test]
+    fn action_mode_title_and_padded_input_survive_required_layouts() {
+        use crate::app::DialogInputMode;
+        use ratatui::style::Modifier;
+        for editing in [false, true] {
+            for mode in [DialogInputMode::Normal, DialogInputMode::Insert] {
+                let mut app = build_insert_app("plain\n", "draft text");
+                app.prefs.layout.status_bar = false;
+                app.draft.set_input_mode(mode);
+                if editing {
+                    app.selection.enter_edit(0);
+                }
+                for (width, height) in [(110, 32), (80, 24), (30, 8)] {
+                    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+                    terminal.draw(|frame| crate::ui::draw(frame, &app)).unwrap();
+                    let buf = terminal.backend().buffer();
+                    let top = dialog_top(buf);
+                    let title: String = (0..width).map(|x| buf[(x, top)].symbol()).collect();
+                    let action = if editing { "EDIT TASK" } else { "ADD TASK" };
+                    assert!(title.contains(&format!("{action} · Vim · {}", mode.label())));
+                    let left = (0..width).find(|&x| buf[(x, top)].symbol() == "┌").unwrap();
+                    let right = (left..width)
+                        .find(|&x| buf[(x, top)].symbol() == "┐")
+                        .unwrap();
+                    for x in left + 1..right {
+                        assert_eq!(buf[(x, top + 1)].symbol(), " ");
+                    }
+                    let input: String =
+                        (left..=right).map(|x| buf[(x, top + 2)].symbol()).collect();
+                    assert!(input.starts_with("│  › "));
+                    assert!(input.contains("draft text█"));
+                    assert!(input.ends_with("  │"));
+                    let mode_x = (left..right)
+                        .find(|&x| buf[(x, top)].symbol() == "V")
+                        .unwrap();
+                    let cell = &buf[(mode_x, top)];
+                    assert_eq!(cell.fg, app.theme().accent);
+                    assert_ne!(cell.fg, cell.bg);
+                    assert!(cell.modifier.contains(Modifier::BOLD));
+                    let text: String = buf.content.iter().map(|c| c.symbol()).collect();
+                    assert_eq!(text.matches("Vim").count(), 1);
+                }
             }
         }
     }

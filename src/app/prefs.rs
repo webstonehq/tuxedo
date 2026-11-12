@@ -144,14 +144,8 @@ impl Prefs {
         format!("week_start: {}", self.week_start)
     }
 
-    /// Persist to an explicit config path. Returns the IO error so the
-    /// caller can flash it (writing to stderr from inside the alt-screen
-    /// would corrupt the TUI). Saving is best-effort — callers that don't
-    /// care about reporting can `let _ = prefs.save_to(path);`.
-    ///
-    /// Loads the on-disk config first so non-pref fields (like
-    /// `share_token` / `share_port`, owned by the capture server) are
-    /// preserved across pref toggles.
+    /// Merge preferences into the config at `path`, preserving other fields.
+    /// Returns I/O errors for the caller to report.
     pub fn save_to(&self, path: &Path) -> io::Result<()> {
         let mut cfg = Config::load_from(path);
         cfg.theme = Some(self.theme().name.to_string());

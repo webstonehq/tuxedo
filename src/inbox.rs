@@ -5,7 +5,7 @@
 //! sibling `inbox.txt`. The running TUI drains it on each external-change
 //! poll (~250 ms): each line is run through the natural-language
 //! pipeline, given a creation date if missing, validated, and merged
-//! into `todo.txt`. See [`crate::app::App::drain_inbox`] for the merge
+//! into `todo.txt`. See [`crate::core::Store::drain_inbox`] for the merge
 //! wiring; this module owns the pure per-line transformation.
 
 use std::path::{Path, PathBuf};

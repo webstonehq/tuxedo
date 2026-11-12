@@ -294,9 +294,7 @@ begin_prompt_context = "c"
 copy_line            = "yy"
 copy_body            = "yb"
 undo                 = "u"
-# begin_prompt_project defaults to "+", which can't be written here (the
-# parser reads "+" as a modifier separator). Pick another key to move it, e.g.
-# begin_prompt_project = "P"
+begin_prompt_project = "+"
 
 # Filtering, sort, view
 begin_search        = "/"

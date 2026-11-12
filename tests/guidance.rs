@@ -40,8 +40,8 @@ fn help_uses_effective_keys_and_scrolls_to_editor_recurrence_and_format() {
         app.help_scroll.set(0);
         let first = screen(&app, width, height);
         if width >= 80 {
-            assert!(first.contains("zz: new task"));
-            assert!(!first.contains(" n: new task"));
+            assert!(first.contains("zz") && first.contains("new task"));
+            assert!(!first.contains("n: new task"));
             assert!(first.contains("scroll"));
         }
         let mut all = first;
@@ -53,7 +53,7 @@ fn help_uses_effective_keys_and_scrolls_to_editor_recurrence_and_format() {
         assert!(all.contains("RECURRENCE"));
         assert!(all.contains("FORMAT"));
         if width >= 80 {
-            assert!(all.contains("Enter / j: save recurrence"));
+            assert!(all.contains("Enter, j") && all.contains("save recurrence"));
         }
         let bottom = app.help_scroll.get();
         app.help_scroll.set(u16::MAX);
@@ -85,6 +85,35 @@ fn help_draws_safely_in_tiny_panes() {
             screen(&app, width, height);
         }
     }
+}
+
+#[test]
+fn default_help_keeps_the_task_overview_together_and_fits_a_large_pane() {
+    let mut app = app();
+    app.mode = Mode::Help;
+    let text = screen(&app, 110, 32);
+    for heading in [
+        "NAVIGATION",
+        "TASK EDITING",
+        "TASK SELECTION",
+        "FILTER & VIEW",
+        "LAYOUT & APPEARANCE",
+        "SYSTEM",
+    ] {
+        assert!(text.contains(heading), "missing {heading}");
+    }
+    assert!(text.contains("quit"));
+    let text = screen(&app, 164, 52);
+    for heading in ["INLINE EDITOR", "RECURRENCE", "FORMAT"] {
+        assert!(text.contains(heading), "missing {heading}");
+    }
+    app.help_scroll.set(u16::MAX);
+    screen(&app, 164, 52);
+    assert_eq!(
+        app.help_scroll.get(),
+        0,
+        "default help should fit this pane"
+    );
 }
 
 #[test]

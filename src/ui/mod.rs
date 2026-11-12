@@ -35,7 +35,7 @@ const DIALOG_H: u16 = 8;
 const DIALOG_MIN_W: u16 = 40;
 const DIALOG_MAX_W: u16 = 100;
 
-const HELP_MAX_H: u16 = 29;
+const HELP_MAX_H: u16 = 44;
 const HELP_MIN_W: u16 = 76;
 const HELP_MAX_W: u16 = 120;
 

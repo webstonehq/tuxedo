@@ -453,6 +453,7 @@ fn editor_hint(app: &App, width: u16) -> String {
         if let Some(overlay) = app.draft.overlay() {
             return match overlay {
                 DraftOverlay::RecurrenceBuilder(_) => "Repeat picker: save/cancel below".into(),
+                DraftOverlay::Calendar(_) => String::new(),
                 _ => "Enter choose · Esc back".into(),
             };
         }
@@ -882,14 +883,32 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     };
     let popup_w: u16 = 50u16.min(screen.width.max(40));
     let popup_h: u16 = 13;
-    let area = anchor_below_dialog(dlg, screen, popup_w, popup_h);
+    // Preserve the editor's profile/input rows when the popup must move up.
+    // On short panes the calendar grid yields space before its controls do.
+    let below_input = dlg.y.saturating_add(3).min(screen.bottom());
+    let available = Rect::new(
+        screen.x,
+        below_input,
+        screen.width,
+        screen.bottom() - below_input,
+    );
+    let calendar_screen = if available.height >= 3 {
+        available
+    } else {
+        screen
+    };
+    let area = anchor_below_dialog(dlg, calendar_screen, popup_w, popup_h);
     frame.render_widget(Clear, area);
     let label = match state.target {
         CalendarTarget::Due => "DUE",
         CalendarTarget::Threshold => "THRESHOLD",
     };
     let block = Block::default()
-        .borders(Borders::ALL)
+        .borders(if area.height < 3 || area.width < 3 {
+            Borders::NONE
+        } else {
+            Borders::ALL
+        })
         .border_style(Style::default().fg(theme.border).bg(theme.panel))
         .title(Line::from(Span::styled(
             format!(" {label} "),
@@ -936,7 +955,11 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     let dow = Line::from(vec![Span::raw("  "), dow_header]).style(Style::default().bg(theme.panel));
     lines.push(dow);
     // Up to 6 week rows; `calendar_cells` stops before any all-blank trailing row.
+    let mut focused_row = 2;
     for row in calendar_cells(first_of_month, app.week_start) {
+        if row.contains(&Some(focused.day())) {
+            focused_row = lines.len();
+        }
         let mut spans: Vec<Span> = vec![Span::raw("  ")];
         for cell in row {
             match cell {
@@ -958,24 +981,43 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
         }
         lines.push(Line::from(spans).style(Style::default().bg(theme.panel)));
     }
-    // Spacer + focused-date label.
-    lines.push(Line::raw("").style(Style::default().bg(theme.panel)));
-    lines.push(
-        Line::from(vec![
-            Span::raw("  "),
-            Span::styled(
-                format_focused(focused),
-                Style::default().fg(theme.due).add_modifier(Modifier::BOLD),
-            ),
-        ])
-        .style(Style::default().bg(theme.panel)),
-    );
-    lines.push(calendar_footer(theme));
-
+    // Reserve the essential controls independently of calendar content. They
+    // must remain visible even when a six-week month or a short pane clips the grid.
+    let [grid_area, focused_area, controls_area, quick_area] = Layout::vertical([
+        Constraint::Min(0),
+        Constraint::Length(u16::from(inner.height >= 3)),
+        Constraint::Length(u16::from(inner.height > 0)),
+        Constraint::Length(u16::from(inner.height >= 11 && inner.width >= 46)),
+    ])
+    .areas(inner);
+    let scroll = super::keep_cursor_visible(0, Some(focused_row), grid_area.height, lines.len());
     frame.render_widget(
-        Paragraph::new(lines).style(Style::default().bg(theme.panel)),
-        inner,
+        Paragraph::new(lines)
+            .scroll((scroll, 0))
+            .style(Style::default().bg(theme.panel)),
+        grid_area,
     );
+    frame.render_widget(
+        Paragraph::new(format!("  {}", format_focused(focused))).style(
+            Style::default()
+                .fg(theme.due)
+                .bg(theme.panel)
+                .add_modifier(Modifier::BOLD),
+        ),
+        focused_area,
+    );
+    let controls = if controls_area.width >= 25 {
+        "Enter select · Esc cancel"
+    } else if controls_area.width >= 19 {
+        "Enter OK · Esc back"
+    } else {
+        "↵OK Esc×"
+    };
+    frame.render_widget(
+        Paragraph::new(controls).style(Style::default().fg(theme.dim).bg(theme.panel)),
+        controls_area,
+    );
+    frame.render_widget(Paragraph::new(calendar_footer(theme)), quick_area);
 }
 
 fn calendar_footer<'a>(theme: &Theme) -> Line<'a> {

@@ -215,3 +215,36 @@ fn long_words_in_notices_are_fully_visible_and_tiny_search_keeps_cursor() {
         assert!(screen(&app, width, 4).contains("█"));
     }
 }
+
+#[test]
+fn calendar_controls_survive_full_draw_for_both_targets_and_status_settings() {
+    use tuxedo::app::{CalendarTarget, DialogInputMode};
+    for target in [CalendarTarget::Due, CalendarTarget::Threshold] {
+        for status in [false, true] {
+            let mut app = app();
+            app.prefs.layout.status_bar = status;
+            app.mode = Mode::Insert;
+            let draft = match target {
+                CalendarTarget::Due => "Example due:",
+                CalendarTarget::Threshold => "Example t:",
+            };
+            app.draft_set_insert(draft.into());
+            app.open_calendar(target);
+            for (width, height) in [(110, 32), (80, 24), (40, 12)] {
+                let text = screen(&app, width, height);
+                assert!(
+                    text.contains("Enter select · Esc cancel"),
+                    "{width}x{height} status={status} target={target:?}: {text}"
+                );
+                assert!(text.contains("Vim · Insert"));
+                assert!(text.contains(&format!("{draft}█")));
+                assert!(app.calendar_state().is_some());
+                assert_eq!(app.draft.input_mode(), DialogInputMode::Insert);
+            }
+            for (width, height) in [(20, 8), (12, 6), (2, 2), (0, 0)] {
+                screen(&app, width, height);
+            }
+            assert!(screen(&app, 20, 8).contains("↵OK Esc×"));
+        }
+    }
+}

@@ -18,7 +18,7 @@ expression: buffer_to_text(&buf)
    @home             4      8 │  › fore summer trip +travel @errands█│                              
    @laptop           4      9 │  ok · pri A · 1 +project 1 @context  │                              
    @phone            3     10 │                                      │                              
-                           11 │Enter choose · Esc back               │                              
+                           11 │                                      │                              
                            12 │                                      │                              
                            13 └───┌ DUE ───────────────────────────────────────────┐                
                            14     │  ‹  May 2026  ›                                │                
@@ -29,8 +29,8 @@ expression: buffer_to_text(&buf)
                                   │   17  18  19  20  21  22  23                   │                
                                   │   24  25  26  27  28  29  30                   │                
                                   │   31                                           │                
-                                  │                                                │                
                                   │  Thu May 7                                     │                
+                                  │Enter select · Esc cancel                       │                
                                   │  t today · T tmw · w +1w · m +1mo · x clear    │                
                                   └────────────────────────────────────────────────┘                
  Vim INSERT  · 15 open · 2026-05-06 · tuxedo 2026.8.1

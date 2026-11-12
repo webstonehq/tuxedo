@@ -1,0 +1,16 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_styled(buf)
+---
+{bg=#1f232b} {/}{fg=#8aa9c9 bg=#1f232b}▶{/}{fg=#e07a7a bg=#1f232b}▮{/}{fg=#8aa9c9 bg=#1f232b}◀{/}{bg=#1f232b} {/}{fg=#c8ccd4 bg=#1f232b mod=bold}/tmp/tuxedo-snapshot.txt{/}{fg=#6b7280 bg=#1f232b}  •  15 tas{/}
+{bg=#1a1d23}                                        {/}
+{fg=#2a2f38 bg=#1f232b}┌{/}{fg=#8aa9c9 bg=#1f232b mod=bold} ADD TASK {/}{fg=#2a2f38 bg=#1f232b}────────────────────────────┐{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{fg=#1a1d23 bg=#8aa9c9 mod=bold} Vim · Insert                         {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{fg=#8aa9c9 bg=#1f232b mod=bold}  › {/}{fg=#c8ccd4 bg=#1f232b}Example t:█{/}{bg=#1f232b}                       {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}┌{/}{fg=#8aa9c9 bg=#1f232b mod=bold} THRESHOLD {/}{fg=#2a2f38 bg=#1f232b}───────────────────────────┐{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}  {/}{fg=#6b7280 bg=#1f232b}  S   M   T   W   T   F   S {/}{bg=#1f232b}        {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}                      {/}{fg=#c8ccd4 bg=#1f232b}  1   2 {/}{bg=#1f232b}        {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{bg=#1f232b}  {/}{fg=#c8ccd4 bg=#1f232b}  3   4   5 {/}{fg=#e07a7a bg=#3a4150 mod=bold}  6 {/}{fg=#c8ccd4 bg=#1f232b}  7   8   9 {/}{bg=#1f232b}        {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{fg=#d4b06a bg=#1f232b mod=bold}  Wed May 6                           {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}│{/}{fg=#6b7280 bg=#1f232b}Enter select · Esc cancel             {/}{fg=#2a2f38 bg=#1f232b}│{/}
+{fg=#2a2f38 bg=#1f232b}└──────────────────────────────────────┘{/}

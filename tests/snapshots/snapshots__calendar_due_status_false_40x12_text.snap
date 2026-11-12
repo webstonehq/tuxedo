@@ -1,0 +1,16 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(buf)
+---
+ ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas
+                                        
+┌ ADD TASK ────────────────────────────┐
+│ Vim · Insert                         │
+│  › Example due:█                     │
+┌ DUE ─────────────────────────────────┐
+│    S   M   T   W   T   F   S         │
+│                        1   2         │
+│    3   4   5   6   7   8   9         │
+│  Wed May 6                           │
+│Enter select · Esc cancel             │
+└──────────────────────────────────────┘

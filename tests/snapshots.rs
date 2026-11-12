@@ -624,3 +624,30 @@ fn visible_interaction_states_required_sizes() {
         }
     }
 }
+
+#[test]
+fn calendar_controls_required_layouts() {
+    for (target, label, draft) in [
+        (CalendarTarget::Due, "due", "Example due:"),
+        (CalendarTarget::Threshold, "threshold", "Example t:"),
+    ] {
+        for status in [false, true] {
+            for (width, height) in [(110, 32), (80, 24), (40, 12)] {
+                if status && width == 40 {
+                    continue;
+                }
+                let mut app = make_app();
+                app.prefs.layout.status_bar = status;
+                app.mode = Mode::Insert;
+                app.draft_set_insert(draft.into());
+                app.open_calendar(target);
+                let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+                terminal.draw(|f| ui::draw(f, &app)).unwrap();
+                let buf = terminal.backend().buffer();
+                let name = format!("calendar_{label}_status_{status}_{width}x{height}");
+                insta::assert_snapshot!(format!("{name}_text"), buffer_to_text(buf));
+                insta::assert_snapshot!(format!("{name}_styled"), buffer_to_styled(buf));
+            }
+        }
+    }
+}

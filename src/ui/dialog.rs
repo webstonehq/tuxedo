@@ -1030,7 +1030,7 @@ fn render_recurrence_builder(frame: &mut Frame, dlg: Rect, screen: Rect, app: &A
         Line::raw("").style(Style::default().bg(theme.panel)),
         line_preview,
         Line::raw("").style(Style::default().bg(theme.panel)),
-        rec_footer(theme),
+        rec_footer(theme, app),
     ];
 
     frame.render_widget(
@@ -1039,31 +1039,27 @@ fn render_recurrence_builder(frame: &mut Frame, dlg: Rect, screen: Rect, app: &A
     );
 }
 
-fn rec_footer<'a>(theme: &Theme) -> Line<'a> {
-    Line::from(vec![
-        Span::raw("  "),
-        Span::styled(
-            "jk",
-            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+fn rec_footer<'a>(theme: &Theme, app: &App) -> Line<'a> {
+    use crate::action::RecAction;
+    let key = |action| {
+        app.keybinds
+            .effective_recurrence_keys(action)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| "unbound".into())
+    };
+    Line::styled(
+        format!(
+            " {} save · {} cancel · {}/{} field · {}/{} value",
+            key(RecAction::Accept),
+            key(RecAction::Cancel),
+            key(RecAction::FocusNext),
+            key(RecAction::FocusPrev),
+            key(RecAction::ValueNext),
+            key(RecAction::ValuePrev)
         ),
-        Span::styled(" field · ", Style::default().fg(theme.dim)),
-        Span::styled(
-            "hl/+-",
-            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" change · ", Style::default().fg(theme.dim)),
-        Span::styled(
-            "Enter",
-            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" save · ", Style::default().fg(theme.dim)),
-        Span::styled(
-            "Esc",
-            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" cancel", Style::default().fg(theme.dim)),
-    ])
-    .style(Style::default().bg(theme.panel))
+        Style::default().fg(theme.dim).bg(theme.panel),
+    )
 }
 
 fn render_priority_chooser(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {

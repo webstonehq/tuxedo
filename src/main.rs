@@ -15,7 +15,7 @@ use tuxedo::app::{AddOutcome, App, CalendarTarget, DialogInputMode, Mode, Overla
 use tuxedo::cli;
 use tuxedo::config::Config;
 use tuxedo::config_watcher;
-use tuxedo::keybinds::{KeyBindings, ResolvedKey};
+use tuxedo::keybinds::KeyBindings;
 use tuxedo::theme;
 use tuxedo::ui::hyperlinks;
 use tuxedo::{clipboard, todo, ui, update};
@@ -89,6 +89,7 @@ fn main() -> Result<()> {
     let done = cli::done_path(&path);
     let mut app_state = App::new_with_done(path.clone(), done, body, today, cfg);
     app_state.config_path = Config::path();
+    app_state.keybinds = keybinds.clone();
     app_state.mode = start_mode;
     // Start the config hot-reload watcher.
     let config_rx = app_state
@@ -757,30 +758,9 @@ fn handle_insert_calendar(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_insert_rec_builder(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
-    // Custom `[recurrence]` bindings win over the built-ins, matching how
-    // `[normal]` is layered in `resolve_normal_key`.
-    if let Some(action) = keybinds.resolve_recurrence(key) {
+    if let Some(action) = keybinds.recurrence_action(key) {
         apply_rec_action(app, action);
-        return;
     }
-    let action = match key.code {
-        // Horizontal keys change the focused field's *value*: both the unit
-        // and the mode render as horizontal segmented controls, so Left/Right
-        // moving along them is the affordance the layout already suggests.
-        KeyCode::Char('h') | KeyCode::Left => RecAction::ValuePrev,
-        KeyCode::Char('l') | KeyCode::Right => RecAction::ValueNext,
-        // Vertical keys (and Tab) move *between* fields.
-        KeyCode::Char('j') | KeyCode::Down | KeyCode::Tab => RecAction::FocusNext,
-        KeyCode::Char('k') | KeyCode::Up | KeyCode::BackTab => RecAction::FocusPrev,
-        // `=` is the unshifted `+` on US keyboards — accept both so users
-        // don't have to chord Shift to bump the interval.
-        KeyCode::Char('+') | KeyCode::Char('=') => RecAction::ValueNext,
-        KeyCode::Char('-') | KeyCode::Char('_') => RecAction::ValuePrev,
-        KeyCode::Enter => RecAction::Accept,
-        KeyCode::Esc => RecAction::Cancel,
-        _ => return,
-    };
-    apply_rec_action(app, action);
 }
 
 fn apply_rec_action(app: &mut App, action: RecAction) {
@@ -826,6 +806,24 @@ fn handle_search(app: &mut App, key: KeyEvent) {
 fn handle_help(app: &mut App, key: KeyEvent) {
     if is_exit_key(key) || matches!(key.code, KeyCode::Esc | KeyCode::Char('?')) {
         app.mode = Mode::Normal;
+        return;
+    }
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => {
+            app.help_scroll.set(app.help_scroll.get().saturating_add(1))
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            app.help_scroll.set(app.help_scroll.get().saturating_sub(1))
+        }
+        KeyCode::PageDown => app
+            .help_scroll
+            .set(app.help_scroll.get().saturating_add(10)),
+        KeyCode::PageUp => app
+            .help_scroll
+            .set(app.help_scroll.get().saturating_sub(10)),
+        KeyCode::Home => app.help_scroll.set(0),
+        KeyCode::End => app.help_scroll.set(u16::MAX),
+        _ => {}
     }
 }
 
@@ -1001,102 +999,7 @@ fn handle_prompt(app: &mut App, key: KeyEvent) {
 /// Mutates the chord state because chord progress is part of interpreting
 /// the key, not a separate concern.
 fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> Option<Action> {
-    match keybinds.resolve_normal(key, &mut app.chord) {
-        Some(ResolvedKey::Action(action)) => return Some(action),
-        Some(ResolvedKey::Pending) => return None,
-        None => {}
-    }
-
-    if is_exit_key(key) {
-        return Some(Action::Quit);
-    }
-
-    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    if ctrl {
-        return match key.code {
-            KeyCode::Char('d') => Some(Action::HalfPageDown),
-            KeyCode::Char('u') => Some(Action::HalfPageUp),
-            KeyCode::Char('p') => Some(Action::OpenCommandPalette),
-            _ => None,
-        };
-    }
-    Some(match key.code {
-        KeyCode::Char('j') | KeyCode::Down => Action::CursorDown,
-        KeyCode::Char('k') | KeyCode::Up => Action::CursorUp,
-        KeyCode::Char('J') => Action::MoveTaskDown,
-        KeyCode::Char('K') => Action::MoveTaskUp,
-        KeyCode::Char('G') => Action::CursorBottom,
-        // First 'g' arms the chord; second 'g' fires CursorTop.
-        KeyCode::Char('g') if app.chord.toggle('g') => Action::CursorTop,
-        KeyCode::Char('n') => Action::BeginAdd,
-        KeyCode::Char('r') => Action::Reschedule,
-        KeyCode::Char('a') => Action::ToggleArchiveView,
-        KeyCode::Char('l') => Action::GoList,
-        KeyCode::Char('e') => Action::BeginEdit,
-        KeyCode::Char('i') => Action::BeginEditInsert,
-        KeyCode::Char('o') => Action::OpenNote,
-        KeyCode::Char('O') => Action::CreateOrOpenNote,
-        KeyCode::Char('x') => Action::ToggleComplete,
-        // 'dd' chord. First press arms; second fires.
-        KeyCode::Char('d') if app.chord.toggle('d') => Action::Delete,
-        // 'yy' chord copies the whole line; 'yb' (after 'y' is armed) copies
-        // the body only. Plain 'y' just arms the leader.
-        KeyCode::Char('y') if app.chord.toggle('y') => Action::CopyLine,
-        KeyCode::Char('b') if app.chord.consume('y') => Action::CopyBody,
-        KeyCode::Char('p') => {
-            // After 'f' arms, 'fp' opens the project picker. Otherwise plain
-            // 'p' cycles priority.
-            if app.chord.consume('f') {
-                Action::PickProject
-            } else {
-                Action::CyclePriority
-            }
-        }
-        KeyCode::Char('c') => {
-            if app.chord.consume('f') {
-                Action::PickContext
-            } else {
-                Action::BeginPromptContext
-            }
-        }
-        KeyCode::Char('/') => Action::BeginSearch,
-        KeyCode::Char('?') => Action::OpenHelp,
-        KeyCode::Char(',') => Action::OpenSettings,
-        KeyCode::Char(':') => Action::OpenCommandPalette,
-        KeyCode::Char('u') => Action::Undo,
-        KeyCode::Char('v') => Action::ToggleVisual,
-        KeyCode::Char(' ') => Action::ToggleSelected,
-        KeyCode::Char('A') => Action::ArchiveCompleted,
-        // First 'f' arms the leader; a second 'f' (`ff`) opens the saved-
-        // search picker. Mirrors the `fp`/`fc` pattern below.
-        KeyCode::Char('f') => {
-            if app.chord.consume('f') {
-                Action::PickSavedFilter
-            } else {
-                Action::ArmF
-            }
-        }
-        KeyCode::Char('s') => {
-            // `fs` saves the active search; plain 's' opens the share QR.
-            if app.chord.consume('f') {
-                Action::SaveCurrentFilter
-            } else {
-                Action::OpenShare
-            }
-        }
-        KeyCode::Char('S') => Action::CycleSort,
-        KeyCode::Char('+') => Action::BeginPromptProject,
-        KeyCode::Char('[') => Action::ToggleLeftPane,
-        KeyCode::Char(']') => Action::ToggleRightPane,
-        KeyCode::Char('T') => Action::OpenThemePicker,
-        KeyCode::Char('D') => Action::CycleDensity,
-        KeyCode::Char('L') => Action::ToggleLineNum,
-        KeyCode::Char('H') => Action::ToggleShowDone,
-        KeyCode::Char('F') => Action::ToggleShowFuture,
-        KeyCode::Esc => Action::EscapeStack,
-        KeyCode::Char('W') => Action::ChangeWeekStart,
-        _ => return None,
-    })
+    keybinds.resolve_action(key, &mut app.chord)
 }
 
 fn apply_action(app: &mut App, action: Action) {
@@ -1217,7 +1120,10 @@ fn apply_action(app: &mut App, action: Action) {
             app.draft_clear();
             app.clear_search();
         }
-        Action::OpenHelp => app.mode = Mode::Help,
+        Action::OpenHelp => {
+            app.help_scroll.set(0);
+            app.mode = Mode::Help;
+        }
         Action::OpenSettings => app.mode = Mode::Settings,
         Action::OpenCommandPalette => {
             // Snapshot the current mode (Normal or Visual) so cancel/run
@@ -1502,6 +1408,33 @@ mod tests {
         handle_welcome(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(app.should_quit, "Esc must quit");
         assert!(!path.exists(), "Esc must not create a file");
+    }
+
+    #[test]
+    fn help_scroll_controls_and_reopening_reset_the_viewport() {
+        let mut app = build_app();
+        apply_action(&mut app, Action::OpenHelp);
+        assert_eq!(app.help_scroll.get(), 0);
+        handle_help(&mut app, key('j'));
+        assert_eq!(app.help_scroll.get(), 1);
+        handle_help(
+            &mut app,
+            KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE),
+        );
+        assert_eq!(app.help_scroll.get(), 11);
+        handle_help(&mut app, key('k'));
+        assert_eq!(app.help_scroll.get(), 10);
+        handle_help(&mut app, KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+        assert_eq!(app.help_scroll.get(), u16::MAX);
+        handle_help(&mut app, KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        handle_help(&mut app, key('k'));
+        assert_eq!(app.help_scroll.get(), 0);
+        handle_help(&mut app, key('j'));
+        handle_help(&mut app, key('?'));
+        assert_eq!(app.mode, Mode::Normal);
+        apply_action(&mut app, Action::OpenHelp);
+        assert_eq!(app.help_scroll.get(), 0);
+        assert_eq!(app.mode, Mode::Help);
     }
 
     #[test]

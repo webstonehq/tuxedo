@@ -1,0 +1,28 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(terminal.backend().buffer())
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL       
+  ┌ tuxedo · help ───────────────────────────────────────────────────────────┐  
+ P│ Normal: h/l or arrows move · w/b/e words · i/a/A insert                  │A)
+  │ Normal: x delete character · dw delete word · cw change word             │02
+  │ Insert: type text · arrows move · Tab autocomplete                       │02
+  │                                                                          │wo
+  │RECURRENCE (rec:) · effective bindings                                    │la
+  │ j / Down / Tab: next field                                               │  
+  │ k / Up / Shift-Tab: previous field                                       │  
+  │ l / Right / + / =: increase value                                        │  
+  │ h / Left / - / _: decrease value                                         │-0
+ C│ Enter: save recurrence                                                   │oa
+  │ Esc: cancel recurrence                                                   │  
+  │                                                                          │  
+  │FORMAT                                                                    │-0
+  │ (A): priority A-Z · YYYY-MM-DD: creation / done date                     │  
+  │ +project · @context · due:YYYY-MM-DD (due:+1w in search)                 │  
+  │ rec:Nu: recur (d/w/m/y/b) · rec:+Nu: anchor on due date                  │  
+  │ x DATE BODY: completed task                                              │  
+  │                                                                          │  
+  │j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 53/53                           │  
+  └──────────────────────────────────────────────────────────────────────────┘  
+                                                                                
+ HELP   ? close help                     15 open · 2026-05-06 · tuxedo 2026.8.1

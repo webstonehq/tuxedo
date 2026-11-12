@@ -333,9 +333,13 @@ quit                 = "q"
 ```
 
 Custom bindings are checked before the defaults. The default bindings remain
-available unless the same key or two-key chord is bound to another action in
-the file. Action names are snake_case, matching the names in the command
-palette where possible: `toggle_complete`, `pick_project`,
+available when they still resolve to that action. A custom single key can
+shadow a default chord leader or its second key; a custom two-key prefix
+can also consume a default single key. Help and command-palette keys show
+the reachable bindings, including aliases. Help scrolls with `j` / `k`,
+arrows or Page Up / Page Down; `Esc`, `?` or `q` closes it. These help
+controls and inline-editor controls have their own fixed bindings. Action names
+are snake_case, matching the names in the command palette where possible: `toggle_complete`, `pick_project`,
 `open_theme_picker`, and so on. Key names can be single characters, two-key
 chords like `ZZ`, modifier forms like `Ctrl-n` / `Alt-x`, named keys like
 `Esc`, `Enter`, `Tab`, arrows, `Page-Up`, `Page-Down`, or `F1` through `F24`.

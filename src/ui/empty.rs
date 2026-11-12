@@ -29,11 +29,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let inner = block.inner(r);
     frame.render_widget(block, r);
 
-    let shortcuts: &[(&str, &str)] = &[
-        ("n", "add a task"),
-        ("?", "show all keybindings"),
-        (",", "settings"),
-        ("q", "quit"),
+    use crate::action::Action;
+    let shortcuts = [
+        (Action::BeginAdd, "add a task"),
+        (Action::OpenHelp, "show all keybindings"),
+        (Action::OpenSettings, "settings"),
+        (Action::Quit, "quit"),
     ];
 
     let mut lines: Vec<Line> = Vec::new();
@@ -46,11 +47,17 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Style::default().fg(theme.fg),
     )));
     lines.push(Line::raw(""));
-    for (key, label) in shortcuts {
+    for (action, label) in shortcuts {
+        let key = app
+            .keybinds
+            .effective_keys(action)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| "unbound".into());
         lines.push(Line::from(vec![
             Span::raw("   "),
             Span::styled(
-                pad_key(key, 4),
+                pad_key(&key, 4),
                 Style::default()
                     .fg(theme.context)
                     .add_modifier(Modifier::BOLD),
@@ -73,7 +80,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 fn pad_key(s: &str, w: usize) -> String {
     let len = s.chars().count();
     if len >= w {
-        s.to_string()
+        format!("{s} ")
     } else {
         let mut o = s.to_string();
         o.push_str(&" ".repeat(w - len));

@@ -30,7 +30,7 @@ expression: buffer_to_text(&buf)
                                   │                                                          │      
                                   │  → writes rec:+1w                                        │      
                                   │                                                          │      
-                                  │  jk field · hl/+- change · Enter save · Esc cancel       │      
+                                  │ Enter save · Esc cancel · j/k field · l/h value          │      
                                   └──────────────────────────────────────────────────────────┘      
                                                                                                     
  INSERT   Enter save · Esc normal                            15 open · 2026-05-06 · tuxedo 2026.8.1

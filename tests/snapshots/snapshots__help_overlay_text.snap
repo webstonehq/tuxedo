@@ -4,33 +4,33 @@ expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL                           
      ┌ tuxedo · help ─────────────────────────────────────────────────────────────────────────┐     
- PROJ│  NAVIGATION                                  VIEW                                      │     
-   +w│    j / k  (↓ / ↑)    next / previous task      /                 fuzzy search          │     
-   +h│    gg / G            first / last task         fp / fc           filter project/context│     
-   +f│    Ctrl-d / Ctrl-u   page down / up            ff / fs           saved filter pick/save│     
-   +h│                                                S                 cycle sort            │     
-   +l│  EDITING                                       v                 visual / multi-select │     
-   +p│    n                 new task                  l                 list view             │     
-   +t│    e / i             edit (normal / insert)    a                 archive view          │     
-     │    r                 reschedule task           A                 archive completed     │rd   
- CONT│    x                 toggle complete           H                 show done in list     │     
-   @e│    dd                delete task               F                 show future in list   │     
-   @h│    p                 cycle priority A→B→C→·    [ / ]             toggle filter / detail│     
-   @l│    J / K             move task down / up       T                 theme picker          │     
-   @p│    c                 add/remove context        D                 cycle density         │     
-     │    +                 add project               L                 toggle line numbers   │     
-     │    yy / yb           copy line / body                                                  │     
-     │    u                 undo                    SYSTEM                                    │     
-     │                                                : / Ctrl-P        command palette       │     
-     │  RECURRENCE (rec:)                             s                 share capture QR      │     
-     │    j / k / Tab       next / prev field         ? / ,             help / settings       │     
-     │    h / l / + / -     change value              q / Ctrl-c        quit                  │     
-     │    Enter / Esc       save / cancel                                                     │     
-     │────────────────────────────────────────────────────────────────────────────────────────│     
-     │  FORMAT                                                                                │     
-     │    (A)               priority A-Z              due:YYYY-MM-DD    due date (+1w = range)│     
-     │    YYYY-MM-DD        creation / done date      rec:Nu            recur (u in d/w/m/y/b)│     
-     │    +project          project tag(s)            rec:+Nu           strict: anchor on due:│     
+ PROJ│TASK LIST · effective bindings                                                          │     
+   +w│ n: new task                                                                            │     
+   +h│ e: edit current task (normal mode)                                                     │     
+   +f│ i: edit current task (insert mode)                                                     │     
+   +h│ x: toggle complete                                                                     │     
+   +l│ dd: delete task                                                                        │     
+   +p│ p: cycle priority                                                                      │     
+   +t│ J: move task down                                                                      │     
+     │ K: move task up                                                                        │rd   
+ CONT│ +: add project to current task                                                         │     
+   @e│ c: add or remove context on current task                                               │     
+   @h│ yy: copy line to clipboard                                                             │     
+   @l│ yb: copy body to clipboard                                                             │     
+   @p│ o: open task note                                                                      │     
+     │ O: create or open task note                                                            │     
+     │ u: undo                                                                                │     
+     │ j / Down: cursor down                                                                  │     
+     │ k / Up: cursor up                                                                      │     
+     │ gg: jump to first task                                                                 │     
+     │ G: jump to last task                                                                   │     
+     │ Ctrl-d: page down                                                                      │     
+     │ Ctrl-u: page up                                                                        │     
+     │ /: fuzzy search                                                                        │     
+     │ fp: filter by project                                                                  │     
+     │ fc: filter by context                                                                  │     
+     │ ff: pick saved filter                                                                  │     
+     │j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 1/45                                          │     
      └────────────────────────────────────────────────────────────────────────────────────────┘     
                                                                                                     
  HELP   ? close help                                         15 open · 2026-05-06 · tuxedo 2026.8.1

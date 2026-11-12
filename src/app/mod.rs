@@ -106,6 +106,10 @@ pub struct App {
     pub selection: Selection,
     flash_state: Flash,
     pub chord: Chord,
+    /// Bindings shared by input dispatch and action guidance.
+    pub keybinds: crate::keybinds::KeyBindings,
+    /// Help viewport, clamped by rendering after terminal resizes.
+    pub help_scroll: Cell<u16>,
     pub file_path: PathBuf,
     /// Resolved path of the on-disk config file. Set by the binary after
     /// construction; preference saves and reloads use this same destination.
@@ -203,6 +207,8 @@ impl App {
             selection: Selection::default(),
             flash_state: Flash::default(),
             chord: Chord::default(),
+            keybinds: crate::keybinds::KeyBindings::default(),
+            help_scroll: Cell::new(0),
             file_path,
             config_path: None,
             should_quit: false,

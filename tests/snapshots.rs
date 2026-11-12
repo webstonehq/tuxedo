@@ -548,3 +548,24 @@ fn list_scrolls_to_keep_cursor_visible_when_below_fold() {
         "cursor row {label:?} should be visible in the scrolled viewport:\n{text}"
     );
 }
+
+#[test]
+fn help_required_sizes() {
+    let mut app = make_app();
+    app.mode = Mode::Help;
+    for (width, height) in [(110, 32), (80, 24)] {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        app.help_scroll.set(0);
+        terminal.draw(|f| ui::draw(f, &app)).unwrap();
+        insta::assert_snapshot!(
+            format!("help_{width}x{height}"),
+            buffer_to_text(terminal.backend().buffer())
+        );
+        app.help_scroll.set(u16::MAX);
+        terminal.draw(|f| ui::draw(f, &app)).unwrap();
+        insta::assert_snapshot!(
+            format!("help_bottom_{width}x{height}"),
+            buffer_to_text(terminal.backend().buffer())
+        );
+    }
+}

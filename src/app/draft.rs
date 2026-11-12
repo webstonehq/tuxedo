@@ -9,6 +9,15 @@ pub enum DialogInputMode {
     Normal,
 }
 
+impl DialogInputMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Insert => "Insert",
+            Self::Normal => "Normal",
+        }
+    }
+}
+
 /// Byte offset within a draft `String`. Construction enforces UTF-8 char-boundary
 /// landing, so cursor positions can't be left mid-codepoint by direct assignment.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -77,6 +86,12 @@ impl DraftState {
 
     pub fn set_overlay(&mut self, overlay: Option<DraftOverlay>) {
         self.overlay = overlay;
+    }
+
+    /// Presentation label for the current editor profile. Keep this separate
+    /// from its mode so another editor can supply its own labels later.
+    pub fn editor_profile_label(&self) -> &'static str {
+        "Vim"
     }
 
     pub fn input_mode(&self) -> DialogInputMode {

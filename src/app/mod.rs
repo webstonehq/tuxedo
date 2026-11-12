@@ -28,6 +28,8 @@ mod types;
 mod visibility;
 
 #[cfg(test)]
+mod grouping_tests;
+#[cfg(test)]
 pub(crate) mod test_support;
 
 pub use crate::core::Archive;
@@ -46,10 +48,10 @@ pub use palette::CommandPaletteState;
 pub use prefs::{Layout, Prefs};
 pub use selection::Selection;
 pub use types::{
-    AUTOCOMPLETE_CAP, AddOutcome, Density, FLASH_TTL, Filter, LEADER_WINDOW, Mode, SavedFilter,
-    Sort, UNDO_LIMIT, View,
+    AUTOCOMPLETE_CAP, AddOutcome, Density, FLASH_TTL, Filter, GroupBy, LEADER_WINDOW, Mode,
+    SavedFilter, Sort, UNDO_LIMIT, View,
 };
-pub use visibility::GroupKey;
+pub use visibility::{DisplayRow, GroupKey};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WeekStart {
@@ -94,6 +96,7 @@ pub struct App {
     pub(crate) view: View,
     pub mode: Mode,
     pub prefs: Prefs,
+    /// Focus index into display_rows; never an absolute task identity.
     pub cursor: usize,
     /// Per-view saved cursor, indexed by `View::idx()`. `set_view` snapshots
     /// the outgoing view's cursor here and restores the incoming view's, so
@@ -106,18 +109,22 @@ pub struct App {
     pub selection: Selection,
     flash_state: Flash,
     pub chord: Chord,
+    /// Bindings shared by input dispatch and action guidance.
+    pub keybinds: crate::keybinds::KeyBindings,
+    /// Help viewport, clamped by rendering after terminal resizes.
+    pub help_scroll: Cell<u16>,
     pub file_path: PathBuf,
-    /// Resolved path of the on-disk config file. Set by the binary after
-    /// construction so the settings overlay can render a stable, real path
-    /// without the renderer having to reach into the environment itself.
-    /// `None` in tests/examples that don't care about the value.
+    /// Config path set by the binary, shared by preference saves, reloads and
+    /// the settings display. `None` uses the XDG default for preference saves.
     pub config_path: Option<PathBuf>,
     pub should_quit: bool,
     visible_cache: Vec<usize>,
-    /// Parallel to `visible_cache`: `visible_groups[i]` is the group key for
-    /// the row at `visible_cache[i]`. `GroupKey::None` for List under
-    /// `Sort::File`; priority/due bucket keys under other List sorts; date
-    /// keys for Archive. Renderers read this to draw section headers.
+    display_rows: Vec<DisplayRow>,
+    collapsed_groups: std::collections::HashSet<GroupKey>,
+    grouping_state: (GroupBy, GroupBy),
+    pub grouping_pick_idx: usize,
+    grouping_pick_prior: Mode,
+    /// Matching task group keys, parallel to the task-only cache.
     visible_groups: Vec<crate::app::visibility::GroupKey>,
     /// Latest known release tag, populated asynchronously by the update
     /// checker. `None` while we haven't heard back (or the check is disabled,
@@ -203,10 +210,17 @@ impl App {
             selection: Selection::default(),
             flash_state: Flash::default(),
             chord: Chord::default(),
+            keybinds: crate::keybinds::KeyBindings::default(),
+            help_scroll: Cell::new(0),
             file_path,
             config_path: None,
             should_quit: false,
             visible_cache: Vec::new(),
+            display_rows: Vec::new(),
+            collapsed_groups: std::collections::HashSet::new(),
+            grouping_state: (GroupBy::Auto, GroupBy::Priority),
+            grouping_pick_idx: 0,
+            grouping_pick_prior: Mode::Normal,
             visible_groups: Vec::new(),
             latest_version: None,
             update_check: None,
@@ -221,7 +235,15 @@ impl App {
             theme_pick_orig: 0,
             week_start: WeekStart::Sunday,
         };
+        app.week_start = app.prefs.week_start;
         app.recompute_visible();
+        if let Some(row) = app
+            .display_rows
+            .iter()
+            .position(|r| matches!(r, DisplayRow::Task(_)))
+        {
+            app.cursor = row;
+        }
         app
     }
 
@@ -355,11 +377,13 @@ impl App {
         self.prefs.sort_label()
     }
 
-    /// Persist preferences. On failure, flashes a short error so the user
-    /// sees the problem inside the TUI (writing to stderr would smash the
-    /// alt-screen).
+    /// Save preferences to `config_path` or the XDG default; flash any error.
     pub fn save_prefs(&mut self) {
-        if let Err(e) = self.prefs.save() {
+        let result = match &self.config_path {
+            Some(path) => self.prefs.save_to(path),
+            None => self.prefs.save(),
+        };
+        if let Err(e) = result {
             self.flash(format!("config save failed: {e}"));
         }
     }
@@ -514,16 +538,16 @@ impl App {
         }
         self.view_cursor[self.view.idx()] = self.cursor;
         self.view = view;
+        self.display_rows.clear();
         self.recompute_visible();
         self.cursor = self.view_cursor[view.idx()];
         self.clamp_cursor();
     }
 
-    /// Set the search-filter text. Cursor resets and the cache is recomputed.
+    /// Set search text and rebuild the view, retaining valid focus.
     /// Typing into the search prompt calls this on every keystroke.
     pub fn set_search(&mut self, search: String) {
         self.filter.search = search;
-        self.cursor = 0;
         self.recompute_visible();
     }
 
@@ -533,21 +557,18 @@ impl App {
             return;
         }
         self.filter.search.clear();
-        self.cursor = 0;
         self.recompute_visible();
     }
 
     /// Set or clear the active project filter. `None` removes it.
     pub fn set_project_filter(&mut self, project: Option<String>) {
         self.filter.project = project;
-        self.cursor = 0;
         self.recompute_visible();
     }
 
     /// Set or clear the active context filter. `None` removes it.
     pub fn set_context_filter(&mut self, context: Option<String>) {
         self.filter.context = context;
-        self.cursor = 0;
         self.recompute_visible();
     }
 
@@ -571,7 +592,6 @@ impl App {
             return;
         }
         self.filter.clear();
-        self.cursor = 0;
         self.recompute_visible();
     }
 
@@ -588,11 +608,18 @@ impl App {
     /// transient input state and refresh the view, matching the old
     /// `apply_external_state` behavior.
     pub(crate) fn on_reload(&mut self) {
+        let cleared = self.selection.len();
         self.selection.clear();
         self.selection.exit_edit();
         self.recompute_visible();
         self.clamp_cursor();
-        self.flash("file changed on disk — reloaded");
+        if cleared > 0 {
+            self.flash(format!(
+                "file changed on disk — reloaded; cleared {cleared} selected tasks"
+            ));
+        } else {
+            self.flash("file changed on disk — reloaded");
+        }
     }
 
     /// Map a store reconcile result to the matching flash + view refresh for a

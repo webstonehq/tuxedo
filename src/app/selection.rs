@@ -29,6 +29,12 @@ impl Selection {
         }
     }
 
+    pub fn retain(&mut self, mut keep: impl FnMut(usize) -> bool) -> usize {
+        let before = self.selected.len();
+        self.selected.retain(|i| keep(*i));
+        before - self.selected.len()
+    }
+
     pub fn clear(&mut self) {
         self.selected.clear();
     }
@@ -44,6 +50,25 @@ impl Selection {
                 self.selected.insert(a);
             }
         }
+    }
+
+    /// Preserve task identity when storage removes lines or inserts a
+    /// recurring successor. Display positions never enter these mappings.
+    pub fn remove_indices(&mut self, removed: &[usize]) {
+        let remap = |i: usize| {
+            (!removed.contains(&i)).then(|| i - removed.iter().filter(|&&r| r < i).count())
+        };
+        self.selected = self.selected.iter().filter_map(|&i| remap(i)).collect();
+        self.editing = self.editing.and_then(remap);
+    }
+
+    pub fn insert_index(&mut self, at: usize) {
+        self.selected = self
+            .selected
+            .iter()
+            .map(|&i| if i >= at { i + 1 } else { i })
+            .collect();
+        self.editing = self.editing.map(|i| if i >= at { i + 1 } else { i });
     }
 
     pub fn editing(&self) -> Option<usize> {

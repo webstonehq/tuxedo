@@ -9,7 +9,6 @@ use crate::search::subseq_match_ci;
 #[derive(Debug, Clone, Copy)]
 pub struct PaletteEntry {
     pub label: &'static str,
-    pub keys: &'static str,
     pub action: Action,
 }
 
@@ -19,242 +18,202 @@ pub struct PaletteEntry {
 pub const ENTRIES: &[PaletteEntry] = &[
     PaletteEntry {
         label: "new task",
-        keys: "n",
         action: Action::BeginAdd,
     },
     PaletteEntry {
         label: "edit current task (normal mode)",
-        keys: "e",
         action: Action::BeginEdit,
     },
     PaletteEntry {
         label: "edit current task (insert mode)",
-        keys: "i",
         action: Action::BeginEditInsert,
     },
     PaletteEntry {
         label: "toggle complete",
-        keys: "x",
         action: Action::ToggleComplete,
     },
     PaletteEntry {
         label: "delete task",
-        keys: "dd",
         action: Action::Delete,
     },
     PaletteEntry {
         label: "cycle priority",
-        keys: "p",
         action: Action::CyclePriority,
     },
     PaletteEntry {
         label: "move task down",
-        keys: "J",
         action: Action::MoveTaskDown,
     },
     PaletteEntry {
         label: "move task up",
-        keys: "K",
         action: Action::MoveTaskUp,
     },
     PaletteEntry {
         label: "add project to current task",
-        keys: "+",
         action: Action::BeginPromptProject,
     },
     PaletteEntry {
         label: "add or remove context on current task",
-        keys: "c",
         action: Action::BeginPromptContext,
     },
     PaletteEntry {
         label: "copy line to clipboard",
-        keys: "yy",
         action: Action::CopyLine,
     },
     PaletteEntry {
         label: "copy body to clipboard",
-        keys: "yb",
         action: Action::CopyBody,
     },
     PaletteEntry {
         label: "open task note",
-        keys: "o",
         action: Action::OpenNote,
     },
     PaletteEntry {
         label: "create or open task note",
-        keys: "O",
         action: Action::CreateOrOpenNote,
     },
     PaletteEntry {
         label: "undo",
-        keys: "u",
         action: Action::Undo,
     },
     PaletteEntry {
         label: "cursor down",
-        keys: "j / ↓",
         action: Action::CursorDown,
     },
     PaletteEntry {
         label: "cursor up",
-        keys: "k / ↑",
         action: Action::CursorUp,
     },
     PaletteEntry {
-        label: "jump to first task",
-        keys: "gg",
+        label: "jump to first row",
         action: Action::CursorTop,
     },
     PaletteEntry {
-        label: "jump to last task",
-        keys: "G",
+        label: "jump to last row",
         action: Action::CursorBottom,
     },
     PaletteEntry {
         label: "page down",
-        keys: "Ctrl-d",
         action: Action::HalfPageDown,
     },
     PaletteEntry {
         label: "page up",
-        keys: "Ctrl-u",
         action: Action::HalfPageUp,
     },
     PaletteEntry {
         label: "fuzzy search",
-        keys: "/",
         action: Action::BeginSearch,
     },
     PaletteEntry {
         label: "filter by project",
-        keys: "fp",
         action: Action::PickProject,
     },
     PaletteEntry {
         label: "filter by context",
-        keys: "fc",
         action: Action::PickContext,
     },
     PaletteEntry {
         label: "pick saved filter",
-        keys: "ff",
         action: Action::PickSavedFilter,
     },
     PaletteEntry {
         label: "save search as filter",
-        keys: "fs",
         action: Action::SaveCurrentFilter,
     },
     PaletteEntry {
+        label: "pick task grouping",
+        action: Action::PickGrouping,
+    },
+    PaletteEntry {
+        label: "collapse / expand focused group",
+        action: Action::ToggleGroup,
+    },
+    PaletteEntry {
         label: "cycle sort",
-        keys: "S",
         action: Action::CycleSort,
     },
     PaletteEntry {
         label: "toggle visual / multi-select",
-        keys: "v",
         action: Action::ToggleVisual,
     },
     PaletteEntry {
         label: "toggle selected row",
-        keys: "Space",
         action: Action::ToggleSelected,
     },
     PaletteEntry {
         label: "list view",
-        keys: "l",
         action: Action::GoList,
     },
     PaletteEntry {
         label: "toggle archive view",
-        keys: "a",
         action: Action::ToggleArchiveView,
     },
     PaletteEntry {
         label: "archive completed tasks",
-        keys: "A",
         action: Action::ArchiveCompleted,
     },
     PaletteEntry {
         label: "show done in list",
-        keys: "H",
         action: Action::ToggleShowDone,
     },
     PaletteEntry {
         label: "show future in list",
-        keys: "F",
         action: Action::ToggleShowFuture,
     },
     PaletteEntry {
         label: "toggle filter pane",
-        keys: "[",
         action: Action::ToggleLeftPane,
     },
     PaletteEntry {
         label: "toggle detail pane",
-        keys: "]",
         action: Action::ToggleRightPane,
     },
     PaletteEntry {
         label: "pick theme",
-        keys: "T",
         action: Action::OpenThemePicker,
     },
     PaletteEntry {
         label: "cycle theme",
-        keys: "",
         action: Action::CycleTheme,
     },
     PaletteEntry {
         label: "cycle density",
-        keys: "D",
         action: Action::CycleDensity,
     },
     PaletteEntry {
         label: "toggle line numbers",
-        keys: "L",
         action: Action::ToggleLineNum,
     },
     PaletteEntry {
         label: "open help",
-        keys: "?",
         action: Action::OpenHelp,
     },
     PaletteEntry {
         label: "open settings",
-        keys: ",",
         action: Action::OpenSettings,
     },
     PaletteEntry {
         label: "open command palette",
-        keys: ": / Ctrl-P",
         action: Action::OpenCommandPalette,
     },
     PaletteEntry {
         label: "show capture QR",
-        keys: "s",
         action: Action::OpenShare,
     },
     PaletteEntry {
         label: "escape / clear",
-        keys: "Esc",
         action: Action::EscapeStack,
     },
     PaletteEntry {
         label: "quit",
-        keys: "q",
         action: Action::Quit,
     },
     PaletteEntry {
         label: "reschedule",
-        keys: "r",
         action: Action::Reschedule,
     },
     PaletteEntry {
         label: "Change week start",
-        keys: "W",
         action: Action::ChangeWeekStart,
     },
 ];
@@ -544,6 +503,8 @@ mod tests {
             Action::PickProject,
             Action::PickContext,
             Action::CycleSort,
+            Action::PickGrouping,
+            Action::ToggleGroup,
             Action::BeginPromptProject,
             Action::BeginPromptContext,
             Action::ToggleLeftPane,

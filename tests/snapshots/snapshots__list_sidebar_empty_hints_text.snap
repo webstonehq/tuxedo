@@ -4,11 +4,11 @@ expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  3 task DETAIL                           
                                                                                                     
- PROJECTS                  (1)  PRIORITY A  ────────────────────── priority  (A)                    
+ PROJECTS                  [-] (1)  PRIORITY A  ────────────────── priority  (A)                    
    tag with +project        1 ▸ (A) Buy milk                       created   —                      
-                           (1)  PRIORITY B  ────────────────────── projects                         
+                           [-] (1)  PRIORITY B  ────────────────── projects                         
  CONTEXTS                   2   (B) Call mom                       contexts                         
-   tag with @context       (1)  NO PRIORITY  ─────────────────────                                  
+   tag with @context       [-] (1)  NO PRIORITY  ─────────────────                                  
                             3       Write up notes                 RAW                              
                                                                                                     
                                                                    (A) Buy milk                     
@@ -33,4 +33,4 @@ expression: buffer_to_text(&buf)
                                                                                                     
                                                                                                     
                                                                                                     
- NORMAL   j/k · n new · r reschedule · x done · / search · ? h3 open · 2026-05-06 · tuxedo 2026.8.1
+ NORMAL  · ? help · n new · x done · / search · u undo · q quit · 3 open · 2026-05-06

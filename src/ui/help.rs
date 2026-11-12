@@ -4,247 +4,460 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 
+use crate::action::{Action, RecAction};
 use crate::app::App;
 use crate::theme::Theme;
 
-type Section = (&'static str, &'static [(&'static str, &'static str)]);
+struct Entry {
+    keys: String,
+    description: &'static str,
+}
 
-// Opposed key pairs share a row. The overlay is height-bound (it fills a
-// 32-row terminal exactly), so pairing is what buys the room for RECURRENCE
-// without pushing FORMAT off the bottom.
-const NAVIGATION: Section = (
-    "NAVIGATION",
-    &[
-        ("j / k  (↓ / ↑)", "next / previous task"),
-        ("gg / G", "first / last task"),
-        ("Ctrl-d / Ctrl-u", "page down / up"),
-    ],
-);
+struct Section {
+    title: &'static str,
+    entries: Vec<Entry>,
+}
 
-const EDITING: Section = (
-    "EDITING",
-    &[
-        ("n", "new task"),
-        ("e / i", "edit (normal / insert)"),
-        ("r", "reschedule task"),
-        ("x", "toggle complete"),
-        ("dd", "delete task"),
-        ("p", "cycle priority A→B→C→·"),
-        ("J / K", "move task down / up"),
-        ("c", "add/remove context"),
-        ("+", "add project"),
-        ("yy / yb", "copy line / body"),
-        ("u", "undo"),
-    ],
-);
+fn key_label(keys: Vec<String>) -> String {
+    keys.into_iter()
+        .map(|key| match key.as_str() {
+            "Down" => "↓".into(),
+            "Up" => "↑".into(),
+            "Left" => "←".into(),
+            "Right" => "→".into(),
+            _ => key,
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
 
-/// Motions inside the `↻ REPEAT` overlay that `rec:` opens in the create/edit
-/// dialog. Rebindable under `[recurrence]` in `keybinds.toml`.
-const RECURRENCE: Section = (
-    "RECURRENCE (rec:)",
-    &[
-        ("j / k / Tab", "next / prev field"),
-        ("h / l / + / -", "change value"),
-        ("Enter / Esc", "save / cancel"),
-    ],
-);
+fn action(app: &App, action: Action, description: &'static str) -> Entry {
+    let keys = key_label(app.keybinds.effective_keys(action));
+    Entry {
+        keys: if keys.is_empty() {
+            "palette".into()
+        } else {
+            keys
+        },
+        description,
+    }
+}
 
-const VIEW: Section = (
-    "VIEW",
-    &[
-        ("/", "fuzzy search"),
-        ("fp / fc", "filter project/context"),
-        ("ff / fs", "saved filter pick/save"),
-        ("S", "cycle sort"),
-        ("v", "visual / multi-select"),
-        ("l", "list view"),
-        ("a", "archive view"),
-        ("A", "archive completed"),
-        ("H", "show done in list"),
-        ("F", "show future in list"),
-        ("[ / ]", "toggle filter / detail"),
-        ("T", "theme picker"),
-        ("D", "cycle density"),
-        ("L", "toggle line numbers"),
-    ],
-);
+fn pair(app: &App, first: Action, second: Action, description: &'static str) -> Entry {
+    let first = action(app, first, "").keys;
+    let second = action(app, second, "").keys;
+    Entry {
+        keys: format!("{first} / {second}"),
+        description,
+    }
+}
 
-const SYSTEM: Section = (
-    "SYSTEM",
-    &[
-        (": / Ctrl-P", "command palette"),
-        ("s", "share capture QR"),
-        ("? / ,", "help / settings"),
-        ("q / Ctrl-c", "quit"),
-    ],
-);
+fn sections(app: &App) -> (Vec<Section>, Vec<Section>) {
+    use Action::*;
+    let left = vec![
+        Section {
+            title: "NAVIGATION",
+            entries: vec![
+                pair(app, CursorDown, CursorUp, "next / previous row"),
+                pair(app, CursorTop, CursorBottom, "first / last row"),
+                pair(app, HalfPageDown, HalfPageUp, "page down / up"),
+                action(app, PickGrouping, "group tasks"),
+                action(app, ToggleGroup, "collapse / expand group"),
+            ],
+        },
+        Section {
+            title: "TASK EDITING",
+            entries: vec![
+                action(app, BeginAdd, "new task"),
+                pair(app, BeginEdit, BeginEditInsert, "edit: normal / insert"),
+                pair(app, ToggleComplete, Delete, "complete / delete"),
+                pair(app, Reschedule, CyclePriority, "reschedule / priority"),
+                pair(app, MoveTaskDown, MoveTaskUp, "move down / up"),
+                pair(
+                    app,
+                    BeginPromptProject,
+                    BeginPromptContext,
+                    "project / context",
+                ),
+                pair(app, CopyLine, CopyBody, "copy line / body"),
+                pair(app, OpenNote, CreateOrOpenNote, "open / create note"),
+                action(app, Undo, "undo task change"),
+            ],
+        },
+        Section {
+            title: "TASK SELECTION",
+            entries: vec![
+                action(app, ToggleVisual, "enter / leave selection"),
+                action(app, ToggleSelected, "toggle selected row"),
+            ],
+        },
+    ];
+    let right = vec![
+        Section {
+            title: "FILTER & VIEW",
+            entries: vec![
+                action(app, BeginSearch, "search tasks"),
+                pair(app, PickProject, PickContext, "filter project / context"),
+                pair(
+                    app,
+                    PickSavedFilter,
+                    SaveCurrentFilter,
+                    "saved filter: pick / save",
+                ),
+                action(app, CycleSort, "cycle sort"),
+                pair(app, GoList, ToggleArchiveView, "list / archive view"),
+                action(app, ArchiveCompleted, "archive completed"),
+                pair(app, ToggleShowDone, ToggleShowFuture, "show done / future"),
+            ],
+        },
+        Section {
+            title: "LAYOUT & APPEARANCE",
+            entries: vec![
+                pair(app, ToggleLeftPane, ToggleRightPane, "filter / detail pane"),
+                pair(app, OpenThemePicker, CycleDensity, "theme / density"),
+                pair(
+                    app,
+                    ToggleLineNum,
+                    ChangeWeekStart,
+                    "line numbers / week start",
+                ),
+                action(app, CycleTheme, "cycle theme"),
+            ],
+        },
+        Section {
+            title: "SYSTEM",
+            entries: vec![
+                action(app, OpenCommandPalette, "command palette"),
+                pair(app, OpenHelp, OpenSettings, "help / settings"),
+                action(app, OpenShare, "phone capture QR"),
+                action(app, EscapeStack, "cancel / clear"),
+                action(app, Quit, "quit"),
+            ],
+        },
+    ];
+    (left, right)
+}
 
-const FORMAT: Section = (
-    "FORMAT",
-    &[
-        ("(A)", "priority A-Z"),
-        ("YYYY-MM-DD", "creation / done date"),
-        ("+project", "project tag(s)"),
-        ("@context", "context tag(s)"),
-        ("due:YYYY-MM-DD", "due date (+1w = range)"),
-        ("rec:Nu", "recur (u in d/w/m/y/b)"),
-        ("rec:+Nu", "strict: anchor on due:"),
-        ("x DATE BODY", "completed task prefix"),
-    ],
-);
+fn details(app: &App) -> (Vec<Section>, Vec<Section>) {
+    let fixed = |keys: &str, description| Entry {
+        keys: keys.into(),
+        description,
+    };
+    let left = vec![
+        Section {
+            title: "INLINE EDITOR · fixed keys",
+            entries: vec![
+                fixed("Enter", "review / save draft"),
+                fixed("Esc", "popup → normal → cancel"),
+                fixed("h / l, ← / →", "move character"),
+                fixed("w / b / e", "word motions (normal)"),
+                fixed("i / a / A", "insert before / after / end"),
+                fixed("x / dw / cw", "delete char / word / change"),
+                fixed("Tab", "autocomplete (insert)"),
+            ],
+        },
+        Section {
+            title: "FORMAT · todo.txt",
+            entries: vec![
+                fixed("(A), YYYY-MM-DD", "priority, creation date"),
+                fixed("+project, @context", "project and context tags"),
+                fixed("due:YYYY-MM-DD", "due date; search due:+1w"),
+                fixed("rec:Nu / rec:+Nu", "d/w/m/y/b; + anchors due"),
+                fixed("x DATE BODY", "completed task"),
+            ],
+        },
+    ];
+    let recurrence = |action, description| Entry {
+        keys: key_label(app.keybinds.effective_recurrence_keys(action)),
+        description,
+    };
+    let right = vec![Section {
+        title: "RECURRENCE · rec: picker",
+        entries: vec![
+            recurrence(RecAction::FocusNext, "next field"),
+            recurrence(RecAction::FocusPrev, "previous field"),
+            recurrence(RecAction::ValueNext, "increase value"),
+            recurrence(RecAction::ValuePrev, "decrease value"),
+            recurrence(RecAction::Accept, "save recurrence"),
+            recurrence(RecAction::Cancel, "cancel recurrence"),
+        ],
+    }];
+    (left, right)
+}
+
+/// Wrap by terminal cells. Long custom bindings stay reachable rather than
+/// disappearing behind the description or the neighboring column.
+fn wrap(text: &str, width: usize) -> Vec<String> {
+    let width = width.max(1);
+    let mut rows = Vec::new();
+    let mut row = String::new();
+    let mut used = 0;
+    for word in text.split_whitespace() {
+        let word_width = Span::raw(word).width();
+        if !row.is_empty() && used + 1 + word_width <= width {
+            row.push(' ');
+            row.push_str(word);
+            used += 1 + word_width;
+            continue;
+        }
+        if !row.is_empty() {
+            rows.push(std::mem::take(&mut row));
+            used = 0;
+        }
+        for ch in word.chars() {
+            let char_width = Span::raw(ch.to_string()).width();
+            if used + char_width > width && !row.is_empty() {
+                rows.push(std::mem::take(&mut row));
+                used = 0;
+            }
+            row.push(ch);
+            used += char_width;
+        }
+    }
+    if !row.is_empty() {
+        rows.push(row);
+    }
+    if rows.is_empty() {
+        rows.push(String::new());
+    }
+    rows
+}
+
+fn section_rows(theme: &Theme, sections: &[Section], width: usize) -> Vec<Line<'static>> {
+    let mut rows = Vec::new();
+    let key_width = sections
+        .iter()
+        .flat_map(|section| &section.entries)
+        .map(|entry| Span::raw(entry.keys.as_str()).width())
+        .max()
+        .unwrap_or(0)
+        .min(22)
+        .min(width.saturating_mul(2) / 5)
+        .max(1);
+    for section in sections {
+        if !rows.is_empty() {
+            rows.push(Line::raw(""));
+        }
+        for title in wrap(section.title, width) {
+            rows.push(Line::styled(
+                title,
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+        if width < 16 {
+            for entry in &section.entries {
+                for row in wrap(&format!("{}: {}", entry.keys, entry.description), width) {
+                    rows.push(Line::raw(row));
+                }
+            }
+            continue;
+        }
+        let description_width = width.saturating_sub(key_width + 2).max(1);
+        for entry in &section.entries {
+            let keys = wrap(&entry.keys, key_width);
+            let descriptions = wrap(entry.description, description_width);
+            for i in 0..keys.len().max(descriptions.len()) {
+                let key = keys.get(i).cloned().unwrap_or_default();
+                let padding = key_width.saturating_sub(Span::raw(key.as_str()).width()) + 2;
+                rows.push(Line::from(vec![
+                    Span::styled(
+                        key,
+                        Style::default()
+                            .fg(theme.context)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(" ".repeat(padding)),
+                    Span::styled(
+                        descriptions.get(i).cloned().unwrap_or_default(),
+                        Style::default().fg(theme.fg),
+                    ),
+                ]));
+            }
+        }
+    }
+    rows
+}
+
+fn columns(theme: &Theme, left: &[Section], right: &[Section], width: usize) -> Vec<Line<'static>> {
+    if width < 80 {
+        let mut rows = section_rows(theme, left, width);
+        rows.push(Line::raw(""));
+        rows.extend(section_rows(theme, right, width));
+        return rows;
+    }
+    let gutter = 4;
+    let half = (width - gutter) / 2;
+    let left = section_rows(theme, left, half);
+    let right = section_rows(theme, right, width - half - gutter);
+    (0..left.len().max(right.len()))
+        .map(|i| {
+            // A source line's style belongs only to its own column. Flatten
+            // it into its spans before joining so a heading cannot color
+            // the neighboring description, or lose its style on the right.
+            let styled_spans = |line: &Line<'static>| {
+                line.spans
+                    .iter()
+                    .map(|span| Span::styled(span.content.clone(), line.style.patch(span.style)))
+                    .collect::<Vec<_>>()
+            };
+            let mut line = Line::from(left.get(i).map(styled_spans).unwrap_or_default());
+            let padding = half.saturating_sub(line.width()) + gutter;
+            line.spans.push(Span::raw(" ".repeat(padding)));
+            if let Some(right) = right.get(i) {
+                line.spans.extend(styled_spans(right));
+            }
+            line
+        })
+        .collect()
+}
+
+fn rows(app: &App, width: u16) -> Vec<Line<'static>> {
+    let width = usize::from(width).max(1);
+    let (left, right) = sections(app);
+    let mut rows = columns(app.theme(), &left, &right, width);
+    rows.push(Line::raw(""));
+    rows.push(Line::styled(
+        "─".repeat(width),
+        Style::default().fg(app.theme().border),
+    ));
+    rows.push(Line::raw(""));
+    let (left, right) = details(app);
+    rows.extend(columns(app.theme(), &left, &right, width));
+    rows.push(Line::raw(""));
+    for note in wrap(
+        "Commas separate aliases; / pairs keys with actions. 'palette' means command palette only.",
+        width,
+    ) {
+        rows.push(Line::styled(note, Style::default().fg(app.theme().dim)));
+    }
+    rows
+}
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.border).bg(theme.panel))
-        .title(Line::from(vec![
-            Span::raw(" "),
-            Span::styled(
-                "tuxedo",
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(" · help ".to_string(), Style::default().fg(theme.dim)),
-        ]))
-        .style(Style::default().bg(theme.panel));
+        .title(" tuxedo · HELP ")
+        .style(Style::default().bg(theme.panel).fg(theme.fg));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-
-    let bg = Style::default().bg(theme.panel).fg(theme.fg);
-
-    // Keybindings (top, two columns) — divider — Format (bottom, two columns).
-    // Each half splits sections across left/right; the last section in each
-    // column drops its trailing blank so the divider lands tight.
-    let kb_lines = two_columns(
-        theme,
-        inner.width,
-        &[NAVIGATION, EDITING, RECURRENCE],
-        &[VIEW, SYSTEM],
+    // Space separates the table from both borders and its scrolling controls.
+    let inner = Rect::new(
+        inner.x.saturating_add(u16::from(inner.width > 2)),
+        inner.y,
+        inner.width.saturating_sub(2),
+        inner.height,
     );
-    let kb_height = u16::try_from(kb_lines.len()).unwrap_or(u16::MAX);
-
-    let (fmt_left, fmt_right) = FORMAT.1.split_at(FORMAT.1.len().div_ceil(2));
-    let fmt_left_section: Section = (FORMAT.0, fmt_left);
-    let fmt_right_section: Section = ("", fmt_right);
-    let fmt_lines = two_columns(
-        theme,
-        inner.width,
-        &[fmt_left_section],
-        &[fmt_right_section],
-    );
-
-    let [kb_area, divider, fmt_area] = Layout::vertical([
-        Constraint::Length(kb_height),
-        Constraint::Length(1),
-        Constraint::Min(0),
-    ])
-    .areas(inner);
-
-    frame.render_widget(Paragraph::new(kb_lines).style(bg), kb_area);
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            "─".repeat(usize::from(divider.width)),
-            Style::default().fg(theme.border),
-        )))
-        .style(bg),
-        divider,
-    );
-    frame.render_widget(Paragraph::new(fmt_lines).style(bg), fmt_area);
-}
-
-/// Render `left` and `right` section lists side-by-side. Each side gets half
-/// the available width; rows are zipped so column heights stay aligned. The
-/// trailing blank that `render_sections` adds after every section is dropped
-/// from the last section in each column — visually that just means the column
-/// ends flush with its final entry rather than carrying dead space below.
-fn two_columns<'a>(
-    theme: &Theme,
-    total_width: u16,
-    left: &[Section],
-    right: &[Section],
-) -> Vec<Line<'a>> {
-    let left_lines = render_sections_trimmed(theme, left);
-    let right_lines = render_sections_trimmed(theme, right);
-    let rows = left_lines.len().max(right_lines.len());
-    let half = usize::from(total_width / 2);
-    let mut out: Vec<Line> = Vec::with_capacity(rows);
-    for i in 0..rows {
-        let mut spans: Vec<Span> = Vec::new();
-        let left_spans: Vec<Span> = left_lines.get(i).map_or_else(Vec::new, |l| l.spans.clone());
-        let left_width: usize = left_spans.iter().map(|s| s.content.chars().count()).sum();
-        spans.extend(left_spans);
-        if left_width < half {
-            spans.push(Span::raw(" ".repeat(half - left_width)));
-        }
-        if let Some(r) = right_lines.get(i) {
-            spans.extend(r.spans.clone());
-        }
-        out.push(Line::from(spans));
-    }
-    out
-}
-
-fn render_sections_trimmed<'a>(theme: &Theme, sections: &[Section]) -> Vec<Line<'a>> {
-    let mut lines = render_sections(theme, sections);
-    // Drop the trailing blank that `render_sections` appends after the last
-    // section so columns end flush.
-    if matches!(lines.last(), Some(line) if line_is_blank(line)) {
-        lines.pop();
-    }
-    lines
-}
-
-fn line_is_blank(line: &Line) -> bool {
-    line.spans
-        .iter()
-        .all(|s| s.content.chars().all(|c| c == ' '))
-}
-
-fn render_sections<'a>(theme: &Theme, sections: &[Section]) -> Vec<Line<'a>> {
-    let mut lines: Vec<Line> = Vec::new();
-    for (title, items) in sections {
-        // An empty title means "this is a continuation column, skip the
-        // header row" — used to align the right half of a 2-col section
-        // (e.g. FORMAT) with the left half that owns the header.
-        if title.is_empty() {
-            lines.push(Line::raw(" "));
-        } else {
-            lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(
-                    (*title).to_string(),
-                    Style::default()
-                        .fg(theme.accent)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]));
-        }
-        for (k, d) in *items {
-            lines.push(Line::from(vec![
-                Span::raw("    "),
-                Span::styled(
-                    pad_str(k, 18),
-                    Style::default()
-                        .fg(theme.context)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled((*d).to_string(), Style::default().fg(theme.fg)),
-            ]));
-        }
-        lines.push(Line::raw(" "));
-    }
-    lines
-}
-
-fn pad_str(s: &str, w: usize) -> String {
-    let len = s.chars().count();
-    if len >= w {
-        s.to_string()
+    let [body, footer] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(inner);
+    let rows = rows(app, body.width);
+    let max = rows
+        .len()
+        .saturating_sub(usize::from(body.height))
+        .min(usize::from(u16::MAX - 1)) as u16;
+    let scroll = app.help_scroll.get().min(max);
+    app.help_scroll.set(scroll);
+    frame.render_widget(Paragraph::new(rows).scroll((scroll, 0)), body);
+    let controls = if footer.width >= 60 {
+        format!(
+            "j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · {}/{}",
+            scroll + 1,
+            max + 1
+        )
+    } else if footer.width >= 30 {
+        "↑↓ scroll · Esc/?/q close".into()
     } else {
-        let mut o = s.to_string();
-        o.push_str(&" ".repeat(w - len));
-        o
+        "↑↓ · Esc close".into()
+    };
+    frame.render_widget(
+        Paragraph::new(controls).style(Style::default().fg(theme.dim)),
+        footer,
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{app::palette::ENTRIES, config::Config, keybinds::KeyBindings};
+
+    fn app() -> App {
+        App::new(
+            "/tmp/unused-help.txt".into(),
+            "".into(),
+            "2026-05-06".into(),
+            Config::default(),
+        )
+    }
+
+    #[test]
+    fn wide_aliases_wrap_at_terminal_cell_boundaries() {
+        let mut app = app();
+        app.keybinds = KeyBindings::parse("[normal]\nopen_help = [\"界\", \"語\", \"文\"]");
+        for row in rows(&app, 29) {
+            assert!(row.width() <= 29, "{row:?}");
+        }
+    }
+
+    #[test]
+    fn overview_preserves_effective_keys_and_fits_wide_help() {
+        let app = app();
+        let (left, right) = sections(&app);
+        let overview = columns(app.theme(), &left, &right, 95);
+        assert!(overview.len() <= 26, "overview has {} rows", overview.len());
+        let labels: String = left
+            .iter()
+            .chain(right.iter())
+            .flat_map(|section| &section.entries)
+            .map(|entry| entry.keys.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        for entry in ENTRIES {
+            for key in app.keybinds.effective_keys(entry.action) {
+                assert!(
+                    labels.contains(&key_label(vec![key.clone()])),
+                    "missing {:?}: {key}",
+                    entry.action
+                );
+            }
+        }
+        for row in overview {
+            assert!(row.width() <= 95, "{row:?}");
+        }
+    }
+
+    #[test]
+    fn column_headers_keep_their_style_without_coloring_neighboring_actions() {
+        use ratatui::{Terminal, backend::TestBackend};
+        let mut app = app();
+        app.mode = crate::app::Mode::Help;
+        let mut terminal = Terminal::new(TestBackend::new(110, 32)).unwrap();
+        terminal.draw(|frame| crate::ui::draw(frame, &app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        for (needle, heading) in [
+            ("NAVIGATION", true),
+            ("FILTER & VIEW", true),
+            ("new task", false),
+            ("command palette", false),
+        ] {
+            let (x, y) = (0..32)
+                .find_map(|y| {
+                    let row: String = (0..110).map(|x| buffer[(x, y)].symbol()).collect();
+                    row.find(needle)
+                        .map(|byte| (row[..byte].chars().count() as u16, y))
+                })
+                .expect("help heading or action is visible");
+            let cell = &buffer[(x, y)];
+            assert_eq!(
+                cell.fg,
+                if heading {
+                    app.theme().accent
+                } else {
+                    app.theme().fg
+                }
+            );
+            assert_eq!(cell.modifier.contains(Modifier::BOLD), heading, "{needle}");
+        }
     }
 }

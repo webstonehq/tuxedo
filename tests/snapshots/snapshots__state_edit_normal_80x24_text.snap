@@ -1,0 +1,25 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(buf)
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL       
+                                                                                
+ PROJECTS                  [-] (2)  PRIORITY A  ────────────────── priority  (A)
+   +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   202
+   +health           3      2   (A) Call dentist to reschedule cle due       202
+   +finance          2     [-] (3)  PRIORITY B  ────────────────── projects  +wo
+   +home             1      3   (B) Review pull requests for auth  contexts  @la
+   +learning         1      4   (B) Renew passport before summer t              
+   +personal        ┌ EDIT TASK · Vim · Normal ────────────┐senior RAW          
+   +travel          │                                      │──────              
+                    │  › current interaction +demo @desk█  │taxes  (A) 2026-05-0
+ CONTEXTS           │  ok · pri A · 1 +project 1 @context  │+healt Finish Q2 boa
+   @errands         │                                      │────── deck +work   
+   @home            │  Enter save · Esc cancel             │ pipel @laptop      
+   @laptop          │                                      │rec:+1 due:2026-05-0
+   @phone           └──────────────────────────────────────┘rands               
+                           11       Schedule annual physical @phon              
+                           12       Read "Designing Data-Intensive              
+                           13       Send thank-you note to mentor               
+                           14       Plan Saturday hike with K. @ph              
+                           15       Replace bathroom faucet washer

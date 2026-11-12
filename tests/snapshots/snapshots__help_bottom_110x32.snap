@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(terminal.backend().buffer())
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tasks  •  sor DETAIL                           
+     ┌ tuxedo · HELP ──────────────────────────────────────────────────────────────────────────────────┐      
+ PROJ│                                                  ? / ,      help / settings                     │      
+   +w│ TASK SELECTION                                   s          phone capture QR                    │      
+   +h│ v                enter / leave selection         Esc        cancel / clear                      │      
+   +f│ Space            toggle selected row             q, Ctrl-c  quit                                │      
+   +h│                                                                                                 │      
+   +l│ ─────────────────────────────────────────────────────────────────────────────────────────────── │      
+   +p│                                                                                                 │      
+   +t│ INLINE EDITOR · fixed keys                       RECURRENCE · rec: picker                       │      
+     │ Enter               review / save draft          j, ↓, Tab        next field                    │ard   
+ CONT│ Esc                 popup → normal → cancel      k, ↑, Shift-Tab  previous field                │      
+   @e│ h / l, ← / →        move character               l, →, +, =       increase value                │      
+   @h│ w / b / e           word motions (normal)        h, ←, -, _       decrease value                │      
+   @l│ i / a / A           insert before / after /      Enter            save recurrence               │      
+   @p│                     end                          Esc              cancel recurrence             │      
+     │ x / dw / cw         delete char / word /                                                        │      
+     │                     change                                                                      │      
+     │ Tab                 autocomplete (insert)                                                       │      
+     │                                                                                                 │      
+     │ FORMAT · todo.txt                                                                               │      
+     │ (A), YYYY-MM-DD     priority, creation date                                                     │      
+     │ +project, @context  project and context tags                                                    │      
+     │ due:YYYY-MM-DD      due date; search due:+1w                                                    │      
+     │ rec:Nu / rec:+Nu    d/w/m/y/b; + anchors due                                                    │      
+     │ x DATE BODY         completed task                                                              │      
+     │                                                                                                 │      
+     │ Commas separate aliases; / pairs keys with actions. 'palette' means command palette only.       │      
+     │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 18/18                                                 │      
+     └─────────────────────────────────────────────────────────────────────────────────────────────────┘      
+                                                                                                              
+ HELP  · Esc close · j/k scroll · 15 open · 2026-05-06 · tuxedo 2026.8.1

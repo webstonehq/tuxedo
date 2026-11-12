@@ -1,0 +1,16 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(terminal.backend().buffer())
+---
+ ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas
+                                        
+▶[+] (2)  PRIORITY A  ──────────────────
+ [-] (3)  PRIORITY B  ──────────────────
+  1 [x]   (B) Review pull requests for a
+  2 [ ]   (B) Renew passport before summ
+  3 [ ]   (B) Draft hiring rubric for se
+ [-] (2)  PRIORITY C  ──────────────────
+  4 [ ]   (C) Pay quarterly estimated ta
+  5 [ ]   (C) Order new running shoes +h
+ TASK SELECT · 1 tasks selected         
+Notice: cleared 1 hidden selected task

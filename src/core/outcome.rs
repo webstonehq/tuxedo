@@ -144,7 +144,13 @@ pub enum RenameOutcome {
 
 #[derive(Debug)]
 pub enum BulkCompleteOutcome {
-    Done { completed: usize, spawned: usize },
+    Done {
+        completed: usize,
+        spawned: usize,
+        /// Original task indices after which successors were inserted.
+        /// These are storage positions before any of the insertions.
+        inserted_after: Vec<usize>,
+    },
     NothingToComplete,
     Aborted(Reconcile),
     Error(StoreError),

@@ -17,7 +17,7 @@ use crate::todo::{self, Task};
 
 /// Which canonical bucket a List-view row belongs to when the active sort is
 /// `Sort::Due`. `NoDue` covers tasks with no `due:` tag.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ListDueBucket {
     Overdue,
     Today,

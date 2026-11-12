@@ -4,7 +4,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, GroupKey, ListDueBucket, Mode, View};
+use crate::app::{App, DisplayRow, GroupKey, ListDueBucket, Mode, View};
 use crate::core::filter;
 use crate::theme::Theme;
 use crate::ui::{header, keep_cursor_visible, task_row};
@@ -30,6 +30,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             // title: None,
             // file: &display_path(&app.file_path),
             count: app.visible_indices().len(),
+            hidden: app.hidden_by_collapse(),
             sort: app.sort_label(),
             filter: filter_label.as_deref(),
         },
@@ -52,65 +53,81 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .as_ref()
         .and_then(|n| (!n.text.is_empty()).then_some(n.text.as_str()));
 
-    let visible = app.visible_indices();
-    let groups = app.visible_groups();
     let mut lines: Vec<Line> = Vec::new();
-    let mut cursor_line: Option<usize> = None;
-
-    if visible.is_empty() {
+    let mut cursor_line = None;
+    let mut first_member_header = None;
+    let mut last_header_line = 0;
+    if app.visible_indices().is_empty() {
         lines.push(Line::from(Span::styled(
-            "   no tasks match".to_string(),
+            "   no tasks match",
             Style::default().fg(theme.dim),
         )));
     } else {
         let blank = super::density_blank_lines(app.prefs.density);
-        let counts = group_counts(groups);
-        let last = visible.len().saturating_sub(1);
-        let mut last_group: Option<&GroupKey> = None;
-
-        for (i, (&abs, gk)) in visible.iter().zip(groups.iter()).enumerate() {
-            // Emit a section header on group transitions. `GroupKey::None`
-            // means the active sort is `Sort::File`; we never render a header
-            // for it, so the layout is identical to the pre-grouping version.
-            if !matches!(gk, GroupKey::None) && last_group != Some(gk) {
-                if !lines.is_empty() {
-                    push_blanks(&mut lines, blank);
+        let mut task_number = 0;
+        for (row, entry) in app.display_rows().iter().enumerate() {
+            let focused = row == app.cursor && app.mode != Mode::Help && app.mode != Mode::Settings;
+            match entry {
+                DisplayRow::Header { key, count } => {
+                    if !lines.is_empty() {
+                        push_blanks(&mut lines, blank);
+                    }
+                    if row == app.cursor {
+                        cursor_line = Some(lines.len());
+                    }
+                    last_header_line = lines.len();
+                    lines.push(group_header(
+                        theme,
+                        key,
+                        *count,
+                        focused,
+                        app.group_collapsed(key),
+                    ));
                 }
-                lines.push(group_header(theme, gk, counts.lookup(gk)));
-                last_group = Some(gk);
-            }
-
-            let task = &app.tasks()[abs];
-            let opts = task_row::RowOpts {
-                idx_label: i,
-                cursor: i == app.cursor && app.mode != Mode::Help && app.mode != Mode::Settings,
-                multi_mode: app.effective_mode() == Mode::Visual,
-                multi_checked: app.selection.is_selected(abs),
-                selected: app.selection.is_selected(abs),
-                show_line_num: app.prefs.layout.line_num,
-                match_term,
-                today: app.today(),
-                hidden_keys: &app.prefs.hidden_keys,
-            };
-            if i == app.cursor {
-                cursor_line = Some(lines.len());
-            }
-            lines.push(task_row::build_line(task, opts, theme));
-            if matches!(gk, GroupKey::None) && i != last {
-                for _ in 0..blank {
-                    lines.push(Line::raw(""));
+                DisplayRow::Task(abs) => {
+                    if row == app.cursor {
+                        cursor_line = Some(lines.len());
+                        if row > 0
+                            && matches!(app.display_rows()[row - 1], DisplayRow::Header { .. })
+                        {
+                            first_member_header = Some(last_header_line);
+                        }
+                    }
+                    let opts = task_row::RowOpts {
+                        idx_label: task_number,
+                        cursor: focused,
+                        multi_mode: app.effective_mode() == Mode::Visual,
+                        multi_checked: app.selection.is_selected(*abs),
+                        selected: app.selection.is_selected(*abs),
+                        show_line_num: app.prefs.layout.line_num,
+                        match_term,
+                        today: app.today(),
+                        hidden_keys: &app.prefs.hidden_keys,
+                    };
+                    lines.push(task_row::build_line(&app.tasks()[*abs], opts, theme));
+                    task_number += 1;
+                    if row + 1 < app.display_rows().len()
+                        && app.prefs.group_by.effective(app.prefs.sort) == crate::app::GroupBy::None
+                    {
+                        push_blanks(&mut lines, blank);
+                    }
                 }
             }
         }
     }
 
     let scroll_cell = &app.view_scroll[View::List.idx()];
-    let scroll = keep_cursor_visible(
+    let mut scroll = keep_cursor_visible(
         scroll_cell.get(),
         cursor_line,
         body_area.height,
         lines.len(),
     );
+    if let (Some(header), Some(cursor)) = (first_member_header, cursor_line)
+        && cursor - header < usize::from(body_area.height)
+    {
+        scroll = scroll.min(header as u16);
+    }
     scroll_cell.set(scroll);
 
     let para = Paragraph::new(lines)
@@ -128,42 +145,13 @@ fn display_path(p: &std::path::Path) -> String {
     p.display().to_string()
 }
 
-/// Tally rows per `GroupKey` so each header can show its count without an
-/// extra rescan during the render loop. Keyed by a stable string form so
-/// `GroupKey::ListPriority(None)` and `ListPriority(Some('A'))` don't collide.
-struct GroupCounts {
-    inner: std::collections::HashMap<String, usize>,
-}
-
-impl GroupCounts {
-    fn lookup(&self, gk: &GroupKey) -> usize {
-        self.inner.get(&group_count_key(gk)).copied().unwrap_or(0)
-    }
-}
-
-fn group_counts(groups: &[GroupKey]) -> GroupCounts {
-    let mut inner: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    for g in groups {
-        if matches!(g, GroupKey::None) {
-            continue;
-        }
-        *inner.entry(group_count_key(g)).or_insert(0) += 1;
-    }
-    GroupCounts { inner }
-}
-
-fn group_count_key(gk: &GroupKey) -> String {
-    match gk {
-        GroupKey::ListPriority(Some(c)) => format!("p:{c}"),
-        GroupKey::ListPriority(None) => "p:_".to_string(),
-        GroupKey::ListDue(b) => format!("d:{}", b.label()),
-        // Not produced for List view; encode defensively.
-        GroupKey::ArchiveDate(d) => format!("a:{d}"),
-        GroupKey::None => String::new(),
-    }
-}
-
-fn group_header<'a>(theme: &Theme, gk: &GroupKey, count: usize) -> Line<'a> {
+fn group_header<'a>(
+    theme: &Theme,
+    gk: &GroupKey,
+    count: usize,
+    focused: bool,
+    collapsed: bool,
+) -> Line<'a> {
     let (label, color) = match gk {
         GroupKey::ListPriority(Some(c)) => (format!("PRIORITY {c}"), theme.priority_color(*c)),
         GroupKey::ListPriority(None) => ("NO PRIORITY".to_string(), theme.dim),
@@ -171,13 +159,18 @@ fn group_header<'a>(theme: &Theme, gk: &GroupKey, count: usize) -> Line<'a> {
         // Defensive fallthrough — not produced under List view.
         GroupKey::ArchiveDate(d) => (d.clone(), theme.accent),
         GroupKey::None => (String::new(), theme.fg),
+        GroupKey::Done => ("DONE".to_string(), theme.dim),
     };
 
     let char_count = count.to_string().len() + label.len();
     let divider_length = 80 - char_count;
 
-    Line::from(vec![
-        Span::raw(" "),
+    let line = Line::from(vec![
+        Span::raw(if focused { "▶" } else { " " }),
+        Span::styled(
+            if collapsed { "[+] " } else { "[-] " },
+            Style::default().fg(color),
+        ),
         Span::styled(format!("({})", count), Style::default().fg(theme.dim)),
         Span::raw("  "),
         Span::styled(
@@ -189,7 +182,12 @@ fn group_header<'a>(theme: &Theme, gk: &GroupKey, count: usize) -> Line<'a> {
             "─".repeat(divider_length),
             Style::default().fg(theme.border),
         ),
-    ])
+    ]);
+    if focused {
+        line.style(Style::default().bg(theme.cursor))
+    } else {
+        line
+    }
 }
 
 fn due_bucket_color(theme: &Theme, b: ListDueBucket) -> Color {

@@ -3,34 +3,34 @@ source: tests/snapshots.rs
 expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL                           
-     ┌ tuxedo · help ─────────────────────────────────────────────────────────────────────────┐     
- PROJ│  NAVIGATION                                  VIEW                                      │     
-   +w│    j / k  (↓ / ↑)    next / previous task      /                 fuzzy search          │     
-   +h│    gg / G            first / last task         fp / fc           filter project/context│     
-   +f│    Ctrl-d / Ctrl-u   page down / up            ff / fs           saved filter pick/save│     
-   +h│                                                S                 cycle sort            │     
-   +l│  EDITING                                       v                 visual / multi-select │     
-   +p│    n                 new task                  l                 list view             │     
-   +t│    e / i             edit (normal / insert)    a                 archive view          │     
-     │    r                 reschedule task           A                 archive completed     │rd   
- CONT│    x                 toggle complete           H                 show done in list     │     
-   @e│    dd                delete task               F                 show future in list   │     
-   @h│    p                 cycle priority A→B→C→·    [ / ]             toggle filter / detail│     
-   @l│    J / K             move task down / up       T                 theme picker          │     
-   @p│    c                 add/remove context        D                 cycle density         │     
-     │    +                 add project               L                 toggle line numbers   │     
-     │    yy / yb           copy line / body                                                  │     
-     │    u                 undo                    SYSTEM                                    │     
-     │                                                : / Ctrl-P        command palette       │     
-     │  RECURRENCE (rec:)                             s                 share capture QR      │     
-     │    j / k / Tab       next / prev field         ? / ,             help / settings       │     
-     │    h / l / + / -     change value              q / Ctrl-c        quit                  │     
-     │    Enter / Esc       save / cancel                                                     │     
-     │────────────────────────────────────────────────────────────────────────────────────────│     
-     │  FORMAT                                                                                │     
-     │    (A)               priority A-Z              due:YYYY-MM-DD    due date (+1w = range)│     
-     │    YYYY-MM-DD        creation / done date      rec:Nu            recur (u in d/w/m/y/b)│     
-     │    +project          project tag(s)            rec:+Nu           strict: anchor on due:│     
+     ┌ tuxedo · HELP ─────────────────────────────────────────────────────────────────────────┐     
+ PROJ│ NAVIGATION                                   FILTER & VIEW                             │     
+   +w│ j, ↓ / k, ↑      next / previous row         /          search tasks                   │     
+   +h│ gg / G           first / last row            fp / fc    filter project / context       │     
+   +f│ Ctrl-d / Ctrl-u  page down / up              ff / fs    saved filter: pick / save      │     
+   +h│ fg               group tasks                 S          cycle sort                     │     
+   +l│ Enter            collapse / expand group     l / a      list / archive view            │     
+   +p│                                              A          archive completed              │     
+   +t│ TASK EDITING                                 H / F      show done / future             │     
+     │ n                new task                                                              │rd   
+ CONT│ e / i            edit: normal / insert       LAYOUT & APPEARANCE                       │     
+   @e│ x / dd           complete / delete           [ / ]      filter / detail pane           │     
+   @h│ r / p            reschedule / priority       T / D      theme / density                │     
+   @l│ J / K            move down / up              L / W      line numbers / week start      │     
+   @p│ + / c            project / context           palette    cycle theme                    │     
+     │ yy / yb          copy line / body                                                      │     
+     │ o / O            open / create note          SYSTEM                                    │     
+     │ u                undo task change            :, Ctrl-p  command palette                │     
+     │                                              ? / ,      help / settings                │     
+     │ TASK SELECTION                               s          phone capture QR               │     
+     │ v                enter / leave selection     Esc        cancel / clear                 │     
+     │ Space            toggle selected row         q, Ctrl-c  quit                           │     
+     │                                                                                        │     
+     │ ────────────────────────────────────────────────────────────────────────────────────── │     
+     │                                                                                        │     
+     │ INLINE EDITOR · fixed keys                   RECURRENCE · rec: picker                  │     
+     │ Enter             review / save draft        j, ↓, Tab        next field               │     
+     │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 1/22                                         │     
      └────────────────────────────────────────────────────────────────────────────────────────┘     
                                                                                                     
- HELP   ? close help                                         15 open · 2026-05-06 · tuxedo 2026.8.1
+ HELP  · Esc close · j/k scroll · 15 open · 2026-05-06 · tuxedo 2026.8.1

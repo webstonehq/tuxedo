@@ -26,6 +26,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             title: Some("done.txt"),
             // file: "completed",
             count: app.archive().len(),
+            hidden: 0,
             sort: "completion-date",
             filter: None,
         },

@@ -5,7 +5,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::{
-    App, BuilderField, CalendarTarget, DraftOverlay, Mode, REC_UNIT_ORDER, TokenKind, WeekStart,
+    App, BuilderField, CalendarTarget, DialogInputMode, DraftOverlay, Mode, REC_UNIT_ORDER,
+    TokenKind, WeekStart,
 };
 use crate::theme::Theme;
 
@@ -262,15 +263,109 @@ pub fn draft_cursor_spans<'a>(
     }
 }
 
+/// Return a single-line UTF-8 window and its cursor byte offset. The window
+/// reserves enough terminal cells for the cursor glyph (or the end block),
+/// so wide characters and drafts longer than u16::MAX stay usable. Width zero
+/// yields no content; a wide cursor in one cell is represented by an end block.
+pub fn visible_draft_window(draft: &str, cursor: usize, width: u16) -> (&str, usize) {
+    let mut cursor = cursor.min(draft.len());
+    while !draft.is_char_boundary(cursor) {
+        cursor -= 1;
+    }
+    if width == 0 {
+        return (&draft[cursor..cursor], 0);
+    }
+    let width = usize::from(width);
+    let mut end = if cursor < draft.len() {
+        next_boundary(draft, cursor)
+    } else {
+        cursor
+    };
+    let end_block = usize::from(cursor == draft.len());
+    if Span::raw(&draft[cursor..end]).width().max(1) > width {
+        return (&draft[cursor..cursor], 0);
+    }
+    let mut start = cursor;
+    for (candidate, _) in draft[..cursor].char_indices().rev() {
+        if Span::raw(&draft[candidate..end]).width() + end_block > width {
+            break;
+        }
+        start = candidate;
+    }
+    let tail_start = end;
+    for (relative, ch) in draft[tail_start..].char_indices() {
+        let candidate = tail_start + relative + ch.len_utf8();
+        if Span::raw(&draft[start..candidate]).width() + end_block > width {
+            break;
+        }
+        end = candidate;
+    }
+    (&draft[start..end], cursor - start)
+}
+
+fn visible_highlighted_draft<'a>(app: &'a App, width: u16) -> Vec<Span<'a>> {
+    let draft = app.draft.text();
+    let cursor = app.draft.cursor();
+    let (window, local_cursor) = visible_draft_window(draft, cursor, width);
+    if width == 0 {
+        return Vec::new();
+    }
+    if window.is_empty() {
+        return vec![Span::styled("█", Style::default().fg(app.theme().fg))];
+    }
+    let start = cursor - local_cursor;
+    let end = start + window.len();
+    let mut offset = 0;
+    highlighted_draft_spans(draft, cursor, app.theme())
+        .into_iter()
+        .filter_map(|span| {
+            let span_start = offset;
+            offset += span.content.len();
+            if span_start == draft.len() && end == draft.len() {
+                return Some(span);
+            }
+            let from = start.max(span_start);
+            let to = end.min(offset);
+            if from >= to {
+                return None;
+            }
+            // Highlighter spans borrow the original draft; retain its token
+            // colours even when the viewport starts midway through a token.
+            let content = &draft[from..to];
+            Some(Span::styled(content, span.style))
+        })
+        .collect()
+}
+
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
-    let title = if app.selection.editing().is_some() {
-        " EDIT TASK "
+    let action = if app.selection.editing().is_some() {
+        "EDIT TASK"
     } else {
-        " ADD TASK "
+        "ADD TASK"
     };
+    let compact = area.height < 3 || area.width < 3;
+    let mode = app.draft.input_mode().label();
+    let profile = app.draft.editor_profile_label();
+    let short_action = if app.selection.editing().is_some() {
+        "EDIT"
+    } else {
+        "ADD"
+    };
+    let titles = [
+        format!(" {action} · {profile} · {mode} "),
+        format!(" {action} · {profile} {} ", &mode[..1]),
+        format!(" {short_action} · {profile} {} ", &mode[..1]),
+        format!(" {short_action} {} ", &mode[..1]),
+    ];
+    let title = titles
+        .into_iter()
+        .find(|title| {
+            Span::raw(title.as_str()).width() <= usize::from(area.width.saturating_sub(2))
+        })
+        .unwrap_or_default();
     let block = Block::default()
-        .borders(Borders::ALL)
+        .borders(if compact { Borders::NONE } else { Borders::ALL })
         .border_style(Style::default().fg(theme.border).bg(theme.panel))
         .title(Line::from(vec![Span::styled(
             title,
@@ -282,75 +377,125 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let [_p1, input_area, preview_area, _p2, hint_area, _p3] = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Length(1),
+    let (mode_area, input_area, preview_area, hint_area) = if inner.height >= 5 {
+        let [mode, input, preview, _, hint, _] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .areas(inner);
+        (mode, input, preview, hint)
+    } else {
+        // The title owns the mode; only borderless panes need an interior label.
+        let mode_h = u16::from(compact && inner.height >= 2);
+        let hint_h = u16::from(inner.height >= 2 + mode_h);
+        let preview_h = u16::from(inner.height >= 3 + mode_h);
+        let [mode, input, preview, hint] = Layout::vertical([
+            Constraint::Length(mode_h),
+            Constraint::Length(1),
+            Constraint::Length(preview_h),
+            Constraint::Length(hint_h),
+        ])
+        .areas(inner);
+        (mode, input, preview, hint)
+    };
+    if compact {
+        frame.render_widget(
+            Paragraph::new(format!("{profile} {}", &mode[..1])).style(
+                Style::default()
+                    .fg(theme.accent)
+                    .bg(theme.panel)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            mode_area,
+        );
+    }
+
+    let prefix_width = if input_area.width >= 8 { 4 } else { 0 };
+    let right_pad = if input_area.width >= 12 { 2 } else { 0 };
+    let [prefix_area, content_area, _right_padding] = Layout::horizontal([
+        Constraint::Length(prefix_width),
+        Constraint::Min(0),
+        Constraint::Length(right_pad),
     ])
-    .areas(inner);
-
-    // Split the input row into a fixed prefix ("  › ") and a scrollable
-    // content area. Without this, long drafts get clipped at the dialog's
-    // right edge — including the cursor itself, so the user can't see what
-    // they're typing. The prefix never scrolls; the content paragraph offsets
-    // horizontally to keep the cursor onscreen.
-    const PREFIX_W: u16 = 4;
-    let [prefix_area, content_area] =
-        Layout::horizontal([Constraint::Length(PREFIX_W), Constraint::Min(0)]).areas(input_area);
-
-    let prefix_line = Line::from(vec![
-        Span::raw("  "),
-        Span::styled(
-            "› ",
+    .areas(input_area);
+    frame.render_widget(
+        Paragraph::new("  › ").style(
             Style::default()
                 .fg(theme.accent)
                 .add_modifier(Modifier::BOLD),
         ),
-    ])
-    .style(Style::default().bg(theme.panel));
-    frame.render_widget(
-        Paragraph::new(prefix_line).style(Style::default().bg(theme.panel)),
         prefix_area,
     );
-
-    let content_line = Line::from(highlighted_draft_spans(
-        app.draft.text(),
-        app.draft.cursor(),
-        theme,
-    ))
-    .style(Style::default().bg(theme.panel));
-    let cursor = app.draft.cursor().min(app.draft.text().len());
-    let cursor_col = app.draft.text()[..cursor].chars().count();
-    let avail = content_area.width as usize;
-    // Pin the cursor to the rightmost visible column whenever it would
-    // otherwise overflow. Stateless: when the cursor moves left of the
-    // viewport, scroll naturally drops back to 0.
-    let scroll_x = if avail == 0 {
-        0
-    } else {
-        cursor_col.saturating_sub(avail.saturating_sub(1)) as u16
-    };
     frame.render_widget(
-        Paragraph::new(content_line)
-            .style(Style::default().bg(theme.panel))
-            .scroll((0, scroll_x)),
+        Paragraph::new(Line::from(visible_highlighted_draft(
+            app,
+            content_area.width,
+        )))
+        .style(Style::default().bg(theme.panel)),
         content_area,
     );
-
-    let preview = preview_line(app);
     frame.render_widget(
-        Paragraph::new(preview).style(Style::default().bg(theme.panel)),
+        Paragraph::new(preview_line(app)).style(Style::default().bg(theme.panel)),
         preview_area,
     );
-
-    let hint = hint_line(theme);
+    let hint_pad = if hint_area.width >= 12 { 2 } else { 0 };
+    let hint_area = Rect::new(
+        hint_area.x + hint_pad,
+        hint_area.y,
+        hint_area.width.saturating_sub(hint_pad * 2),
+        hint_area.height,
+    );
     frame.render_widget(
-        Paragraph::new(hint).style(Style::default().bg(theme.panel)),
+        Paragraph::new(editor_hint(app, hint_area.width))
+            .style(Style::default().fg(theme.dim).bg(theme.panel)),
         hint_area,
     );
+}
+
+fn editor_hint(app: &App, width: u16) -> String {
+    let insert = app.draft.input_mode() == DialogInputMode::Insert;
+    if insert {
+        if let Some(overlay) = app.draft.overlay() {
+            return match overlay {
+                DraftOverlay::RecurrenceBuilder(_) => "Repeat picker: save/cancel below".into(),
+                DraftOverlay::Calendar(_) => String::new(),
+                _ => "Enter choose · Esc back".into(),
+            };
+        }
+        if app.autocomplete_visible() {
+            return "Tab/Enter accept · Esc dismiss".into();
+        }
+    }
+    let save = if app.selection.editing().is_some() {
+        "save"
+    } else {
+        "review/save"
+    };
+    let candidates = if insert {
+        vec![
+            format!("Enter {save} · Esc normal → Esc cancel"),
+            format!("Enter {save} · Esc→Normal→cancel"),
+            "Enter save · Esc→Normal→cancel".into(),
+            "Enter OK · Esc×2 cancel".into(),
+            "Enter · Esc×2".into(),
+            "↵ · Esc×2".into(),
+        ]
+    } else {
+        vec![
+            format!("Enter {save} · Esc cancel"),
+            "Enter save · Esc cancel".into(),
+            "Enter · Esc cancel".into(),
+            "↵ · Esc".into(),
+        ]
+    };
+    candidates
+        .into_iter()
+        .find(|text| Span::raw(text.as_str()).width() <= usize::from(width))
+        .unwrap_or_default()
 }
 
 fn preview_line<'a>(app: &App) -> Line<'a> {
@@ -448,9 +593,19 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
     ])
     .areas(inner);
 
-    let mut spans = vec![
-        Span::raw("  "),
-        Span::styled(
+    let prefix_width = if input_area.width >= 5 {
+        3
+    } else if input_area.width >= 2 {
+        1
+    } else {
+        0
+    };
+    let mut spans = Vec::new();
+    if prefix_width == 3 {
+        spans.push(Span::raw("  "));
+    }
+    if prefix_width > 0 {
+        spans.push(Span::styled(
             sigil,
             Style::default()
                 .fg(if sigil == "+" {
@@ -459,14 +614,14 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
                     theme.context
                 })
                 .add_modifier(Modifier::BOLD),
-        ),
-    ];
-    spans.extend(draft_cursor_spans(
+        ));
+    }
+    let (window, cursor) = visible_draft_window(
         app.draft.text(),
         app.draft.cursor(),
-        theme.fg,
-        theme.panel,
-    ));
+        input_area.width.saturating_sub(prefix_width),
+    );
+    spans.extend(draft_cursor_spans(window, cursor, theme.fg, theme.panel));
     let line = Line::from(spans).style(Style::default().bg(theme.panel));
     frame.render_widget(
         Paragraph::new(line).style(Style::default().bg(theme.panel)),
@@ -519,25 +674,7 @@ pub fn render_autocomplete(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App
     let popup_w: u16 = (((longest as u16).saturating_add(3)).max(16)).min(dlg.width.max(16));
     let popup_h: u16 = matches.len() as u16;
 
-    // Anchor below the dialog, aligned to the input prefix ("  › " = 4 cols).
-    let mut popup_x = dlg.x + 4;
-    let mut popup_y = dlg.y + dlg.height;
-    // Keep on-screen when the dialog hugs the bottom/right edge.
-    let max_x = screen.x + screen.width.saturating_sub(popup_w);
-    let max_y = screen.y + screen.height.saturating_sub(popup_h);
-    if popup_x > max_x {
-        popup_x = max_x;
-    }
-    if popup_y > max_y {
-        popup_y = max_y;
-    }
-
-    let area = Rect {
-        x: popup_x,
-        y: popup_y,
-        width: popup_w,
-        height: popup_h,
-    };
+    let area = anchor_below_dialog(dlg, screen, popup_w, popup_h);
     frame.render_widget(Clear, area);
 
     let selected = app.draft.autocomplete_index().min(matches.len() - 1);
@@ -573,6 +710,8 @@ pub fn render_autocomplete(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App
 /// `render_autocomplete` placement code so every overlay floats in the same
 /// place.
 fn anchor_below_dialog(dlg: Rect, screen: Rect, popup_w: u16, popup_h: u16) -> Rect {
+    let popup_w = popup_w.min(screen.width);
+    let popup_h = popup_h.min(screen.height);
     let mut popup_x = dlg.x + 4;
     let mut popup_y = dlg.y + dlg.height;
     let max_x = screen.x + screen.width.saturating_sub(popup_w);
@@ -753,14 +892,32 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     };
     let popup_w: u16 = 50u16.min(screen.width.max(40));
     let popup_h: u16 = 13;
-    let area = anchor_below_dialog(dlg, screen, popup_w, popup_h);
+    // Preserve the editor's profile/input rows when the popup must move up.
+    // On short panes the calendar grid yields space before its controls do.
+    let below_input = dlg.y.saturating_add(3).min(screen.bottom());
+    let available = Rect::new(
+        screen.x,
+        below_input,
+        screen.width,
+        screen.bottom() - below_input,
+    );
+    let calendar_screen = if available.height >= 3 {
+        available
+    } else {
+        screen
+    };
+    let area = anchor_below_dialog(dlg, calendar_screen, popup_w, popup_h);
     frame.render_widget(Clear, area);
     let label = match state.target {
         CalendarTarget::Due => "DUE",
         CalendarTarget::Threshold => "THRESHOLD",
     };
     let block = Block::default()
-        .borders(Borders::ALL)
+        .borders(if area.height < 3 || area.width < 3 {
+            Borders::NONE
+        } else {
+            Borders::ALL
+        })
         .border_style(Style::default().fg(theme.border).bg(theme.panel))
         .title(Line::from(Span::styled(
             format!(" {label} "),
@@ -807,7 +964,11 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     let dow = Line::from(vec![Span::raw("  "), dow_header]).style(Style::default().bg(theme.panel));
     lines.push(dow);
     // Up to 6 week rows; `calendar_cells` stops before any all-blank trailing row.
+    let mut focused_row = 2;
     for row in calendar_cells(first_of_month, app.week_start) {
+        if row.contains(&Some(focused.day())) {
+            focused_row = lines.len();
+        }
         let mut spans: Vec<Span> = vec![Span::raw("  ")];
         for cell in row {
             match cell {
@@ -829,24 +990,43 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
         }
         lines.push(Line::from(spans).style(Style::default().bg(theme.panel)));
     }
-    // Spacer + focused-date label.
-    lines.push(Line::raw("").style(Style::default().bg(theme.panel)));
-    lines.push(
-        Line::from(vec![
-            Span::raw("  "),
-            Span::styled(
-                format_focused(focused),
-                Style::default().fg(theme.due).add_modifier(Modifier::BOLD),
-            ),
-        ])
-        .style(Style::default().bg(theme.panel)),
-    );
-    lines.push(calendar_footer(theme));
-
+    // Reserve the essential controls independently of calendar content. They
+    // must remain visible even when a six-week month or a short pane clips the grid.
+    let [grid_area, focused_area, controls_area, quick_area] = Layout::vertical([
+        Constraint::Min(0),
+        Constraint::Length(u16::from(inner.height >= 3)),
+        Constraint::Length(u16::from(inner.height > 0)),
+        Constraint::Length(u16::from(inner.height >= 11 && inner.width >= 46)),
+    ])
+    .areas(inner);
+    let scroll = super::keep_cursor_visible(0, Some(focused_row), grid_area.height, lines.len());
     frame.render_widget(
-        Paragraph::new(lines).style(Style::default().bg(theme.panel)),
-        inner,
+        Paragraph::new(lines)
+            .scroll((scroll, 0))
+            .style(Style::default().bg(theme.panel)),
+        grid_area,
     );
+    frame.render_widget(
+        Paragraph::new(format!("  {}", format_focused(focused))).style(
+            Style::default()
+                .fg(theme.due)
+                .bg(theme.panel)
+                .add_modifier(Modifier::BOLD),
+        ),
+        focused_area,
+    );
+    let controls = if controls_area.width >= 25 {
+        "Enter select · Esc cancel"
+    } else if controls_area.width >= 19 {
+        "Enter OK · Esc back"
+    } else {
+        "↵OK Esc×"
+    };
+    frame.render_widget(
+        Paragraph::new(controls).style(Style::default().fg(theme.dim).bg(theme.panel)),
+        controls_area,
+    );
+    frame.render_widget(Paragraph::new(calendar_footer(theme)), quick_area);
 }
 
 fn calendar_footer<'a>(theme: &Theme) -> Line<'a> {
@@ -1030,7 +1210,7 @@ fn render_recurrence_builder(frame: &mut Frame, dlg: Rect, screen: Rect, app: &A
         Line::raw("").style(Style::default().bg(theme.panel)),
         line_preview,
         Line::raw("").style(Style::default().bg(theme.panel)),
-        rec_footer(theme),
+        rec_footer(theme, app),
     ];
 
     frame.render_widget(
@@ -1039,31 +1219,27 @@ fn render_recurrence_builder(frame: &mut Frame, dlg: Rect, screen: Rect, app: &A
     );
 }
 
-fn rec_footer<'a>(theme: &Theme) -> Line<'a> {
-    Line::from(vec![
-        Span::raw("  "),
-        Span::styled(
-            "jk",
-            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+fn rec_footer<'a>(theme: &Theme, app: &App) -> Line<'a> {
+    use crate::action::RecAction;
+    let key = |action| {
+        app.keybinds
+            .effective_recurrence_keys(action)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| "unbound".into())
+    };
+    Line::styled(
+        format!(
+            " {} save · {} cancel · {}/{} field · {}/{} value",
+            key(RecAction::Accept),
+            key(RecAction::Cancel),
+            key(RecAction::FocusNext),
+            key(RecAction::FocusPrev),
+            key(RecAction::ValueNext),
+            key(RecAction::ValuePrev)
         ),
-        Span::styled(" field · ", Style::default().fg(theme.dim)),
-        Span::styled(
-            "hl/+-",
-            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" change · ", Style::default().fg(theme.dim)),
-        Span::styled(
-            "Enter",
-            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" save · ", Style::default().fg(theme.dim)),
-        Span::styled(
-            "Esc",
-            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" cancel", Style::default().fg(theme.dim)),
-    ])
-    .style(Style::default().bg(theme.panel))
+        Style::default().fg(theme.dim).bg(theme.panel),
+    )
 }
 
 fn render_priority_chooser(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
@@ -1237,15 +1413,6 @@ fn format_focused(d: chrono::NaiveDate) -> String {
     format!("{dow} {mon} {}", d.day())
 }
 
-fn hint_line<'a>(theme: &Theme) -> Line<'a> {
-    let mut spans = vec![
-        Span::raw("  "),
-        Span::styled("format: ", Style::default().fg(theme.dim)),
-    ];
-    spans.extend(format_hint_spans(theme));
-    Line::from(spans).style(Style::default().bg(theme.panel))
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -1256,6 +1423,17 @@ mod tests {
     use crate::app::{App, Mode};
     use crate::config::Config;
 
+    fn dialog_top(buf: &Buffer) -> u16 {
+        (0..buf.area.height)
+            .find(|&y| {
+                let row: String = (0..buf.area.width).map(|x| buf[(x, y)].symbol()).collect();
+                ["ADD TASK", "EDIT TASK", "ADD PROJECT", "TOGGLE CONTEXT"]
+                    .iter()
+                    .any(|title| row.contains(title))
+            })
+            .expect("dialog title visible")
+    }
+
     /// Pull just the rows immediately below the centered Insert dialog where
     /// the popup floats — avoids matching against the sidebar / status bar
     /// content that contains the same project / context names.
@@ -1265,8 +1443,7 @@ mod tests {
         let rows = buf.area.height;
         let cols = buf.area.width;
         let dlg_h: u16 = 8;
-        let dlg_y = (rows.saturating_sub(dlg_h)) / 2;
-        let popup_top = dlg_y + dlg_h;
+        let popup_top = dialog_top(buf) + dlg_h;
         let popup_bottom = (popup_top + 8).min(rows);
         let mut out = String::new();
         for y in popup_top..popup_bottom {
@@ -1294,6 +1471,167 @@ mod tests {
         app.mode = Mode::Insert;
         app.draft_set_insert(draft.to_string());
         app
+    }
+
+    #[test]
+    fn draft_window_keeps_ascii_and_wide_cursors_inside_cell_budget() {
+        for draft in ["abcdefghijk", "ab界界界終", "café long draft", ""] {
+            for cursor in draft
+                .char_indices()
+                .map(|(i, _)| i)
+                .chain(std::iter::once(draft.len()))
+            {
+                for width in 1..12 {
+                    let (window, local) = super::visible_draft_window(draft, cursor, width);
+                    assert!(window.is_char_boundary(local));
+                    let spans = super::draft_cursor_spans(
+                        window,
+                        local,
+                        ratatui::style::Color::White,
+                        ratatui::style::Color::Black,
+                    );
+                    assert!(
+                        ratatui::text::Line::from(spans).width() <= usize::from(width),
+                        "{window:?} {local} {width}"
+                    );
+                    assert_eq!(
+                        window[..local].chars().last(),
+                        draft[..cursor].chars().last().filter(|_| local > 0)
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn draft_window_handles_huge_drafts_invalid_offsets_and_zero_width() {
+        let draft = format!("{}界", "x".repeat(70_000));
+        let (window, cursor) = super::visible_draft_window(&draft, usize::MAX, 10);
+        assert_eq!(window, "xxxxxxx界");
+        assert_eq!(cursor, window.len());
+        assert_eq!(super::visible_draft_window("界", 1, 1), ("", 0));
+        assert_eq!(super::visible_draft_window("abc", 2, 0), ("", 0));
+    }
+
+    #[test]
+    fn dialog_modes_and_controls_are_visible_without_status_bar() {
+        let mut app = build_insert_app("plain\n", "draft text");
+        app.prefs.layout.status_bar = false;
+        for mode in [
+            crate::app::DialogInputMode::Normal,
+            crate::app::DialogInputMode::Insert,
+        ] {
+            app.draft.set_input_mode(mode);
+            for (width, height) in [(110, 32), (80, 24), (30, 8)] {
+                let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+                terminal.draw(|frame| crate::ui::draw(frame, &app)).unwrap();
+                let text: String = terminal
+                    .backend()
+                    .buffer()
+                    .content
+                    .iter()
+                    .map(|cell| cell.symbol())
+                    .collect();
+                assert!(text.contains("Vim"));
+                assert!(text.contains(mode.label()));
+                assert!(text.contains("draft text█"));
+                assert!(text.contains("Enter"));
+                assert!(text.contains("Esc"));
+            }
+        }
+    }
+
+    #[test]
+    fn action_mode_title_and_padded_input_survive_required_layouts() {
+        use crate::app::DialogInputMode;
+        use ratatui::style::Modifier;
+        for editing in [false, true] {
+            for mode in [DialogInputMode::Normal, DialogInputMode::Insert] {
+                let mut app = build_insert_app("plain\n", "draft text");
+                app.prefs.layout.status_bar = false;
+                app.draft.set_input_mode(mode);
+                if editing {
+                    app.selection.enter_edit(0);
+                }
+                for (width, height) in [(110, 32), (80, 24), (30, 8)] {
+                    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+                    terminal.draw(|frame| crate::ui::draw(frame, &app)).unwrap();
+                    let buf = terminal.backend().buffer();
+                    let top = dialog_top(buf);
+                    let title: String = (0..width).map(|x| buf[(x, top)].symbol()).collect();
+                    let action = if editing { "EDIT TASK" } else { "ADD TASK" };
+                    assert!(title.contains(&format!("{action} · Vim · {}", mode.label())));
+                    let left = (0..width).find(|&x| buf[(x, top)].symbol() == "┌").unwrap();
+                    let right = (left..width)
+                        .find(|&x| buf[(x, top)].symbol() == "┐")
+                        .unwrap();
+                    for x in left + 1..right {
+                        assert_eq!(buf[(x, top + 1)].symbol(), " ");
+                    }
+                    let input: String =
+                        (left..=right).map(|x| buf[(x, top + 2)].symbol()).collect();
+                    assert!(input.starts_with("│  › "));
+                    assert!(input.contains("draft text█"));
+                    assert!(input.ends_with("  │"));
+                    let mode_x = (left..right)
+                        .find(|&x| buf[(x, top)].symbol() == "V")
+                        .unwrap();
+                    let cell = &buf[(mode_x, top)];
+                    assert_eq!(cell.fg, app.theme().accent);
+                    assert_ne!(cell.fg, cell.bg);
+                    assert!(cell.modifier.contains(Modifier::BOLD));
+                    let text: String = buf.content.iter().map(|c| c.symbol()).collect();
+                    assert_eq!(text.matches("Vim").count(), 1);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn essential_editor_hints_fit_without_partial_control_names() {
+        let mut app = build_insert_app("plain\n", "draft text");
+        for mode in [
+            crate::app::DialogInputMode::Normal,
+            crate::app::DialogInputMode::Insert,
+        ] {
+            app.draft.set_input_mode(mode);
+            for width in [28, 38, 60] {
+                let hint = super::editor_hint(&app, width);
+                assert!(ratatui::text::Span::raw(hint.as_str()).width() <= usize::from(width));
+                assert!(hint.contains("Enter") && hint.contains("Esc"));
+                assert!(hint.contains("cancel"));
+            }
+        }
+    }
+
+    #[test]
+    fn dialog_and_popups_stay_bounded_in_tiny_panes() {
+        let app = build_insert_app("plain\n", "long draft 界");
+        for width in 0..12 {
+            for height in 0..8 {
+                let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+                terminal
+                    .draw(|frame| super::render(frame, frame.area(), &app))
+                    .unwrap();
+                let screen = ratatui::layout::Rect::new(3, 4, width, height);
+                let popup = super::anchor_below_dialog(screen, screen, 60, 10);
+                assert!(popup.x >= screen.x && popup.y >= screen.y);
+                assert!(popup.right() <= screen.right() && popup.bottom() <= screen.bottom());
+            }
+        }
+    }
+
+    #[test]
+    fn horizontal_window_preserves_existing_token_colours() {
+        let app = build_insert_app("plain\n", "due:2026-12-31");
+        let spans = super::visible_highlighted_draft(&app, 6);
+        assert!(
+            spans
+                .iter()
+                .any(|span| span.style.fg == Some(app.theme().due))
+        );
+        let text: String = spans.iter().map(|span| span.content.as_ref()).collect();
+        assert_eq!(text, "12-31█");
     }
 
     #[test]
@@ -1440,10 +1778,9 @@ mod tests {
     /// Pull the dialog's interior rows (between the borders) — preview lives
     /// on row 3 of the inner area in the current layout.
     fn dialog_inner_text(buf: &Buffer) -> String {
-        let rows = buf.area.height;
         let cols = buf.area.width;
-        let dlg_h: u16 = 9;
-        let dlg_y = (rows.saturating_sub(dlg_h)) / 2;
+        let dlg_h: u16 = 8;
+        let dlg_y = dialog_top(buf);
         let mut out = String::new();
         for y in dlg_y..(dlg_y + dlg_h) {
             for x in 0..cols {
@@ -1469,8 +1806,7 @@ mod tests {
         let buf = terminal.backend().buffer();
         // Dialog is 8 rows tall, centered in a 30-row area; input lives on
         // the second inner row (top border + 1 row padding + input).
-        let dlg_y = (30u16 - 8) / 2;
-        let input_y = dlg_y + 2;
+        let input_y = dialog_top(buf) + 2;
         let mut row = String::new();
         for x in 0..80 {
             row.push_str(buf[(x, input_y)].symbol());
@@ -1584,8 +1920,7 @@ mod tests {
         let rows = buf.area.height;
         let cols = buf.area.width;
         let dlg_h: u16 = 5; // PROMPT_H
-        let dlg_y = (rows.saturating_sub(dlg_h)) / 2;
-        let popup_top = dlg_y + dlg_h;
+        let popup_top = dialog_top(buf) + dlg_h;
         let popup_bottom = (popup_top + 8).min(rows);
         let mut out = String::new();
         for y in popup_top..popup_bottom {

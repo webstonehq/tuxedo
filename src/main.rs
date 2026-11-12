@@ -15,7 +15,7 @@ use tuxedo::app::{AddOutcome, App, CalendarTarget, DialogInputMode, Mode, Overla
 use tuxedo::cli;
 use tuxedo::config::Config;
 use tuxedo::config_watcher;
-use tuxedo::keybinds::{KeyBindings, ResolvedKey};
+use tuxedo::keybinds::KeyBindings;
 use tuxedo::theme;
 use tuxedo::ui::hyperlinks;
 use tuxedo::{clipboard, todo, ui, update};
@@ -89,6 +89,7 @@ fn main() -> Result<()> {
     let done = cli::done_path(&path);
     let mut app_state = App::new_with_done(path.clone(), done, body, today, cfg);
     app_state.config_path = Config::path();
+    app_state.keybinds = keybinds.clone();
     app_state.mode = start_mode;
     // Start the config hot-reload watcher.
     let config_rx = app_state
@@ -260,13 +261,14 @@ fn run(
 /// apply it to the app. Returns `true` when a reload was attempted (whether
 /// successful or not) so the caller can trigger a redraw.
 ///
-/// Deferred while `Mode::PickTheme` is open: its live preview
+/// Deferred while a theme or grouping picker is open so its snapshot and
+/// cancellation contract remain intact. Theme live preview
 /// (`pick_theme_step`) mutates `prefs.theme_idx` in memory without saving,
 /// so an unrelated reload landing mid-preview would silently clobber it
 /// back to whatever's on disk. The signal stays queued in `rx` and is
 /// applied on the first poll after the picker closes.
 fn poll_config_reload(app: &mut App, rx: &Option<mpsc::Receiver<()>>) -> bool {
-    if app.mode == Mode::PickTheme {
+    if matches!(app.mode, Mode::PickTheme | Mode::PickGrouping) {
         return false;
     }
     let rx = match rx {
@@ -282,8 +284,17 @@ fn poll_config_reload(app: &mut App, rx: &Option<mpsc::Receiver<()>>) -> bool {
     };
     match Config::load_strict(path) {
         Ok(new_cfg) => {
+            let selected = app.selection.len();
             app.reload_config(new_cfg);
-            app.flash("config reloaded");
+            let cleared = selected - app.selection.len();
+            if cleared > 0 {
+                app.flash(format!(
+                    "config reloaded; cleared {cleared} hidden selected task{}",
+                    if cleared == 1 { "" } else { "s" }
+                ));
+            } else {
+                app.flash("config reloaded");
+            }
             true
         }
         Err(e) => {
@@ -350,6 +361,13 @@ fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
         | Mode::PromptSaveFilter => handle_prompt(app, key),
         Mode::PickProject | Mode::PickContext | Mode::PickSavedFilter => handle_pick(app, key),
         Mode::PickTheme => handle_pick_theme(app, key),
+        Mode::PickGrouping => match key.code {
+            KeyCode::Char('j') | KeyCode::Down => app.pick_grouping_step(true),
+            KeyCode::Char('k') | KeyCode::Up => app.pick_grouping_step(false),
+            KeyCode::Enter => app.pick_grouping_accept(),
+            KeyCode::Esc => app.pick_grouping_cancel(),
+            _ => {}
+        },
         Mode::CommandPalette => handle_command_palette(app, key),
         Mode::Share => handle_share(app, key),
         Mode::Welcome => handle_welcome(app, key),
@@ -757,30 +775,9 @@ fn handle_insert_calendar(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_insert_rec_builder(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
-    // Custom `[recurrence]` bindings win over the built-ins, matching how
-    // `[normal]` is layered in `resolve_normal_key`.
-    if let Some(action) = keybinds.resolve_recurrence(key) {
+    if let Some(action) = keybinds.recurrence_action(key) {
         apply_rec_action(app, action);
-        return;
     }
-    let action = match key.code {
-        // Horizontal keys change the focused field's *value*: both the unit
-        // and the mode render as horizontal segmented controls, so Left/Right
-        // moving along them is the affordance the layout already suggests.
-        KeyCode::Char('h') | KeyCode::Left => RecAction::ValuePrev,
-        KeyCode::Char('l') | KeyCode::Right => RecAction::ValueNext,
-        // Vertical keys (and Tab) move *between* fields.
-        KeyCode::Char('j') | KeyCode::Down | KeyCode::Tab => RecAction::FocusNext,
-        KeyCode::Char('k') | KeyCode::Up | KeyCode::BackTab => RecAction::FocusPrev,
-        // `=` is the unshifted `+` on US keyboards — accept both so users
-        // don't have to chord Shift to bump the interval.
-        KeyCode::Char('+') | KeyCode::Char('=') => RecAction::ValueNext,
-        KeyCode::Char('-') | KeyCode::Char('_') => RecAction::ValuePrev,
-        KeyCode::Enter => RecAction::Accept,
-        KeyCode::Esc => RecAction::Cancel,
-        _ => return,
-    };
-    apply_rec_action(app, action);
 }
 
 fn apply_rec_action(app: &mut App, action: RecAction) {
@@ -826,25 +823,44 @@ fn handle_search(app: &mut App, key: KeyEvent) {
 fn handle_help(app: &mut App, key: KeyEvent) {
     if is_exit_key(key) || matches!(key.code, KeyCode::Esc | KeyCode::Char('?')) {
         app.mode = Mode::Normal;
+        return;
+    }
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => {
+            app.help_scroll.set(app.help_scroll.get().saturating_add(1))
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            app.help_scroll.set(app.help_scroll.get().saturating_sub(1))
+        }
+        KeyCode::PageDown => app
+            .help_scroll
+            .set(app.help_scroll.get().saturating_add(10)),
+        KeyCode::PageUp => app
+            .help_scroll
+            .set(app.help_scroll.get().saturating_sub(10)),
+        KeyCode::Home => app.help_scroll.set(0),
+        KeyCode::End => app.help_scroll.set(u16::MAX),
+        _ => {}
     }
 }
 
 fn handle_settings(app: &mut App, key: KeyEvent) {
-    if is_exit_key(key) {
-        app.mode = Mode::Normal;
-        return;
-    }
-
-    match key.code {
-        KeyCode::Esc | KeyCode::Char(',') => app.mode = Mode::Normal,
-        KeyCode::Char('T') => apply_action(app, Action::CycleTheme),
-        KeyCode::Char('D') => apply_action(app, Action::CycleDensity),
-        KeyCode::Char('L') => apply_action(app, Action::ToggleLineNum),
-        KeyCode::Char('[') => apply_action(app, Action::ToggleLeftPane),
-        KeyCode::Char(']') => apply_action(app, Action::ToggleRightPane),
-        KeyCode::Char('H') => apply_action(app, Action::ToggleShowDone),
-        KeyCode::Char('F') => apply_action(app, Action::ToggleShowFuture),
-        KeyCode::Char('S') => apply_action(app, Action::CycleSort),
+    let bindings = app.keybinds.clone();
+    match bindings.resolve_action(key, &mut app.chord) {
+        Some(Action::PickGrouping) => apply_action(app, Action::PickGrouping),
+        Some(Action::OpenHelp) => apply_action(app, Action::OpenHelp),
+        Some(Action::ArmF) => app.chord.arm('f'),
+        Some(Action::OpenThemePicker | Action::CycleTheme) => apply_action(app, Action::CycleTheme),
+        Some(
+            action @ (Action::CycleDensity
+            | Action::ToggleLineNum
+            | Action::ToggleLeftPane
+            | Action::ToggleRightPane
+            | Action::ToggleShowDone
+            | Action::ToggleShowFuture
+            | Action::CycleSort),
+        ) => apply_action(app, action),
+        Some(Action::EscapeStack | Action::OpenSettings | Action::Quit) => app.mode = Mode::Normal,
         _ => {}
     }
 }
@@ -1001,102 +1017,7 @@ fn handle_prompt(app: &mut App, key: KeyEvent) {
 /// Mutates the chord state because chord progress is part of interpreting
 /// the key, not a separate concern.
 fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> Option<Action> {
-    match keybinds.resolve_normal(key, &mut app.chord) {
-        Some(ResolvedKey::Action(action)) => return Some(action),
-        Some(ResolvedKey::Pending) => return None,
-        None => {}
-    }
-
-    if is_exit_key(key) {
-        return Some(Action::Quit);
-    }
-
-    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    if ctrl {
-        return match key.code {
-            KeyCode::Char('d') => Some(Action::HalfPageDown),
-            KeyCode::Char('u') => Some(Action::HalfPageUp),
-            KeyCode::Char('p') => Some(Action::OpenCommandPalette),
-            _ => None,
-        };
-    }
-    Some(match key.code {
-        KeyCode::Char('j') | KeyCode::Down => Action::CursorDown,
-        KeyCode::Char('k') | KeyCode::Up => Action::CursorUp,
-        KeyCode::Char('J') => Action::MoveTaskDown,
-        KeyCode::Char('K') => Action::MoveTaskUp,
-        KeyCode::Char('G') => Action::CursorBottom,
-        // First 'g' arms the chord; second 'g' fires CursorTop.
-        KeyCode::Char('g') if app.chord.toggle('g') => Action::CursorTop,
-        KeyCode::Char('n') => Action::BeginAdd,
-        KeyCode::Char('r') => Action::Reschedule,
-        KeyCode::Char('a') => Action::ToggleArchiveView,
-        KeyCode::Char('l') => Action::GoList,
-        KeyCode::Char('e') => Action::BeginEdit,
-        KeyCode::Char('i') => Action::BeginEditInsert,
-        KeyCode::Char('o') => Action::OpenNote,
-        KeyCode::Char('O') => Action::CreateOrOpenNote,
-        KeyCode::Char('x') => Action::ToggleComplete,
-        // 'dd' chord. First press arms; second fires.
-        KeyCode::Char('d') if app.chord.toggle('d') => Action::Delete,
-        // 'yy' chord copies the whole line; 'yb' (after 'y' is armed) copies
-        // the body only. Plain 'y' just arms the leader.
-        KeyCode::Char('y') if app.chord.toggle('y') => Action::CopyLine,
-        KeyCode::Char('b') if app.chord.consume('y') => Action::CopyBody,
-        KeyCode::Char('p') => {
-            // After 'f' arms, 'fp' opens the project picker. Otherwise plain
-            // 'p' cycles priority.
-            if app.chord.consume('f') {
-                Action::PickProject
-            } else {
-                Action::CyclePriority
-            }
-        }
-        KeyCode::Char('c') => {
-            if app.chord.consume('f') {
-                Action::PickContext
-            } else {
-                Action::BeginPromptContext
-            }
-        }
-        KeyCode::Char('/') => Action::BeginSearch,
-        KeyCode::Char('?') => Action::OpenHelp,
-        KeyCode::Char(',') => Action::OpenSettings,
-        KeyCode::Char(':') => Action::OpenCommandPalette,
-        KeyCode::Char('u') => Action::Undo,
-        KeyCode::Char('v') => Action::ToggleVisual,
-        KeyCode::Char(' ') => Action::ToggleSelected,
-        KeyCode::Char('A') => Action::ArchiveCompleted,
-        // First 'f' arms the leader; a second 'f' (`ff`) opens the saved-
-        // search picker. Mirrors the `fp`/`fc` pattern below.
-        KeyCode::Char('f') => {
-            if app.chord.consume('f') {
-                Action::PickSavedFilter
-            } else {
-                Action::ArmF
-            }
-        }
-        KeyCode::Char('s') => {
-            // `fs` saves the active search; plain 's' opens the share QR.
-            if app.chord.consume('f') {
-                Action::SaveCurrentFilter
-            } else {
-                Action::OpenShare
-            }
-        }
-        KeyCode::Char('S') => Action::CycleSort,
-        KeyCode::Char('+') => Action::BeginPromptProject,
-        KeyCode::Char('[') => Action::ToggleLeftPane,
-        KeyCode::Char(']') => Action::ToggleRightPane,
-        KeyCode::Char('T') => Action::OpenThemePicker,
-        KeyCode::Char('D') => Action::CycleDensity,
-        KeyCode::Char('L') => Action::ToggleLineNum,
-        KeyCode::Char('H') => Action::ToggleShowDone,
-        KeyCode::Char('F') => Action::ToggleShowFuture,
-        KeyCode::Esc => Action::EscapeStack,
-        KeyCode::Char('W') => Action::ChangeWeekStart,
-        _ => return None,
-    })
+    keybinds.resolve_action(key, &mut app.chord)
 }
 
 fn apply_action(app: &mut App, action: Action) {
@@ -1122,6 +1043,7 @@ fn apply_action(app: &mut App, action: Action) {
             Action::BeginAdd
             | Action::BeginEdit
             | Action::BeginEditInsert
+            | Action::Reschedule
             | Action::CyclePriority
             | Action::MoveTaskDown
             | Action::MoveTaskUp
@@ -1135,6 +1057,8 @@ fn apply_action(app: &mut App, action: Action) {
             | Action::PickSavedFilter
             | Action::SaveCurrentFilter
             | Action::CycleSort
+            | Action::PickGrouping
+            | Action::ToggleGroup
             | Action::ToggleShowDone
             | Action::ToggleShowFuture
             | Action::Undo => {
@@ -1144,7 +1068,41 @@ fn apply_action(app: &mut App, action: Action) {
             _ => {}
         }
     }
-    let len = app.visible_indices().len();
+    let selected_bulk = app.mode == Mode::Visual
+        && !app.selection.is_empty()
+        && matches!(
+            action,
+            Action::ToggleComplete
+                | Action::Delete
+                | Action::CopyLine
+                | Action::CopyBody
+                | Action::MoveTaskDown
+                | Action::MoveTaskUp
+        );
+    if !selected_bulk
+        && matches!(
+            action,
+            Action::BeginEdit
+                | Action::BeginEditInsert
+                | Action::ToggleComplete
+                | Action::Delete
+                | Action::CyclePriority
+                | Action::MoveTaskDown
+                | Action::MoveTaskUp
+                | Action::Reschedule
+                | Action::BeginPromptProject
+                | Action::BeginPromptContext
+                | Action::CopyLine
+                | Action::CopyBody
+                | Action::OpenNote
+                | Action::CreateOrOpenNote
+                | Action::ToggleSelected
+        )
+        && app.task_action_on_header()
+    {
+        return;
+    }
+    let len = app.display_rows().len();
     match action {
         Action::Quit => app.should_quit = true,
         Action::CursorDown => {
@@ -1217,7 +1175,10 @@ fn apply_action(app: &mut App, action: Action) {
             app.draft_clear();
             app.clear_search();
         }
-        Action::OpenHelp => app.mode = Mode::Help,
+        Action::OpenHelp => {
+            app.help_scroll.set(0);
+            app.mode = Mode::Help;
+        }
         Action::OpenSettings => app.mode = Mode::Settings,
         Action::OpenCommandPalette => {
             // Snapshot the current mode (Normal or Visual) so cancel/run
@@ -1274,6 +1235,8 @@ fn apply_action(app: &mut App, action: Action) {
             }
         }
         Action::CycleSort => app.cycle_sort(),
+        Action::PickGrouping => app.enter_pick_grouping(),
+        Action::ToggleGroup => app.toggle_group(),
         Action::BeginPromptProject => {
             app.mode = Mode::PromptProject;
             app.draft_clear();
@@ -1400,10 +1363,9 @@ fn copy_payload(app: &App, body_only: bool) -> Option<String> {
     };
     if app.view() == View::List && app.mode == Mode::Visual && !app.selection.is_empty() {
         let lines: Vec<_> = app
-            .visible_indices()
-            .iter()
-            .filter(|&&abs| app.selection.is_selected(abs))
-            .map(|&abs| format(&app.tasks()[abs].raw))
+            .navigable_indices()
+            .filter(|&abs| app.selection.is_selected(abs))
+            .map(|abs| format(&app.tasks()[abs].raw))
             .collect();
         return (lines.len() == app.selection.len()).then(|| lines.join("\n"));
     }
@@ -1412,6 +1374,8 @@ fn copy_payload(app: &App, body_only: bool) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
     use chrono::NaiveDate;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -1438,6 +1402,12 @@ mod tests {
         app.tasks().iter().map(|task| task.raw.as_str()).collect()
     }
 
+    fn mktempcfg(basename: &str) -> PathBuf {
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        std::env::temp_dir().join(format!("tuxedo-{basename}-{}-{n}.txt", std::process::id(),))
+    }
+
     fn welcome_app(name: &str) -> (App, std::path::PathBuf) {
         let path = std::env::temp_dir().join(format!(
             "tuxedo-welcome-{name}-{}-{:?}.txt",
@@ -1451,6 +1421,7 @@ mod tests {
             "2026-05-07".into(),
             Config::default(),
         );
+        app.config_path = Some(mktempcfg("welcome-config"));
         app.mode = Mode::Welcome;
         (app, path)
     }
@@ -1496,6 +1467,33 @@ mod tests {
     }
 
     #[test]
+    fn help_scroll_controls_and_reopening_reset_the_viewport() {
+        let mut app = build_app();
+        apply_action(&mut app, Action::OpenHelp);
+        assert_eq!(app.help_scroll.get(), 0);
+        handle_help(&mut app, key('j'));
+        assert_eq!(app.help_scroll.get(), 1);
+        handle_help(
+            &mut app,
+            KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE),
+        );
+        assert_eq!(app.help_scroll.get(), 11);
+        handle_help(&mut app, key('k'));
+        assert_eq!(app.help_scroll.get(), 10);
+        handle_help(&mut app, KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+        assert_eq!(app.help_scroll.get(), u16::MAX);
+        handle_help(&mut app, KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        handle_help(&mut app, key('k'));
+        assert_eq!(app.help_scroll.get(), 0);
+        handle_help(&mut app, key('j'));
+        handle_help(&mut app, key('?'));
+        assert_eq!(app.mode, Mode::Normal);
+        apply_action(&mut app, Action::OpenHelp);
+        assert_eq!(app.help_scroll.get(), 0);
+        assert_eq!(app.mode, Mode::Help);
+    }
+
+    #[test]
     fn settings_hinted_keys_apply_and_dialog_stays_open() {
         let mut app = build_app();
         app.mode = Mode::Settings;
@@ -1523,6 +1521,28 @@ mod tests {
 
         handle_settings(&mut app, key('q'));
         assert_eq!(app.mode, Mode::Normal, "`q` must still close the dialog");
+    }
+
+    #[test]
+    fn cycle_prefs_persist_to_config_path() {
+        let path = mktempcfg("prefs-save");
+        let _ = std::fs::remove_file(&path);
+
+        let mut app = build_app();
+        app.config_path = Some(path.clone());
+
+        app.cycle_density();
+        app.cycle_sort();
+        // cycle_theme() also exercised for parity — no dedicated App-level
+        // wrapper test exists for it today either.
+        app.cycle_theme();
+
+        let saved = Config::load_from(&path);
+        assert_eq!(saved.density, Some(app.prefs.density));
+        assert_eq!(saved.sort, Some(app.prefs.sort));
+        assert_eq!(saved.theme.as_deref(), Some(app.theme().name));
+
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
@@ -1577,34 +1597,218 @@ mod tests {
         );
     }
 
+    #[test]
+    fn settings_full_render_back_hint_dispatches_when_escape_opens_grouping() {
+        use ratatui::{Terminal, backend::TestBackend};
+        for (config, back) in [
+            ("[normal]\npick_grouping = \"Esc\"", ","),
+            (
+                "[normal]\npick_grouping = \"Esc\"\nopen_help = \",\"\nescape_stack = \"zb\"",
+                "zb",
+            ),
+        ] {
+            let mut app = build_app();
+            app.keybinds = KeyBindings::parse(config);
+            app.mode = Mode::Settings;
+            let mut terminal = Terminal::new(TestBackend::new(110, 32)).expect("terminal");
+            terminal
+                .draw(|frame| ui::draw(frame, &app))
+                .expect("settings render");
+            let text: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(text.contains(&format!("{back} back")), "{text}");
+            assert!(!text.contains("Esc back"));
+            handle_settings(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+            assert_eq!(app.mode, Mode::PickGrouping);
+            app.pick_grouping_cancel();
+            assert_eq!(app.mode, Mode::Settings);
+            if back == "zb" {
+                handle_settings(&mut app, key('z'));
+                assert_eq!(app.mode, Mode::Settings, "chord prefix must not close");
+                handle_settings(&mut app, key('b'));
+            } else {
+                handle_settings(&mut app, key(','));
+            }
+            assert_eq!(app.mode, Mode::Normal);
+            assert!(!app.should_quit, "Settings Quit aliases close the overlay");
+        }
+    }
+
+    #[test]
+    fn grouping_settings_custom_chord_does_not_trigger_its_fixed_prefix() {
+        let mut app = build_app();
+        let theme = app.prefs.theme_idx();
+        app.mode = Mode::Settings;
+        app.keybinds = KeyBindings::parse("[normal]\npick_grouping = \"Tg\"");
+        handle_settings(&mut app, key('T'));
+        assert_eq!(app.prefs.theme_idx(), theme);
+        assert_eq!(app.mode, Mode::Settings);
+        handle_settings(&mut app, key('g'));
+        assert_eq!(app.mode, Mode::PickGrouping);
+        app.pick_grouping_cancel();
+        app.keybinds = KeyBindings::parse("[normal]\npick_grouping = \"q\"");
+        handle_settings(&mut app, key('q'));
+        assert_eq!(app.mode, Mode::PickGrouping);
+    }
+
+    #[test]
+    fn hot_reload_preserves_collapsed_selection_clear_count() {
+        let mut app = build_app_with_archive("this due:2026-05-08\nnext due:2026-05-10\n", None);
+        app.prefs.group_by = tuxedo::app::GroupBy::Due;
+        app.recompute_visible();
+        app.cursor = 0;
+        app.toggle_group();
+        app.selection.toggle(1);
+        std::fs::write(
+            app.config_path.as_ref().expect("config path"),
+            "group_by = due\nweek_start = monday\n",
+        )
+        .expect("config fixture");
+        let (tx, rx) = mpsc::channel();
+        tx.send(()).expect("reload signal");
+        assert!(poll_config_reload(&mut app, &Some(rx)));
+        assert!(app.selection.is_empty());
+        assert_eq!(
+            app.flash_active(),
+            Some("config reloaded; cleared 1 hidden selected task")
+        );
+    }
+
+    #[test]
+    fn grouping_picker_settings_keys_and_display_navigation() {
+        let mut app = build_app();
+        app.mode = Mode::Settings;
+        handle_settings(&mut app, key('f'));
+        handle_settings(&mut app, key('g'));
+        assert_eq!(app.mode, Mode::PickGrouping);
+        app.pick_grouping_cancel();
+        assert_eq!(app.mode, Mode::Settings);
+        app.keybinds = KeyBindings::parse("[normal]\npick_grouping = \"z\"");
+        handle_settings(&mut app, key('z'));
+        assert_eq!(app.mode, Mode::PickGrouping);
+        app.pick_grouping_cancel();
+        app.mode = Mode::Normal;
+        app.prefs.group_by = tuxedo::app::GroupBy::Priority;
+        app.recompute_visible();
+        apply_action(&mut app, Action::CursorTop);
+        assert!(app.focused_header().is_some());
+        apply_action(&mut app, Action::ToggleGroup);
+        assert_eq!(app.display_rows().len(), 1);
+        for action in [
+            Action::CursorDown,
+            Action::CursorUp,
+            Action::CursorTop,
+            Action::CursorBottom,
+            Action::HalfPageDown,
+            Action::HalfPageUp,
+        ] {
+            apply_action(&mut app, action);
+            assert_eq!(app.cursor, 0);
+            assert!(app.focused_header().is_some());
+        }
+        assert_eq!(
+            resolve(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Some(Action::ToggleGroup)
+        );
+        apply_action(&mut app, Action::ToggleGroup);
+        apply_action(&mut app, Action::CursorDown);
+        assert_eq!(app.cur_abs(), Some(0));
+        apply_action(&mut app, Action::CursorBottom);
+        assert_eq!(app.cur_abs(), Some(2));
+    }
+
+    #[test]
+    fn header_focus_bulk_copy_uses_only_remaining_explicit_visible_selection() {
+        let mut app = build_app_with_archive("(A) hidden\n(B) remaining\n", None);
+        app.prefs.group_by = tuxedo::app::GroupBy::Priority;
+        app.recompute_visible();
+        app.mode = Mode::Visual;
+        app.selection.toggle(0);
+        app.selection.toggle(1);
+        app.cursor = 0;
+        app.toggle_group();
+        assert_eq!(copy_payload(&app, false).as_deref(), Some("(B) remaining"));
+        app.selection.toggle(0); // Deliberately invalid stale hidden target.
+        assert!(copy_payload(&app, false).is_none());
+    }
+
+    #[test]
+    fn header_task_actions_never_mutate_or_enter_task_prompts() {
+        for action in [
+            Action::BeginEdit,
+            Action::BeginEditInsert,
+            Action::ToggleComplete,
+            Action::Delete,
+            Action::CyclePriority,
+            Action::MoveTaskDown,
+            Action::MoveTaskUp,
+            Action::Reschedule,
+            Action::BeginPromptProject,
+            Action::BeginPromptContext,
+            Action::CopyLine,
+            Action::CopyBody,
+            Action::OpenNote,
+            Action::CreateOrOpenNote,
+        ] {
+            let mut app = build_app();
+            app.prefs.group_by = tuxedo::app::GroupBy::Priority;
+            app.recompute_visible();
+            app.cursor = 0;
+            let before = std::fs::read(&app.file_path).expect("read isolated fixture");
+            apply_action(&mut app, action);
+            assert_eq!(app.cur_abs(), None, "{action:?}");
+            assert_eq!(app.mode, Mode::Normal, "{action:?}");
+            assert_eq!(
+                app.flash_active(),
+                Some("group header — choose a task"),
+                "{action:?}"
+            );
+            assert_eq!(
+                std::fs::read(&app.file_path).expect("read isolated fixture"),
+                before,
+                "{action:?}"
+            );
+        }
+    }
+
     fn build_app() -> App {
-        let path = std::env::temp_dir().join(format!(
-            "tuxedo-bindings-{}-{:?}.txt",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let path = mktempcfg("bindings");
         let _ = std::fs::write(&path, "a\nb\nc\n");
-        App::new(
+        let mut app = App::new(
             path,
             "a\nb\nc\n".into(),
             "2026-05-07".into(),
-            Config::default(),
-        )
+            Config {
+                group_by: Some(tuxedo::app::GroupBy::None),
+                ..Config::default()
+            },
+        );
+        // Give saves a scratch destination so tests that exercise a
+        // save_prefs-triggering action (e.g. via handle_settings) never
+        // fall through to the real XDG config path.
+        app.config_path = Some(mktempcfg("config"));
+        app
     }
 
     fn build_app_with_due() -> App {
-        let path = std::env::temp_dir().join(format!(
-            "tuxedo-bindings-{}-{:?}.txt",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let path = mktempcfg("bindings");
         let _ = std::fs::write(&path, "Buy milk due:2026-06-30\n");
-        App::new(
+        let mut app = App::new(
             path,
             "Buy milk due:2026-06-30\n".into(),
             "2026-05-07".into(),
-            Config::default(),
-        )
+            Config {
+                group_by: Some(tuxedo::app::GroupBy::None),
+                ..Config::default()
+            },
+        );
+        app.config_path = Some(mktempcfg("due-config"));
+        app
     }
 
     #[test]
@@ -1851,6 +2055,7 @@ mod tests {
         );
         app.prefs.sort = Sort::File;
         app.recompute_visible();
+        app.cursor = 0; // Move the first file row; sort changes now retain task focus.
         apply_action(&mut app, Action::MoveTaskDown);
         assert_eq!(
             task_lines(&app),
@@ -1998,8 +2203,12 @@ mod tests {
             todo_path,
             todo_raw.into(),
             "2026-05-06".into(),
-            Config::default(),
+            Config {
+                group_by: Some(tuxedo::app::GroupBy::None),
+                ..Config::default()
+            },
         );
+        app.config_path = Some(dir.join("config.toml"));
         if done_raw.is_some() {
             // Drain the startup archive loader so app.archive is populated.
             let deadline = Instant::now() + Duration::from_secs(2);

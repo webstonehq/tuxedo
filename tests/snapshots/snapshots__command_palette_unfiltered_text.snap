@@ -4,21 +4,20 @@ expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL                           
                                                                                                     
- PROJECTS                  (2)  PRIORITY A  ────────────────────── priority  (A)                    
+ PROJECTS                  [-] (2)  PRIORITY A  ────────────────── priority  (A)                    
    +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   2026-05-01             
    +health           3      2   (A) Call dentist to reschedule cle due       2026-05-06  today      
-   +finance          2     (3)  PRIORITY B  ────────────────────── projects  +work                  
-   +home            ┌ tuxedo · command ────────────────────────────────────────┐ptop                
-   +learning        │ > █                                                      │                    
-   +personal        │──────────────────────────────────────────────────────────│                    
-   +travel          │ ▶ new task                                             n │                    
-                    │   edit current task (normal mode)                      e │1 Finish Q2 board   
- CONTEXTS           │   edit current task (insert mode)                      i │aptop               
-   @errands         │   toggle complete                                      x │6                   
-   @home            │   delete task                                         dd │                    
-   @laptop          │   cycle priority                                       p │                    
-   @phone           │   move task down                                       J │                    
-                    │   move task up                                         K │                    
+   +finance         ┌ tuxedo · command ────────────────────────────────────────┐rk                  
+   +home            │ > █                                                      │ptop                
+   +learning        │──────────────────────────────────────────────────────────│                    
+   +personal        │ ▶ new task                                             n │                    
+   +travel          │   edit current task (normal mode)                      e │                    
+                    │   edit current task (insert mode)                      i │1 Finish Q2 board   
+ CONTEXTS           │   toggle complete                                      x │aptop               
+   @errands         │   delete task                                         dd │6                   
+   @home            │   cycle priority                                       p │                    
+   @laptop          │   move task down                                       J │                    
+   @phone           │   move task up                                         K │                    
                     │   add project to current task                          + │                    
                     │   add or remove context on current task                c │                    
                     │   copy line to clipboard                              yy │                    
@@ -33,4 +32,5 @@ expression: buffer_to_text(&buf)
                                                                                                     
                                                                                                     
                                                                                                     
- COMMAND   type to filter · Enter run · Esc cancel           15 open · 2026-05-06 · tuxedo 2026.8.1
+                                                                                                    
+ COMMAND  · Enter run · Esc cancel · 15 open · 2026-05-06 · tuxedo 2026.8.1

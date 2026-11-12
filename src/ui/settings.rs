@@ -4,6 +4,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
+use crate::action::Action;
 use crate::app::App;
 use crate::ui::header;
 
@@ -27,6 +28,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             // title: None,
             // file: "settings",
             count: app.tasks().len(),
+            hidden: 0,
             sort: app.sort_label(),
             filter: None,
         },
@@ -46,44 +48,108 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .map(|p| p.display().to_string())
         .unwrap_or_else(|| "(unavailable)".into());
 
+    let keys = |action| {
+        let label = app.keybinds.keys_label(action);
+        if label.is_empty() {
+            "palette".to_string()
+        } else {
+            label
+        }
+    };
+    let mut theme_keys = app.keybinds.effective_keys(Action::OpenThemePicker);
+    theme_keys.extend(app.keybinds.effective_keys(Action::CycleTheme));
+    let theme_keys = if theme_keys.is_empty() {
+        "palette".to_string()
+    } else {
+        theme_keys.join(", ")
+    };
+
     let items: &[(&str, Option<String>)] = &[
         ("FILES", None),
         ("  todo file", Some(app.file_path.display().to_string())),
         ("  config file", Some(config_path)),
         ("", Some("".into())),
         ("DISPLAY", None),
-        ("  theme", Some(format!("{} ▾  (T to cycle)", theme.name))),
-        ("  density", Some(format!("{} ▾  (D to cycle)", density))),
+        (
+            "  theme",
+            Some(format!("{} ▾  ({} to cycle)", theme.name, theme_keys)),
+        ),
+        (
+            "  density",
+            Some(format!(
+                "{} ▾  ({} to cycle)",
+                density,
+                keys(Action::CycleDensity)
+            )),
+        ),
         (
             "  line numbers",
-            Some(format!("{}  (L to toggle)", on(app.prefs.layout.line_num))),
+            Some(format!(
+                "{}  ({} to toggle)",
+                on(app.prefs.layout.line_num),
+                keys(Action::ToggleLineNum)
+            )),
         ),
         ("  status bar", Some(on(app.prefs.layout.status_bar).into())),
         (
             "  filter sidebar",
-            Some(format!("{}  ([ to toggle)", on(app.prefs.layout.left))),
+            Some(format!(
+                "{}  ({} to toggle)",
+                on(app.prefs.layout.left),
+                keys(Action::ToggleLeftPane)
+            )),
         ),
         (
             "  detail sidebar",
-            Some(format!("{}  (] to toggle)", on(app.prefs.layout.right))),
+            Some(format!(
+                "{}  ({} to toggle)",
+                on(app.prefs.layout.right),
+                keys(Action::ToggleRightPane)
+            )),
         ),
         (
             "  show done in list",
-            Some(format!("{}  (H to toggle)", on(app.prefs.show_done))),
+            Some(format!(
+                "{}  ({} to toggle)",
+                on(app.prefs.show_done),
+                keys(Action::ToggleShowDone)
+            )),
         ),
         (
             "  show future in list",
-            Some(format!("{}  (F to toggle)", on(app.prefs.show_future))),
+            Some(format!(
+                "{}  ({} to toggle)",
+                on(app.prefs.show_future),
+                keys(Action::ToggleShowFuture)
+            )),
         ),
         ("", Some("".into())),
         ("BEHAVIOR", None),
         (
             "  default sort",
-            Some(format!("{} (S to cycle)", app.sort_label())),
+            Some(format!(
+                "{} ({} to cycle)",
+                app.sort_label(),
+                keys(Action::CycleSort)
+            )),
+        ),
+        (
+            "  grouping",
+            Some(format!(
+                "{} ({} to choose)",
+                app.prefs.group_by.label(),
+                app.keybinds.keys_label(crate::action::Action::PickGrouping)
+            )),
         ),
         ("", Some("".into())),
         ("KEYBINDINGS", None),
-        ("  ", Some("press ? for the full list".into())),
+        (
+            "  ",
+            Some(format!(
+                "press {} for the full list",
+                keys(Action::OpenHelp)
+            )),
+        ),
     ];
 
     for (k, v) in items {

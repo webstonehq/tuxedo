@@ -1,0 +1,28 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(buf)
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  4 task DETAIL       
+                                                                                
+ PROJECTS                  [-] (1)  PRIORITY A  ────────────────── priority  (A)
+   +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   202
+   +health           3     [-] (2)  PRIORITY B  ────────────────── due       202
+   +finance          2      2   (B) Review pull requests for auth  projects  +wo
+   +home             1      3   (B) Draft hiring rubric for senior contexts  @la
+   +learning         1     [-] (1)  NO PRIORITY  ─────────────────              
+   +personal         1      4       Migrate analytics to new pipel RAW          
+   +travel           1                                                          
+                                                                   (A) 2026-05-0
+ CONTEXTS                                                          Finish Q2 boa
+   @errands          4                                             deck +work   
+   @home             4                                             @laptop      
+   @laptop           4                                             due:2026-05-0
+   @phone            3                                                          
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+SEARCH / work█                                                                  
+4 matches · Enter accept · Esc cancel                                           
+Notice: File changed externally; reloaded tasks. Review before continuing.

@@ -1,20 +1,101 @@
 use super::App;
-use super::types::{Sort, View};
+use super::types::{GroupBy, Mode, View};
 use crate::core::filter::{self, ListDueBucket};
 
-/// One entry per visible row, parallel to `visible_cache`. Renderers detect
-/// group transitions by comparing successive entries; under `Sort::File` every
-/// row is `None` so the renderer skips headers.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Stable presentation identity, independent of member order and row offset.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum GroupKey {
     None,
     ArchiveDate(String),
     /// `Some('A'..='Z')` for a graded priority, `None` for unprioritized.
     ListPriority(Option<char>),
     ListDue(ListDueBucket),
+    Done,
+}
+
+/// Focusable rows carry task identity only for real tasks. Archive headers
+/// retain their existing nonfocusable rendering and are not represented here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DisplayRow {
+    Header { key: GroupKey, count: usize },
+    Task(usize),
 }
 
 impl App {
+    /// Matching task members currently reachable by list navigation.
+    pub fn navigable_indices(&self) -> impl Iterator<Item = usize> + '_ {
+        self.display_rows.iter().filter_map(|row| match row {
+            DisplayRow::Task(abs) => Some(*abs),
+            _ => None,
+        })
+    }
+
+    pub fn hidden_by_collapse(&self) -> usize {
+        self.visible_cache
+            .len()
+            .saturating_sub(self.navigable_indices().count())
+    }
+
+    pub fn group_collapsed(&self, key: &GroupKey) -> bool {
+        self.view == View::List && self.collapsed_groups.contains(key)
+    }
+
+    pub fn toggle_group(&mut self) {
+        let Some(key) = self.focused_header().cloned() else {
+            self.flash("choose a group header to collapse or expand");
+            return;
+        };
+        if !self.collapsed_groups.remove(&key) {
+            self.collapsed_groups.insert(key);
+        }
+        self.recompute_visible();
+    }
+
+    pub fn enter_pick_grouping(&mut self) {
+        self.grouping_pick_idx = GroupBy::ALL
+            .iter()
+            .position(|g| *g == self.prefs.group_by)
+            .unwrap_or(0);
+        self.grouping_pick_prior = self.mode;
+        self.mode = Mode::PickGrouping;
+    }
+
+    pub fn pick_grouping_step(&mut self, forward: bool) {
+        self.grouping_pick_idx =
+            (self.grouping_pick_idx + if forward { 1 } else { 3 }) % GroupBy::ALL.len();
+    }
+
+    pub fn pick_grouping_accept(&mut self) {
+        self.prefs.group_by = GroupBy::ALL[self.grouping_pick_idx];
+        self.mode = self.grouping_pick_prior;
+        self.recompute_visible();
+        self.save_prefs();
+    }
+
+    pub fn pick_grouping_cancel(&mut self) {
+        self.mode = self.grouping_pick_prior;
+    }
+
+    pub fn display_rows(&self) -> &[DisplayRow] {
+        &self.display_rows
+    }
+
+    pub fn focused_header(&self) -> Option<&GroupKey> {
+        match self.display_rows.get(self.cursor) {
+            Some(DisplayRow::Header { key, .. }) => Some(key),
+            _ => None,
+        }
+    }
+
+    pub fn task_action_on_header(&mut self) -> bool {
+        if self.focused_header().is_some() {
+            self.flash("group header — choose a task");
+            true
+        } else {
+            false
+        }
+    }
+
     /// Indices into the active view's task source after filter + sort, in
     /// display order. The source is `archive().tasks()` in Archive view,
     /// `tasks()` otherwise. Reads the cache populated by `recompute_visible`.
@@ -22,7 +103,7 @@ impl App {
         &self.visible_cache
     }
 
-    /// Group key per row, parallel to `visible_indices()`.
+    /// Group key per matching task, parallel to `visible_indices()`.
     pub fn visible_groups(&self) -> &[GroupKey] {
         &self.visible_groups
     }
@@ -30,13 +111,52 @@ impl App {
     /// Recompute the cached visible-index list and parallel group keys. Call
     /// after any mutation that affects filter/sort/view/tasks/archive.
     pub fn recompute_visible(&mut self) {
+        let focused = self.display_rows.get(self.cursor).cloned();
         match self.view {
             View::List => self.rebuild_list_cache(),
             View::Archive => self.rebuild_archive_cache(),
         }
+        if let Some(pos) = self
+            .display_rows
+            .iter()
+            .position(|row| match (row, &focused) {
+                (DisplayRow::Task(a), Some(DisplayRow::Task(b))) => a == b,
+                (DisplayRow::Header { key: a, .. }, Some(DisplayRow::Header { key: b, .. })) => {
+                    a == b
+                }
+                _ => false,
+            })
+        {
+            self.cursor = pos;
+        }
+        self.clamp_cursor();
+        if self.view == View::List {
+            let reachable: std::collections::HashSet<_> = self.navigable_indices().collect();
+            // Keep the existing filter-hidden selection contract: bulk actions
+            // reject it. Collapse clears only matching members it hides.
+            let hidden: std::collections::HashSet<_> = self
+                .visible_cache
+                .iter()
+                .copied()
+                .filter(|i| !reachable.contains(i))
+                .collect();
+            let cleared = self.selection.retain(|i| !hidden.contains(&i));
+            if cleared > 0 {
+                self.flash(format!(
+                    "cleared {cleared} hidden selected task{}",
+                    if cleared == 1 { "" } else { "s" }
+                ));
+            }
+        }
     }
 
     fn rebuild_list_cache(&mut self) {
+        let effective = self.prefs.group_by.effective(self.prefs.sort);
+        let grouping_state = (self.prefs.group_by, effective);
+        if self.grouping_state != grouping_state {
+            self.collapsed_groups.clear();
+            self.grouping_state = grouping_state;
+        }
         let tasks = self.store.tasks();
         let today = self.store.today();
         // Resolved once, not per task — a `due:` term can drive a
@@ -59,21 +179,50 @@ impl App {
 
         filter::sort_by_prefs(&mut idxs, tasks, self.prefs.sort);
 
-        let week_start = &self.week_start;
-
-        let groups: Vec<GroupKey> = match self.prefs.sort {
-            Sort::File => vec![GroupKey::None; idxs.len()],
-            Sort::Priority => idxs
-                .iter()
-                .map(|&i| GroupKey::ListPriority(tasks[i].priority))
-                .collect(),
-            Sort::Due => idxs
-                .iter()
-                .map(|&i| GroupKey::ListDue(filter::due_bucket(&tasks[i], today, week_start)))
-                .collect(),
+        let grouping = self.prefs.group_by.effective(self.prefs.sort);
+        let key = |i: usize| {
+            if grouping == GroupBy::None {
+                GroupKey::None
+            } else if tasks[i].done {
+                GroupKey::Done
+            } else {
+                match grouping {
+                    GroupBy::Priority => GroupKey::ListPriority(tasks[i].priority),
+                    GroupBy::Due => {
+                        GroupKey::ListDue(filter::due_bucket(&tasks[i], today, &self.week_start))
+                    }
+                    _ => GroupKey::None,
+                }
+            }
         };
-        self.visible_groups = groups;
+        // Stable grouping preserves the chosen sort and its existing ties.
+        // Option<char> orders None first, so rank unprioritized explicitly last.
+        idxs.sort_by_key(|&i| match key(i) {
+            GroupKey::ListPriority(Some(c)) => (0, c as u32),
+            GroupKey::ListPriority(None) => (1, 0),
+            GroupKey::ListDue(b) => (0, b as u32),
+            GroupKey::Done => (2, 0),
+            _ => (0, 0),
+        });
+        self.visible_groups = idxs.iter().map(|&i| key(i)).collect();
         self.visible_cache = idxs;
+        self.display_rows.clear();
+        for (pos, &abs) in self.visible_cache.iter().enumerate() {
+            let group = &self.visible_groups[pos];
+            if *group != GroupKey::None && (pos == 0 || self.visible_groups[pos - 1] != *group) {
+                let count = self.visible_groups[pos..]
+                    .iter()
+                    .take_while(|g| *g == group)
+                    .count();
+                self.display_rows.push(DisplayRow::Header {
+                    key: group.clone(),
+                    count,
+                });
+            }
+            if !self.collapsed_groups.contains(group) {
+                self.display_rows.push(DisplayRow::Task(abs));
+            }
+        }
     }
 
     fn rebuild_archive_cache(&mut self) {
@@ -96,16 +245,20 @@ impl App {
                 GroupKey::ArchiveDate(date)
             })
             .collect();
+        self.display_rows = idxs.iter().copied().map(DisplayRow::Task).collect();
         self.visible_cache = idxs;
         self.visible_groups = groups;
     }
 
     pub fn cur_abs(&self) -> Option<usize> {
-        self.visible_cache.get(self.cursor).copied()
+        match self.display_rows.get(self.cursor) {
+            Some(DisplayRow::Task(abs)) => Some(*abs),
+            _ => None,
+        }
     }
 
     pub fn clamp_cursor(&mut self) {
-        let len = self.visible_cache.len();
+        let len = self.display_rows.len();
         if len == 0 {
             self.cursor = 0;
         } else if self.cursor >= len {
@@ -116,8 +269,15 @@ impl App {
     /// Move the cursor to wherever `abs` lives in the current visible list.
     /// Falls back to clamping if `abs` was filtered out.
     pub(super) fn follow_cursor(&mut self, abs: usize) {
-        if let Some(pos) = self.visible_cache.iter().position(|&i| i == abs) {
+        if let Some(pos) = self
+            .display_rows
+            .iter()
+            .position(|row| *row == DisplayRow::Task(abs))
+        {
             self.cursor = pos;
+        } else if let Some(group_pos) = self.visible_cache.iter().position(|i| *i == abs)
+            && let Some(header_pos) = self.display_rows.iter().position(|row| matches!(row, DisplayRow::Header { key, .. } if *key == self.visible_groups[group_pos])) {
+            self.cursor = header_pos;
         } else {
             self.clamp_cursor();
         }
@@ -127,6 +287,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::Sort;
     use crate::app::test_support::build_app;
     use crate::core::filter::ListDueBucket;
 

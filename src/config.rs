@@ -1,11 +1,9 @@
-//! Persisted UI preferences, located per the XDG Base Directory Specification.
+//! Persisted configuration, defaulting to
+//! `${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/config.toml`.
 //!
-//! Path: `${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/config.toml`
-//!
-//! Format: simple `key = value` lines. Lines starting with `#` and blank lines
-//! are ignored. Unknown keys are ignored so older binaries won't choke on
-//! newer files. Load failures fall back to defaults silently; save failures
-//! print to stderr but never panic.
+//! Uses simple `key = value` lines; comments, blank lines and unknown keys are
+//! ignored. Load failures use defaults; save methods return I/O errors.
+//! Explicit-path methods let callers use another destination.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -13,13 +11,14 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::app::WeekStart;
-use crate::app::{Density, Sort};
+use crate::app::{Density, GroupBy, Sort};
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Config {
     pub theme: Option<String>,
     pub density: Option<Density>,
     pub sort: Option<Sort>,
+    pub group_by: Option<GroupBy>,
     pub show_left: Option<bool>,
     pub show_right: Option<bool>,
     pub show_line_num: Option<bool>,
@@ -148,6 +147,7 @@ fn parse(s: &str) -> Config {
             "theme" => c.theme = Some(v.to_string()),
             "density" => c.density = v.parse().ok(),
             "sort" => c.sort = v.parse().ok(),
+            "group_by" => c.group_by = v.parse().ok(),
             "show_left" => c.show_left = parse_bool(v),
             "show_right" => c.show_right = parse_bool(v),
             "show_line_num" => c.show_line_num = parse_bool(v),
@@ -204,6 +204,9 @@ fn serialize(c: &Config) -> String {
     }
     if let Some(v) = c.density {
         let _ = writeln!(out, "density = {v}");
+    }
+    if let Some(v) = c.group_by {
+        let _ = writeln!(out, "group_by = {v}");
     }
     if let Some(v) = c.sort {
         let _ = writeln!(out, "sort = {v}");
@@ -277,6 +280,7 @@ mod tests {
             theme: Some("Nord".into()),
             density: Some(Density::Cozy),
             sort: Some(Sort::Due),
+            group_by: Some(GroupBy::Priority),
             show_left: Some(false),
             show_right: Some(true),
             show_line_num: Some(false),
@@ -437,6 +441,7 @@ mod tests {
             theme: Some("Dawn".into()),
             density: Some(Density::Compact),
             sort: Some(Sort::File),
+            group_by: None,
             show_left: Some(false),
             show_right: Some(false),
             show_line_num: Some(true),

@@ -4,21 +4,20 @@ expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL                           
                                                                                                     
- PROJECTS                  (2)  PRIORITY A  ────────────────────── priority  (A)                    
+ PROJECTS                  [-] (2)  PRIORITY A  ────────────────── priority  (A)                    
    +work             4      1 ▸ (A) Finish Q2 board deck +work @la created   2026-05-01             
    +health           3      2   (A) Call dentist to reschedule cle due       2026-05-06  today      
-   +finance          2     (3)  PRIORITY B  ────────────────────── projects  +work                  
-   +home            ┌ tuxedo · command ────────────────────────────────────────┐ptop                
-   +learning        │ > arch█  4 matches                                       │                    
-   +personal        │──────────────────────────────────────────────────────────│                    
-   +travel          │ ▶ archive completed tasks                              A │                    
-                    │   toggle archive view                                  a │1 Finish Q2 board   
- CONTEXTS           │   fuzzy search                                         / │aptop               
-   @errands         │   save search as filter                               fs │6                   
+   +finance         ┌ tuxedo · command ────────────────────────────────────────┐rk                  
+   +home            │ > arch█  4 matches                                       │ptop                
+   +learning        │──────────────────────────────────────────────────────────│                    
+   +personal        │ ▶ archive completed tasks                              A │                    
+   +travel          │   toggle archive view                                  a │                    
+                    │   fuzzy search                                         / │1 Finish Q2 board   
+ CONTEXTS           │   save search as filter                               fs │aptop               
+   @errands         │                                                          │6                   
    @home            │                                                          │                    
    @laptop          │                                                          │                    
    @phone           │                                                          │                    
-                    │                                                          │                    
                     │                                                          │                    
                     │                                                          │                    
                     │                                                          │                    
@@ -33,4 +32,5 @@ expression: buffer_to_text(&buf)
                                                                                                     
                                                                                                     
                                                                                                     
- COMMAND   type to filter · Enter run · Esc cancel           15 open · 2026-05-06 · tuxedo 2026.8.1
+                                                                                                    
+ COMMAND  · Enter run · Esc cancel · 15 open · 2026-05-06 · tuxedo 2026.8.1

@@ -294,17 +294,17 @@ begin_prompt_context = "c"
 copy_line            = "yy"
 copy_body            = "yb"
 undo                 = "u"
-# begin_prompt_project defaults to "+", which can't be written here (the
-# parser reads "+" as a modifier separator). Pick another key to move it, e.g.
-# begin_prompt_project = "P"
+begin_prompt_project = "+"
 
 # Filtering, sort, view
 begin_search        = "/"
-arm_f               = "f"        # leader for the fp / fc / ff / fs chords
+arm_f               = "f"        # leader for the fp / fc / ff / fs / fg chords
 pick_project        = "fp"
 pick_context        = "fc"
 pick_saved_filter   = "ff"
 save_current_filter = "fs"
+pick_grouping       = "fg"
+toggle_group        = "Enter"
 cycle_sort          = "S"
 toggle_visual       = "v"
 toggle_selected     = "space"
@@ -332,13 +332,15 @@ escape_stack         = "Esc"
 quit                 = "q"
 ```
 
-Custom bindings are checked before the defaults. The default bindings remain
-available unless the same key or two-key chord is bound to another action in
-the file. Action names are snake_case, matching the names in the command
-palette where possible: `toggle_complete`, `pick_project`,
-`open_theme_picker`, and so on. Key names can be single characters, two-key
-chords like `ZZ`, modifier forms like `Ctrl-n` / `Alt-x`, named keys like
-`Esc`, `Enter`, `Tab`, arrows, `Page-Up`, `Page-Down`, or `F1` through `F24`.
+Custom bindings take precedence over defaults, including chord prefixes and
+second keys. Help and command-palette labels show reachable bindings and
+aliases. Help and inline-editor controls use fixed bindings.
+
+Action names are snake_case, matching the command palette where possible:
+`toggle_complete`, `pick_project`, `open_theme_picker`, and so on. Key names
+can be single characters, two-key chords like `ZZ`, modifier forms like
+`Ctrl-n` / `Alt-x`, named keys like `Esc`, `Enter`, `Tab`, arrows,
+`Page-Up`, `Page-Down`, or `F1` through `F24`.
 
 ### Recurrence builder keys
 
@@ -364,10 +366,10 @@ chord here is ignored rather than bound to a key that could never fire.
 
 | Key | Action |
 | --- | --- |
-| `j` / `↓` | next task |
-| `k` / `↑` | previous task |
-| `gg` | first task |
-| `G` | last task |
+| `j` / `↓` | next task or group header |
+| `k` / `↑` | previous task or group header |
+| `gg` | first row |
+| `G` | last row |
 | `Ctrl-d` / `Ctrl-u` | half-page down / up |
 
 ### Editing
@@ -389,15 +391,17 @@ chord here is ignored rather than bound to a key that could never fire.
 
 Movement preserves the active sort: priority mode requires matching priority
 and due date, due mode requires matching due date, and file mode allows
-unrestricted movement. Visual selections move in one undoable operation and
-must be fully visible within one sort tie.
+movement within the current group (or the whole flat list). Visual selections
+move in one undoable operation and must be fully visible within one group and
+sort tie.
 
 ### Edit dialog
 
-The edit dialog uses vim-style modal editing. Press `i` to edit the current task
-starting in **Insert mode** — start typing immediately. Press `e` to start in
-**Normal mode** so you can navigate before changing anything. The add prompt
-(`n`) also opens directly in Insert mode.
+The edit dialog uses Vim-style modal editing, with the profile and mode in
+its title. Press `i` to edit in **Insert mode**, or `e` for **Normal mode**.
+The add prompt (`n`) starts in Insert mode. Long drafts scroll to keep the
+cursor visible; mode and save/cancel controls also work with the status bar
+hidden.
 
 The modal keys below apply in Normal mode:
 
@@ -428,6 +432,8 @@ The modal keys below apply in Normal mode:
 | `ff` | pick a saved search (`j` / `k` cycles, `Enter` keeps, `Esc` reverts) |
 | `fs` | save the active `/`-search as a named filter |
 | `S` | cycle sort: priority → due → file order |
+| `fg` | choose [grouping](#grouping-tasks) (`j` / `k`, `Enter` keeps, `Esc` cancels) |
+| `Enter` on a group header | collapse / expand its tasks |
 | `v` | enter visual / multi-select; `space` toggles a row |
 | `x` / `dd` (in visual) | bulk-complete / bulk-delete the selection |
 | `yy` / `yb` (in visual) | copy selected lines / bodies |
@@ -437,6 +443,16 @@ The modal keys below apply in Normal mode:
 | `H` | toggle showing done tasks in the main list |
 | `o` | open the current task's existing `note:<path>` in `$VISUAL` / `$EDITOR` |
 | `O` | create the current task's note if needed, then open it |
+
+Enter on a header toggles `[-]` expanded / `[+]` collapsed; counts include
+collapsed tasks. Headers remain navigable when every group is collapsed.
+Collapsing clears only selections it hides and reports the count; expansion
+does not restore them. Collapse resets on restart or a grouping change, but
+survives sort changes within the same effective grouping. Task actions on a
+header show a notice. Bulk actions reject selections hidden by filters.
+
+Selected tasks are checked and counted. Search input, selection counts,
+pending chords and notices remain visible with the status bar hidden.
 
 While a `+project` or `@context` filter is active, `n` seeds the add prompt
 with the matching tags so a task added under a filter stays in view —
@@ -462,7 +478,10 @@ backspace to drop them. A `/`-search filter seeds nothing.
 | `,` | settings overlay |
 | `q` | quit |
 
-Two-key chord prompts (`gg`, `dd`, `yy`, `yb`, `fp`, `fc`, `ff`, `fs`) show
+In help, scroll with `j` / `k`, arrows or Page Up / Page Down; close with
+`Esc`, `?` or `q`.
+
+Two-key chord prompts (`gg`, `dd`, `yy`, `yb`, `fp`, `fc`, `ff`, `fs`, `fg`) show
 a `g…` / `d…` / `y…` / `f…` indicator in the status-bar mode chip while the
 leader is armed; the window is 600 ms.
 
@@ -597,9 +616,9 @@ if a producer must be serialized with the TUI drain.
 ## Configuration
 
 Persisted to `${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/config.toml`. Cycling
-theme, density, or sort, and toggling sidebars / line-numbers / done-visibility
-all update the file. Unknown keys are ignored, so older binaries don't break
-on newer files.
+theme, density, sort or grouping, and toggling sidebars / line-numbers /
+done-visibility all update the file. Unknown keys are ignored, so older
+binaries don't break on newer files.
 
 **Hot-reload.** Edits to `config.toml` are picked up while the TUI is running —
 change the theme, density, sort, layout, saved filters, or any other field and
@@ -645,6 +664,23 @@ recurrence_builder = false
 complete. The setting is config-only (no in-app toggle) and hot-reloads like
 every other field. Other pickers are unaffected — `due:` and `t:` still open
 the calendar.
+
+### Grouping tasks
+
+Choose with `fg`, settings or the command palette. The saved `group_by` setting
+controls sections; `sort` orders tasks within them.
+
+| Value | Sections |
+| --- | --- |
+| `auto` (default) | Follow sort: priority or due sections; flat under file sort |
+| `none` | Flat list |
+| `priority` | A–Z, then NO PRIORITY |
+| `due` | OVERDUE, TODAY, THIS WEEK, NEXT WEEK, LATER, NO DUE DATE |
+
+For example, `group_by = priority` with `sort = due` keeps priority sections
+and orders each by deadline. Grouped completed tasks appear only in DONE when
+shown. Due buckets use `week_start`. Grouping leaves task files and CLI
+ordering unchanged.
 
 ### Hiding `key:value` tags
 

@@ -43,6 +43,7 @@ pub enum Mode {
     /// Theme picker dialog — j/k to preview themes, Enter to accept,
     /// Esc to revert.
     PickTheme,
+    PickGrouping,
     /// First-run welcome prompt, shown when `tuxedo` is launched with no
     /// target and no `./todo.txt` exists. `c` creates `./todo.txt`, `s`
     /// opens the bundled sample, `q`/`Esc` quits without creating anything.
@@ -96,6 +97,62 @@ impl FromStr for Sort {
             "priority" => Ok(Sort::Priority),
             "due" => Ok(Sort::Due),
             "file" => Ok(Sort::File),
+            _ => Err(()),
+        }
+    }
+}
+
+/// Persistent grouping choice, independent of the member sort.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum GroupBy {
+    #[default]
+    Auto,
+    None,
+    Priority,
+    Due,
+}
+
+impl GroupBy {
+    pub const ALL: [Self; 4] = [Self::Auto, Self::None, Self::Priority, Self::Due];
+
+    pub fn effective(self, sort: Sort) -> Self {
+        match (self, sort) {
+            (Self::Auto, Sort::Priority) => Self::Priority,
+            (Self::Auto, Sort::Due) => Self::Due,
+            (Self::Auto, Sort::File) => Self::None,
+            _ => self,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "Follow sort",
+            Self::None => "None",
+            Self::Priority => "Priority",
+            Self::Due => "Due date",
+        }
+    }
+}
+
+impl fmt::Display for GroupBy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Auto => "auto",
+            Self::None => "none",
+            Self::Priority => "priority",
+            Self::Due => "due",
+        })
+    }
+}
+
+impl FromStr for GroupBy {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "auto" => Ok(Self::Auto),
+            "none" => Ok(Self::None),
+            "priority" => Ok(Self::Priority),
+            "due" => Ok(Self::Due),
             _ => Err(()),
         }
     }

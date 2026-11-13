@@ -1651,6 +1651,7 @@ dependencies = [
  "qrcode",
  "ratatui",
  "tiny_http",
+ "unicode-segmentation",
 ]
 
 [[package]]

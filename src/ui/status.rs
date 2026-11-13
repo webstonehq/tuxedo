@@ -17,6 +17,7 @@ fn mode_label(app: &App) -> &'static str {
         Mode::Insert => match app.draft.input_mode() {
             DialogInputMode::Normal => "Vim NORMAL",
             DialogInputMode::Insert => "Vim INSERT",
+            DialogInputMode::Extend => "Helix EXTEND",
         },
         Mode::Search => "SEARCH",
         Mode::Visual => "TASK SELECT",

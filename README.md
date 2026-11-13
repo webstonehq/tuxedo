@@ -294,9 +294,7 @@ begin_prompt_context = "c"
 copy_line            = "yy"
 copy_body            = "yb"
 undo                 = "u"
-# begin_prompt_project defaults to "+", which can't be written here (the
-# parser reads "+" as a modifier separator). Pick another key to move it, e.g.
-# begin_prompt_project = "P"
+begin_prompt_project = "+"
 
 # Filtering, sort, view
 begin_search        = "/"
@@ -332,13 +330,15 @@ escape_stack         = "Esc"
 quit                 = "q"
 ```
 
-Custom bindings are checked before the defaults. The default bindings remain
-available unless the same key or two-key chord is bound to another action in
-the file. Action names are snake_case, matching the names in the command
-palette where possible: `toggle_complete`, `pick_project`,
-`open_theme_picker`, and so on. Key names can be single characters, two-key
-chords like `ZZ`, modifier forms like `Ctrl-n` / `Alt-x`, named keys like
-`Esc`, `Enter`, `Tab`, arrows, `Page-Up`, `Page-Down`, or `F1` through `F24`.
+Custom bindings take precedence over defaults, including chord prefixes and
+second keys. Help and command-palette labels show reachable bindings and
+aliases. Help and inline-editor controls use fixed bindings.
+
+Action names are snake_case, matching the command palette where possible:
+`toggle_complete`, `pick_project`, `open_theme_picker`, and so on. Key names
+can be single characters, two-key chords like `ZZ`, modifier forms like
+`Ctrl-n` / `Alt-x`, named keys like `Esc`, `Enter`, `Tab`, arrows,
+`Page-Up`, `Page-Down`, or `F1` through `F24`.
 
 ### Recurrence builder keys
 
@@ -394,12 +394,13 @@ must be fully visible within one sort tie.
 
 ### Edit dialog
 
-The edit dialog uses vim-style modal editing. Press `i` to edit the current task
-starting in **Insert mode** — start typing immediately. Press `e` to start in
-**Normal mode** so you can navigate before changing anything. The add prompt
-(`n`) also opens directly in Insert mode.
+The edit dialog defaults to Vim-style modal editing, with the profile and mode
+in its title. Press `i` to edit in **Insert mode**, or `e` for **Normal mode**.
+The add prompt (`n`) starts in Insert mode. Long drafts scroll to keep the
+cursor visible; mode and save/cancel controls also work with the status bar
+hidden.
 
-The modal keys below apply in Normal mode:
+The Vim modal keys below apply in Normal mode:
 
 | Key | Action |
 | --- | --- |
@@ -417,6 +418,63 @@ The modal keys below apply in Normal mode:
 | `Esc` (in Insert) | return to Normal mode |
 | `Esc` (in Normal) | cancel and close |
 | `Enter` (in Insert and Normal) | save |
+
+To opt into **Helix-style editing**, set this in
+`config.toml`, or press `E` in settings (`,`):
+
+```toml
+editing_profile = "helix" # "vim" is the default; unknown values use Vim
+```
+
+The choice applies to the next task dialog; hot reload keeps an open draft's
+profile. Search, tag/name prompts, the palette, recurrence controls, and task-list
+keys keep their existing behavior. `e` opens a Helix draft in Normal mode at the
+first character; `i` and `n` open in Insert mode at the end.
+
+| Helix draft key | Action |
+| --- | --- |
+| `h` / `l`, arrows | select previous / next grapheme |
+| `w` / `b` / `e` | select through next word start / previous word start / next word end |
+| Home / End | select first / last grapheme |
+| `v` | toggle Extend mode; movement retains the anchor |
+| `%` / `x` | select the whole task draft |
+| `;` | collapse to the active cursor |
+| `y` | yank selection to the application’s internal register |
+| `d` / `c` | yank and delete selection; `c` also enters Insert |
+| `i` / `a` | insert before / after the selection, preserving it |
+| `I` / `A` | insert at absolute draft start / end |
+| `p` / `P` | paste the internal register after / before selection |
+| `u` / `U` | undo / redo draft text edits (up to 50) |
+| Enter | submit; natural-language add still asks for confirmation |
+| Escape | dismiss popup first; Insert / Extend → Normal; Normal → cancel |
+
+Selected text has a background highlight; the active cursor has a separate
+inverted highlight. Word motions distinguish punctuation and include traversed
+spaces: on `one two`, `w` selects `one `, another `w` selects `two`, and `b`
+selects it backwards. Insert preserves selection as in Helix: `w`, `i`, `!`,
+Escape produces `!one two` with `one ` selected backwards; `w`, `a`, `!`,
+Escape produces `one !two` with `one !` selected forwards.
+
+The editor supports one task line and one selection, with grapheme-safe movement
+(including combining marks and emoji). `I` deliberately uses the **absolute
+start**, including before leading spaces; Helix uses the first non-whitespace
+character. The end-of-input position is safe without adding a newline. Counts,
+multiple selections, regex selection, text objects, macros, shell commands,
+soft wrapping, and general editor-key remapping are unsupported.
+
+The internal register lasts across task dialogs in the running app, independently
+of task-list clipboard copying. An empty register reports a harmless no-op.
+Draft history starts fresh for each dialog; typing characters, deletion/change,
+paste, and accepted completion/picker replacements are undoable. Moving, yanking,
+and mode changes add no history. Saving uses normal task persistence and task
+undo; cancelling discards draft changes.
+
+Failed submissions retain the editable draft. If the file changes externally
+while editing, the draft keeps its EDIT identity and blocks further saves to
+avoid overwriting another task or adding a duplicate. Preserve the text before
+cancelling and reopening the intended task: in Helix Normal mode use `%`, `y`
+(and later `p`); in Vim use your terminal’s text-copy facility. Review the task
+again before reapplying changes. Automatic conflict rebasing is unsupported.
 
 ### Filtering, sort, view
 
@@ -437,6 +495,9 @@ The modal keys below apply in Normal mode:
 | `H` | toggle showing done tasks in the main list |
 | `o` | open the current task's existing `note:<path>` in `$VISUAL` / `$EDITOR` |
 | `O` | create the current task's note if needed, then open it |
+
+Selected tasks are checked and counted. Search input, selection counts,
+pending chords and notices remain visible with the status bar hidden.
 
 While a `+project` or `@context` filter is active, `n` seeds the add prompt
 with the matching tags so a task added under a filter stays in view —
@@ -461,6 +522,9 @@ backspace to drop them. A `/`-search filter seeds nothing.
 | `?` | help overlay |
 | `,` | settings overlay |
 | `q` | quit |
+
+In help, scroll with `j` / `k`, arrows or Page Up / Page Down; close with
+`Esc`, `?` or `q`.
 
 Two-key chord prompts (`gg`, `dd`, `yy`, `yb`, `fp`, `fc`, `ff`, `fs`) show
 a `g…` / `d…` / `y…` / `f…` indicator in the status-bar mode chip while the

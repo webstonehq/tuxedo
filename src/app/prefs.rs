@@ -1,7 +1,8 @@
 use std::io;
+use std::path::Path;
 
 use super::types::{Density, Sort};
-use crate::app::WeekStart;
+use crate::app::{EditingProfile, WeekStart};
 use crate::config::Config;
 use crate::theme::{self, Theme};
 
@@ -30,6 +31,7 @@ impl Default for Layout {
 #[derive(Debug, Clone)]
 pub struct Prefs {
     theme_idx: usize,
+    pub editing_profile: EditingProfile,
     pub density: Density,
     pub sort: Sort,
     pub layout: Layout,
@@ -54,6 +56,7 @@ impl Prefs {
             .unwrap_or(0);
         Self {
             theme_idx,
+            editing_profile: cfg.editing_profile.unwrap_or_default(),
             density: cfg.density.unwrap_or(Density::Comfortable),
             sort: cfg.sort.unwrap_or(Sort::Priority),
             layout: Layout {
@@ -141,16 +144,11 @@ impl Prefs {
         format!("week_start: {}", self.week_start)
     }
 
-    /// Persist to the XDG config path. Returns the IO error so the caller
-    /// can flash it (writing to stderr from inside the alt-screen would
-    /// corrupt the TUI). Saving is best-effort — callers that don't care
-    /// about reporting can `let _ = prefs.save();`.
-    ///
-    /// Loads the on-disk config first so non-pref fields (like
-    /// `share_token` / `share_port`, owned by the capture server) are
-    /// preserved across pref toggles.
-    pub fn save(&self) -> io::Result<()> {
-        let mut cfg = Config::load();
+    /// Merge preferences into the config at `path`, preserving other fields.
+    /// Returns I/O errors for the caller to report.
+    pub fn save_to(&self, path: &Path) -> io::Result<()> {
+        let mut cfg = Config::load_from(path);
+        cfg.editing_profile = Some(self.editing_profile);
         cfg.theme = Some(self.theme().name.to_string());
         cfg.density = Some(self.density);
         cfg.sort = Some(self.sort);
@@ -161,6 +159,13 @@ impl Prefs {
         cfg.show_done = Some(self.show_done);
         cfg.show_future = Some(self.show_future);
         cfg.hidden_keys = self.hidden_keys.clone();
-        cfg.save()
+        cfg.save_to(path)
+    }
+
+    /// Persist to the XDG config path. See [`Prefs::save_to`].
+    pub fn save(&self) -> io::Result<()> {
+        let path = Config::path()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no config dir"))?;
+        self.save_to(&path)
     }
 }

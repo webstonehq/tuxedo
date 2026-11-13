@@ -20,6 +20,7 @@ expression: buffer_to_text(&buf)
                                                                                                     
  BEHAVIOR                                                                                           
    default sort                priority (S to cycle)                                                
+   editor profile              vim (E toggle; next draft)                                           
                                                                                                     
  KEYBINDINGS                                                                                        
                                press ? for the full list                                            
@@ -32,5 +33,4 @@ expression: buffer_to_text(&buf)
                                                                                                     
                                                                                                     
                                                                                                     
-                                                                                                    
- SETTINGS   Esc back                                         15 open · 2026-05-06 · tuxedo 2026.8.1
+ SETTINGS  · Esc back · 15 open · 2026-05-06 · tuxedo 2026.8.1

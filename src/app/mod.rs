@@ -35,7 +35,7 @@ pub use crate::core::History;
 pub use crate::core::filter::{ListDueBucket, ordered_unique};
 pub use autocomplete::{ActiveToken, AutocompleteTarget, TokenKind, active_token};
 pub use chord::Chord;
-pub use draft::{DialogInputMode, DraftCursor, DraftState};
+pub use draft::{DialogInputMode, DraftCursor, DraftState, EditingProfile};
 pub use draft_overlay::{
     BuilderField, CalendarState, CalendarTarget, DraftOverlay, OverlayKind, PriorityChooserState,
     REC_UNIT_ORDER, RecurrenceBuilderState, SLASH_ENTRIES, SlashEntry, SlashKind, SlashMenuState,
@@ -106,11 +106,13 @@ pub struct App {
     pub selection: Selection,
     flash_state: Flash,
     pub chord: Chord,
+    /// Bindings shared by input dispatch and action guidance.
+    pub keybinds: crate::keybinds::KeyBindings,
+    /// Help viewport, clamped by rendering after terminal resizes.
+    pub help_scroll: Cell<u16>,
     pub file_path: PathBuf,
-    /// Resolved path of the on-disk config file. Set by the binary after
-    /// construction so the settings overlay can render a stable, real path
-    /// without the renderer having to reach into the environment itself.
-    /// `None` in tests/examples that don't care about the value.
+    /// Config path set by the binary, shared by preference saves, reloads and
+    /// the settings display. `None` uses the XDG default for preference saves.
     pub config_path: Option<PathBuf>,
     pub should_quit: bool,
     visible_cache: Vec<usize>,
@@ -203,6 +205,8 @@ impl App {
             selection: Selection::default(),
             flash_state: Flash::default(),
             chord: Chord::default(),
+            keybinds: crate::keybinds::KeyBindings::default(),
+            help_scroll: Cell::new(0),
             file_path,
             config_path: None,
             should_quit: false,
@@ -355,11 +359,13 @@ impl App {
         self.prefs.sort_label()
     }
 
-    /// Persist preferences. On failure, flashes a short error so the user
-    /// sees the problem inside the TUI (writing to stderr would smash the
-    /// alt-screen).
+    /// Save preferences to `config_path` or the XDG default; flash any error.
     pub fn save_prefs(&mut self) {
-        if let Err(e) = self.prefs.save() {
+        let result = match &self.config_path {
+            Some(path) => self.prefs.save_to(path),
+            None => self.prefs.save(),
+        };
+        if let Err(e) = result {
             self.flash(format!("config save failed: {e}"));
         }
     }
@@ -589,10 +595,23 @@ impl App {
     /// `apply_external_state` behavior.
     pub(crate) fn on_reload(&mut self) {
         self.selection.clear();
-        self.selection.exit_edit();
+        if self.mode == Mode::Insert && self.selection.editing().is_some() {
+            self.selection.invalidate_edit();
+            self.flash_stale_draft();
+        } else {
+            self.selection.exit_edit();
+            self.flash("file changed on disk — reloaded");
+        }
         self.recompute_visible();
         self.clamp_cursor();
-        self.flash("file changed on disk — reloaded");
+    }
+
+    pub(crate) fn flash_stale_draft(&mut self) {
+        self.flash(if self.draft.profile() == EditingProfile::Helix {
+            "file changed; draft kept — Normal: % y, then cancel/reopen task"
+        } else {
+            "file changed; draft kept — copy text in terminal, then cancel/reopen task"
+        });
     }
 
     /// Map a store reconcile result to the matching flash + view refresh for a
@@ -652,14 +671,32 @@ impl App {
 
     /// Reconcile against disk and drain the inbox. Returns `true` when it is
     /// safe to proceed (disk unchanged); `false` when the file was reloaded or
-    /// unreadable. The TUI run loop and `handle_key` call this each tick.
+    /// unreadable. The TUI uses this on idle ticks; input dispatch uses
+    /// `poll_external_changes` to keep local draft recovery available.
     pub fn check_external_changes(&mut self) -> bool {
+        matches!(self.poll_external_changes(), Reconcile::Unchanged)
+    }
+
+    /// Keep the reconcile outcome available to input dispatch: a failed read
+    /// blocks persistence, but must not block local draft editing or cancel.
+    /// Successful reloads still invalidate row identities and consume the key.
+    pub fn poll_external_changes(&mut self) -> Reconcile {
         let reconcile = self.store.reconcile();
-        if matches!(reconcile, Reconcile::Reloaded) {
-            self.on_reload();
+        match reconcile {
+            Reconcile::Reloaded => self.on_reload(),
+            Reconcile::ReadError => self.flash(if self.mode == Mode::Insert {
+                "read failed; draft kept"
+            } else {
+                "read failed"
+            }),
+            Reconcile::Unchanged => {}
         }
-        let report = self.store.drain_inbox();
-        self.apply_drain(report);
-        matches!(reconcile, Reconcile::Unchanged)
+        // Inbox draining also persists tasks. Leave captures pending when
+        // disk content could not be verified, just as store mutators do.
+        if reconcile != Reconcile::ReadError {
+            let report = self.store.drain_inbox();
+            self.apply_drain(report);
+        }
+        reconcile
     }
 }

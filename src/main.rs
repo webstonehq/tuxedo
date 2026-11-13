@@ -11,11 +11,14 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 use std::io::Write;
 
 use tuxedo::action::{Action, RecAction};
-use tuxedo::app::{AddOutcome, App, CalendarTarget, DialogInputMode, Mode, OverlayKind, View};
+use tuxedo::app::{
+    AddOutcome, App, CalendarTarget, DialogInputMode, EditingProfile, Mode, OverlayKind, View,
+};
 use tuxedo::cli;
 use tuxedo::config::Config;
 use tuxedo::config_watcher;
-use tuxedo::keybinds::{KeyBindings, ResolvedKey};
+use tuxedo::core::outcome::Reconcile;
+use tuxedo::keybinds::KeyBindings;
 use tuxedo::theme;
 use tuxedo::ui::hyperlinks;
 use tuxedo::{clipboard, todo, ui, update};
@@ -89,6 +92,7 @@ fn main() -> Result<()> {
     let done = cli::done_path(&path);
     let mut app_state = App::new_with_done(path.clone(), done, body, today, cfg);
     app_state.config_path = Config::path();
+    app_state.keybinds = keybinds.clone();
     app_state.mode = start_mode;
     // Start the config hot-reload watcher.
     let config_rx = app_state
@@ -335,8 +339,12 @@ fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
     // Detect external edits before processing the key. On detection the
     // file is reloaded, the keystroke is consumed (re-press to act on the
     // new state), and the per-mutator checks become no-ops downstream.
-    if !app.check_external_changes() {
-        return;
+    match app.poll_external_changes() {
+        Reconcile::Reloaded => return,
+        Reconcile::ReadError if app.mode != Mode::Insert => return,
+        // Draft commands stay usable through read failure. Submit still goes
+        // through store reconciliation, which refuses unverified disk state.
+        Reconcile::ReadError | Reconcile::Unchanged => {}
     }
     match app.mode {
         Mode::Insert => handle_insert(app, key, keybinds),
@@ -550,21 +558,73 @@ fn apply_to_draft(app: &mut App, key: KeyEvent) -> DraftEffect {
     }
 }
 
-fn handle_insert_normal(app: &mut App, key: KeyEvent) {
+fn submit_task_draft(app: &mut App) {
+    let outcome = if app.selection.editing().is_some() {
+        app.save_edit()
+    } else {
+        app.add_from_draft()
+    };
+    if matches!(outcome, AddOutcome::Saved | AddOutcome::Empty) {
+        app.mode = Mode::Normal;
+        app.draft_clear();
+        app.selection.exit_edit();
+        app.chord.clear();
+    }
+}
+
+fn handle_helix_normal(app: &mut App, key: KeyEvent) {
+    if key
+        .modifiers
+        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+    {
+        return;
+    }
     match key.code {
-        KeyCode::Enter => {
-            let outcome = if app.selection.editing().is_some() {
-                app.save_edit();
-                AddOutcome::Saved
-            } else {
-                app.add_from_draft()
-            };
-            if !matches!(outcome, AddOutcome::Parsed) {
-                app.mode = Mode::Normal;
-                app.draft_clear();
-                app.selection.exit_edit();
+        KeyCode::Enter => submit_task_draft(app),
+        KeyCode::Esc if app.draft.input_mode() == DialogInputMode::Extend => {
+            app.draft.helix_normal()
+        }
+        KeyCode::Esc => {
+            app.mode = Mode::Normal;
+            app.draft_clear();
+            app.selection.exit_edit();
+        }
+        KeyCode::Char('h') | KeyCode::Left => app.draft.helix_move(false),
+        KeyCode::Char('l') | KeyCode::Right => app.draft.helix_move(true),
+        KeyCode::Char(c @ ('w' | 'b' | 'e')) => app.draft.helix_word(c),
+        KeyCode::Home => app.draft.helix_boundary(false),
+        KeyCode::End => app.draft.helix_boundary(true),
+        KeyCode::Char('v') => app.draft.helix_toggle_extend(),
+        KeyCode::Char('%' | 'x') => app.draft.helix_select_all(),
+        KeyCode::Char(';') => app.draft.helix_collapse(),
+        KeyCode::Char('d') => app.draft.helix_delete(false),
+        KeyCode::Char('c') => app.draft.helix_delete(true),
+        KeyCode::Char('i') => app.draft.helix_insert(false),
+        KeyCode::Char('a') => app.draft.helix_insert(true),
+        KeyCode::Char('I') => app.draft.helix_insert_boundary(false),
+        KeyCode::Char('A') => app.draft.helix_insert_boundary(true),
+        KeyCode::Char('y') => {
+            app.draft.helix_yank();
+            app.flash("yanked draft selection");
+        }
+        KeyCode::Char(c @ ('p' | 'P')) => {
+            if !app.draft.helix_paste(c == 'P') {
+                app.flash("draft register is empty");
             }
         }
+        KeyCode::Char('u') => {
+            if !app.draft.undo() {
+                app.flash("no draft edits to undo");
+            }
+        }
+        KeyCode::Char('U') if !app.draft.redo() => app.flash("no draft edits to redo"),
+        _ => {}
+    }
+}
+
+fn handle_insert_normal(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Enter => submit_task_draft(app),
         KeyCode::Esc => {
             app.mode = Mode::Normal;
             app.draft_clear();
@@ -597,11 +657,12 @@ fn handle_insert_normal(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_insert(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
-    if app.draft.input_mode() == DialogInputMode::Normal {
-        handle_insert_normal(app, key);
-        return;
-    }
+    app.draft.begin_history_group();
+    handle_task_draft_key(app, key, keybinds);
+    app.draft.end_history_group();
+}
 
+fn handle_task_draft_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
     // Metadata-picker overlays take precedence. Non-slash overlays fully
     // consume keys until accepted or cancelled; the slash menu intercepts
     // only its navigation keys and lets text editing flow through so the
@@ -635,6 +696,15 @@ fn handle_insert(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
         None => {}
     }
 
+    if app.draft.input_mode() != DialogInputMode::Insert {
+        if app.draft.profile() == EditingProfile::Helix {
+            handle_helix_normal(app, key);
+        } else {
+            handle_insert_normal(app, key);
+        }
+        return;
+    }
+
     // Autocomplete bindings take precedence — only when the popup is visible.
     // Tab accepts; Enter falls through to save so the popup never swallows the
     // submit keystroke (e.g. when the typed token already matches an existing
@@ -657,24 +727,13 @@ fn handle_insert(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
 
     match key.code {
         KeyCode::Esc => {
-            app.draft.set_input_mode(DialogInputMode::Normal);
-        }
-        KeyCode::Enter => {
-            let outcome = if app.selection.editing().is_some() {
-                app.save_edit();
-                AddOutcome::Saved
+            if app.draft.profile() == EditingProfile::Helix {
+                app.draft.helix_normal();
             } else {
-                app.add_from_draft()
-            };
-            // `Parsed` means the NL parser rewrote the draft into canonical
-            // todo.txt and is asking the user to confirm — stay in Insert so
-            // they can review/edit before a second Enter saves.
-            if !matches!(outcome, AddOutcome::Parsed) {
-                app.mode = Mode::Normal;
-                app.draft_clear();
-                app.selection.exit_edit();
+                app.draft.set_input_mode(DialogInputMode::Normal);
             }
         }
+        KeyCode::Enter => submit_task_draft(app),
         _ => {
             let before = app.draft.text().len();
             let effect = apply_to_draft(app, key);
@@ -757,30 +816,9 @@ fn handle_insert_calendar(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_insert_rec_builder(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
-    // Custom `[recurrence]` bindings win over the built-ins, matching how
-    // `[normal]` is layered in `resolve_normal_key`.
-    if let Some(action) = keybinds.resolve_recurrence(key) {
+    if let Some(action) = keybinds.recurrence_action(key) {
         apply_rec_action(app, action);
-        return;
     }
-    let action = match key.code {
-        // Horizontal keys change the focused field's *value*: both the unit
-        // and the mode render as horizontal segmented controls, so Left/Right
-        // moving along them is the affordance the layout already suggests.
-        KeyCode::Char('h') | KeyCode::Left => RecAction::ValuePrev,
-        KeyCode::Char('l') | KeyCode::Right => RecAction::ValueNext,
-        // Vertical keys (and Tab) move *between* fields.
-        KeyCode::Char('j') | KeyCode::Down | KeyCode::Tab => RecAction::FocusNext,
-        KeyCode::Char('k') | KeyCode::Up | KeyCode::BackTab => RecAction::FocusPrev,
-        // `=` is the unshifted `+` on US keyboards — accept both so users
-        // don't have to chord Shift to bump the interval.
-        KeyCode::Char('+') | KeyCode::Char('=') => RecAction::ValueNext,
-        KeyCode::Char('-') | KeyCode::Char('_') => RecAction::ValuePrev,
-        KeyCode::Enter => RecAction::Accept,
-        KeyCode::Esc => RecAction::Cancel,
-        _ => return,
-    };
-    apply_rec_action(app, action);
 }
 
 fn apply_rec_action(app: &mut App, action: RecAction) {
@@ -826,6 +864,24 @@ fn handle_search(app: &mut App, key: KeyEvent) {
 fn handle_help(app: &mut App, key: KeyEvent) {
     if is_exit_key(key) || matches!(key.code, KeyCode::Esc | KeyCode::Char('?')) {
         app.mode = Mode::Normal;
+        return;
+    }
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => {
+            app.help_scroll.set(app.help_scroll.get().saturating_add(1))
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            app.help_scroll.set(app.help_scroll.get().saturating_sub(1))
+        }
+        KeyCode::PageDown => app
+            .help_scroll
+            .set(app.help_scroll.get().saturating_add(10)),
+        KeyCode::PageUp => app
+            .help_scroll
+            .set(app.help_scroll.get().saturating_sub(10)),
+        KeyCode::Home => app.help_scroll.set(0),
+        KeyCode::End => app.help_scroll.set(u16::MAX),
+        _ => {}
     }
 }
 
@@ -837,6 +893,18 @@ fn handle_settings(app: &mut App, key: KeyEvent) {
 
     match key.code {
         KeyCode::Esc | KeyCode::Char(',') => app.mode = Mode::Normal,
+        KeyCode::Char('E') => {
+            app.prefs.editing_profile = if app.prefs.editing_profile == EditingProfile::Vim {
+                EditingProfile::Helix
+            } else {
+                EditingProfile::Vim
+            };
+            app.flash(format!(
+                "next task draft: {}",
+                app.prefs.editing_profile.label()
+            ));
+            app.save_prefs();
+        }
         KeyCode::Char('T') => apply_action(app, Action::CycleTheme),
         KeyCode::Char('D') => apply_action(app, Action::CycleDensity),
         KeyCode::Char('L') => apply_action(app, Action::ToggleLineNum),
@@ -1001,102 +1069,7 @@ fn handle_prompt(app: &mut App, key: KeyEvent) {
 /// Mutates the chord state because chord progress is part of interpreting
 /// the key, not a separate concern.
 fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> Option<Action> {
-    match keybinds.resolve_normal(key, &mut app.chord) {
-        Some(ResolvedKey::Action(action)) => return Some(action),
-        Some(ResolvedKey::Pending) => return None,
-        None => {}
-    }
-
-    if is_exit_key(key) {
-        return Some(Action::Quit);
-    }
-
-    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    if ctrl {
-        return match key.code {
-            KeyCode::Char('d') => Some(Action::HalfPageDown),
-            KeyCode::Char('u') => Some(Action::HalfPageUp),
-            KeyCode::Char('p') => Some(Action::OpenCommandPalette),
-            _ => None,
-        };
-    }
-    Some(match key.code {
-        KeyCode::Char('j') | KeyCode::Down => Action::CursorDown,
-        KeyCode::Char('k') | KeyCode::Up => Action::CursorUp,
-        KeyCode::Char('J') => Action::MoveTaskDown,
-        KeyCode::Char('K') => Action::MoveTaskUp,
-        KeyCode::Char('G') => Action::CursorBottom,
-        // First 'g' arms the chord; second 'g' fires CursorTop.
-        KeyCode::Char('g') if app.chord.toggle('g') => Action::CursorTop,
-        KeyCode::Char('n') => Action::BeginAdd,
-        KeyCode::Char('r') => Action::Reschedule,
-        KeyCode::Char('a') => Action::ToggleArchiveView,
-        KeyCode::Char('l') => Action::GoList,
-        KeyCode::Char('e') => Action::BeginEdit,
-        KeyCode::Char('i') => Action::BeginEditInsert,
-        KeyCode::Char('o') => Action::OpenNote,
-        KeyCode::Char('O') => Action::CreateOrOpenNote,
-        KeyCode::Char('x') => Action::ToggleComplete,
-        // 'dd' chord. First press arms; second fires.
-        KeyCode::Char('d') if app.chord.toggle('d') => Action::Delete,
-        // 'yy' chord copies the whole line; 'yb' (after 'y' is armed) copies
-        // the body only. Plain 'y' just arms the leader.
-        KeyCode::Char('y') if app.chord.toggle('y') => Action::CopyLine,
-        KeyCode::Char('b') if app.chord.consume('y') => Action::CopyBody,
-        KeyCode::Char('p') => {
-            // After 'f' arms, 'fp' opens the project picker. Otherwise plain
-            // 'p' cycles priority.
-            if app.chord.consume('f') {
-                Action::PickProject
-            } else {
-                Action::CyclePriority
-            }
-        }
-        KeyCode::Char('c') => {
-            if app.chord.consume('f') {
-                Action::PickContext
-            } else {
-                Action::BeginPromptContext
-            }
-        }
-        KeyCode::Char('/') => Action::BeginSearch,
-        KeyCode::Char('?') => Action::OpenHelp,
-        KeyCode::Char(',') => Action::OpenSettings,
-        KeyCode::Char(':') => Action::OpenCommandPalette,
-        KeyCode::Char('u') => Action::Undo,
-        KeyCode::Char('v') => Action::ToggleVisual,
-        KeyCode::Char(' ') => Action::ToggleSelected,
-        KeyCode::Char('A') => Action::ArchiveCompleted,
-        // First 'f' arms the leader; a second 'f' (`ff`) opens the saved-
-        // search picker. Mirrors the `fp`/`fc` pattern below.
-        KeyCode::Char('f') => {
-            if app.chord.consume('f') {
-                Action::PickSavedFilter
-            } else {
-                Action::ArmF
-            }
-        }
-        KeyCode::Char('s') => {
-            // `fs` saves the active search; plain 's' opens the share QR.
-            if app.chord.consume('f') {
-                Action::SaveCurrentFilter
-            } else {
-                Action::OpenShare
-            }
-        }
-        KeyCode::Char('S') => Action::CycleSort,
-        KeyCode::Char('+') => Action::BeginPromptProject,
-        KeyCode::Char('[') => Action::ToggleLeftPane,
-        KeyCode::Char(']') => Action::ToggleRightPane,
-        KeyCode::Char('T') => Action::OpenThemePicker,
-        KeyCode::Char('D') => Action::CycleDensity,
-        KeyCode::Char('L') => Action::ToggleLineNum,
-        KeyCode::Char('H') => Action::ToggleShowDone,
-        KeyCode::Char('F') => Action::ToggleShowFuture,
-        KeyCode::Esc => Action::EscapeStack,
-        KeyCode::Char('W') => Action::ChangeWeekStart,
-        _ => return None,
-    })
+    keybinds.resolve_action(key, &mut app.chord)
 }
 
 fn apply_action(app: &mut App, action: Action) {
@@ -1170,7 +1143,7 @@ fn apply_action(app: &mut App, action: Action) {
             // view the moment it saves. The cursor parks after the seed, so
             // an unwanted tag is a backspace away.
             let seed = app.filter().tag_seed();
-            app.draft_set_insert(seed);
+            app.open_task_draft(seed, DialogInputMode::Insert);
             app.selection.exit_edit();
         }
         Action::BeginEdit => {
@@ -1178,7 +1151,7 @@ fn apply_action(app: &mut App, action: Action) {
                 && let Some(raw) = app.task_raw(abs)
             {
                 app.selection.enter_edit(abs);
-                app.draft_set(raw);
+                app.open_task_draft(raw, DialogInputMode::Normal);
                 app.mode = Mode::Insert;
             }
         }
@@ -1187,7 +1160,7 @@ fn apply_action(app: &mut App, action: Action) {
                 && let Some(raw) = app.task_raw(abs)
             {
                 app.selection.enter_edit(abs);
-                app.draft_set_insert(raw);
+                app.open_task_draft(raw, DialogInputMode::Insert);
                 app.mode = Mode::Insert;
             }
         }
@@ -1217,7 +1190,10 @@ fn apply_action(app: &mut App, action: Action) {
             app.draft_clear();
             app.clear_search();
         }
-        Action::OpenHelp => app.mode = Mode::Help,
+        Action::OpenHelp => {
+            app.help_scroll.set(0);
+            app.mode = Mode::Help;
+        }
         Action::OpenSettings => app.mode = Mode::Settings,
         Action::OpenCommandPalette => {
             // Snapshot the current mode (Normal or Visual) so cancel/run
@@ -1351,7 +1327,7 @@ fn apply_action(app: &mut App, action: Action) {
                 && let Some(raw) = app.task_raw(abs)
             {
                 app.selection.enter_edit(abs);
-                app.draft_set_insert(raw);
+                app.open_task_draft(raw, DialogInputMode::Insert);
                 app.mode = Mode::Insert;
                 app.open_calendar(CalendarTarget::Due);
             }
@@ -1412,6 +1388,8 @@ fn copy_payload(app: &App, body_only: bool) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
     use chrono::NaiveDate;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -1438,6 +1416,12 @@ mod tests {
         app.tasks().iter().map(|task| task.raw.as_str()).collect()
     }
 
+    fn mktempcfg(basename: &str) -> PathBuf {
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        std::env::temp_dir().join(format!("tuxedo-{basename}-{}-{n}.txt", std::process::id(),))
+    }
+
     fn welcome_app(name: &str) -> (App, std::path::PathBuf) {
         let path = std::env::temp_dir().join(format!(
             "tuxedo-welcome-{name}-{}-{:?}.txt",
@@ -1451,6 +1435,7 @@ mod tests {
             "2026-05-07".into(),
             Config::default(),
         );
+        app.config_path = Some(mktempcfg("welcome-config"));
         app.mode = Mode::Welcome;
         (app, path)
     }
@@ -1496,6 +1481,33 @@ mod tests {
     }
 
     #[test]
+    fn help_scroll_controls_and_reopening_reset_the_viewport() {
+        let mut app = build_app();
+        apply_action(&mut app, Action::OpenHelp);
+        assert_eq!(app.help_scroll.get(), 0);
+        handle_help(&mut app, key('j'));
+        assert_eq!(app.help_scroll.get(), 1);
+        handle_help(
+            &mut app,
+            KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE),
+        );
+        assert_eq!(app.help_scroll.get(), 11);
+        handle_help(&mut app, key('k'));
+        assert_eq!(app.help_scroll.get(), 10);
+        handle_help(&mut app, KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+        assert_eq!(app.help_scroll.get(), u16::MAX);
+        handle_help(&mut app, KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        handle_help(&mut app, key('k'));
+        assert_eq!(app.help_scroll.get(), 0);
+        handle_help(&mut app, key('j'));
+        handle_help(&mut app, key('?'));
+        assert_eq!(app.mode, Mode::Normal);
+        apply_action(&mut app, Action::OpenHelp);
+        assert_eq!(app.help_scroll.get(), 0);
+        assert_eq!(app.mode, Mode::Help);
+    }
+
+    #[test]
     fn settings_hinted_keys_apply_and_dialog_stays_open() {
         let mut app = build_app();
         app.mode = Mode::Settings;
@@ -1523,6 +1535,28 @@ mod tests {
 
         handle_settings(&mut app, key('q'));
         assert_eq!(app.mode, Mode::Normal, "`q` must still close the dialog");
+    }
+
+    #[test]
+    fn cycle_prefs_persist_to_config_path() {
+        let path = mktempcfg("prefs-save");
+        let _ = std::fs::remove_file(&path);
+
+        let mut app = build_app();
+        app.config_path = Some(path.clone());
+
+        app.cycle_density();
+        app.cycle_sort();
+        // cycle_theme() also exercised for parity — no dedicated App-level
+        // wrapper test exists for it today either.
+        app.cycle_theme();
+
+        let saved = Config::load_from(&path);
+        assert_eq!(saved.density, Some(app.prefs.density));
+        assert_eq!(saved.sort, Some(app.prefs.sort));
+        assert_eq!(saved.theme.as_deref(), Some(app.theme().name));
+
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
@@ -1578,33 +1612,32 @@ mod tests {
     }
 
     fn build_app() -> App {
-        let path = std::env::temp_dir().join(format!(
-            "tuxedo-bindings-{}-{:?}.txt",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let path = mktempcfg("bindings");
         let _ = std::fs::write(&path, "a\nb\nc\n");
-        App::new(
+        let mut app = App::new(
             path,
             "a\nb\nc\n".into(),
             "2026-05-07".into(),
             Config::default(),
-        )
+        );
+        // Give saves a scratch destination so tests that exercise a
+        // save_prefs-triggering action (e.g. via handle_settings) never
+        // fall through to the real XDG config path.
+        app.config_path = Some(mktempcfg("config"));
+        app
     }
 
     fn build_app_with_due() -> App {
-        let path = std::env::temp_dir().join(format!(
-            "tuxedo-bindings-{}-{:?}.txt",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let path = mktempcfg("bindings");
         let _ = std::fs::write(&path, "Buy milk due:2026-06-30\n");
-        App::new(
+        let mut app = App::new(
             path,
             "Buy milk due:2026-06-30\n".into(),
             "2026-05-07".into(),
             Config::default(),
-        )
+        );
+        app.config_path = Some(mktempcfg("due-config"));
+        app
     }
 
     #[test]
@@ -2000,6 +2033,7 @@ mod tests {
             "2026-05-06".into(),
             Config::default(),
         );
+        app.config_path = Some(dir.join("config.toml"));
         if done_raw.is_some() {
             // Drain the startup archive loader so app.archive is populated.
             let deadline = Instant::now() + Duration::from_secs(2);
@@ -2316,3 +2350,6 @@ mod tests {
         assert_eq!(app.draft.text(), "");
     }
 }
+
+#[cfg(test)]
+mod helix_input_tests;

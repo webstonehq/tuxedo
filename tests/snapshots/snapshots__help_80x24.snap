@@ -1,0 +1,28 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(terminal.backend().buffer())
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL       
+  ┌ tuxedo · HELP ───────────────────────────────────────────────────────────┐  
+ P│ NAVIGATION                                                               │A)
+  │ j, ↓ / k, ↑      next / previous task                                    │02
+  │ gg / G           first / last task                                       │02
+  │ Ctrl-d / Ctrl-u  page down / up                                          │wo
+  │                                                                          │la
+  │ TASK EDITING                                                             │  
+  │ n                new task                                                │  
+  │ e / i            edit: normal / insert                                   │  
+  │ x / dd           complete / delete                                       │-0
+ C│ r / p            reschedule / priority                                   │oa
+  │ J / K            move down / up                                          │  
+  │ + / c            project / context                                       │  
+  │ yy / yb          copy line / body                                        │-0
+  │ o / O            open / create note                                      │  
+  │ u                undo task change                                        │  
+  │                                                                          │  
+  │ TASK SELECTION                                                           │  
+  │ v                enter / leave selection                                 │  
+  │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 1/79                           │  
+  └──────────────────────────────────────────────────────────────────────────┘  
+                                                                                
+ HELP  · Esc close · j/k scroll · 15 open · 2026-05-06 · tuxedo 2026.8.1

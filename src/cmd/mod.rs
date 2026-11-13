@@ -1,6 +1,6 @@
 //! One-shot CLI commands (a todo.txt-cli-style surface), driving the headless
-//! [`Store`](crate::core::Store). Invoked by `main` when the first argument is a
-//! recognized subcommand; otherwise the binary launches the TUI.
+//! [`Store`]. A recognized subcommand runs once; otherwise the binary launches
+//! the TUI.
 
 mod json;
 

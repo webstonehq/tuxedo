@@ -9,7 +9,6 @@ expression: buffer_to_text(&buf)
                                                                                                     
  CONTEXTS                                                                                           
    tag with @context                                                                                
-                                                                                                    
                       ┌ tuxedo · welcome ────────────────────────────────────┐                      
                       │                    ██          ██                    │                      
                       │                    ████  ██  ████                    │                      
@@ -33,4 +32,5 @@ expression: buffer_to_text(&buf)
                                                                                                     
                                                                                                     
                                                                                                     
- WELCOME   c create ./todo.txt · s open sample · q quit       0 open · 2026-05-06 · tuxedo 2026.8.1
+                                                                                                    
+ WELCOME  · c create · s sample · q quit · 0 open · 2026-05-06 · tuxedo 2026.8.1

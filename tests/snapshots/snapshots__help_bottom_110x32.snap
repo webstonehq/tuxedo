@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(terminal.backend().buffer())
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tasks  •  sor DETAIL                           
+     ┌ tuxedo · HELP ──────────────────────────────────────────────────────────────────────────────────┐      
+ PROJ│                                                  editing_profile  config: vim (default) / helix │      
+   +w│ FORMAT · todo.txt                                h / l, ← / →     move / extend one grapheme    │      
+   +h│ (A), YYYY-MM-DD     priority, creation date      w / b / e        next start / prev start / end │      
+   +f│ +project, @context  project and context tags     Home / End       draft start / end             │      
+   +h│ due:YYYY-MM-DD      due date; search due:+1w     v                toggle normal / extend        │      
+   +l│ rec:Nu / rec:+Nu    d/w/m/y/b; + anchors due     % / x            select whole task draft       │      
+   +p│ x DATE BODY         completed task               ;                collapse to active cursor     │      
+   +t│                                                  d / c            yank + delete / then insert   │      
+     │                                                  i / a            insert before / after         │ard   
+ CONT│                                                                   selection                     │      
+   @e│                                                  I / A            insert at absolute start /    │      
+   @h│                                                                   end                           │      
+   @l│                                                  y                yank to app register          │      
+   @p│                                                  p / P            paste register after / before │      
+     │                                                  u / U            undo / redo draft text        │      
+     │                                                  Enter            review / save draft           │      
+     │                                                  Esc              popup → normal → cancel       │      
+     │                                                  Tab              autocomplete (insert)         │      
+     │                                                                                                 │      
+     │ Helix-style editing supports one selection in task drafts. Its register stays in memory across  │      
+     │ dialogs; it does not read the system clipboard. Draft undo is separate from task undo.          │      
+     │ Unsupported: multiple selections, counts, text objects, regex selection, macros, shell          │      
+     │ commands, multiline editing and editor-key remapping. I uses absolute draft start rather than   │      
+     │ first nonblank.                                                                                 │      
+     │                                                                                                 │      
+     │ Commas separate aliases; / pairs keys with actions. 'palette' means command palette only.       │      
+     │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 35/35                                                 │      
+     └─────────────────────────────────────────────────────────────────────────────────────────────────┘      
+                                                                                                              
+ HELP  · Esc close · j/k scroll · 15 open · 2026-05-06 · tuxedo 2026.8.1

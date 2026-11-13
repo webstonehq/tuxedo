@@ -20,6 +20,7 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}BEHAVIOR{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                           {/}
 {fg=#c8ccd4 bg=#1a1d23}   default sort                {/}{fg=#6b7280 bg=#1a1d23}priority (S to cycle){/}{fg=#c8ccd4 bg=#1a1d23}                                                {/}
+{fg=#c8ccd4 bg=#1a1d23}   editor profile              {/}{fg=#6b7280 bg=#1a1d23}vim (E toggle; next draft){/}{fg=#c8ccd4 bg=#1a1d23}                                           {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23} {/}{fg=#8aa9c9 bg=#1a1d23 mod=bold}KEYBINDINGS{/}{fg=#c8ccd4 bg=#1a1d23}                                                                                        {/}
 {fg=#c8ccd4 bg=#1a1d23}                               {/}{fg=#6b7280 bg=#1a1d23}press ? for the full list{/}{fg=#c8ccd4 bg=#1a1d23}                                            {/}
@@ -32,5 +33,4 @@ expression: buffer_to_styled(&buf)
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
 {fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
-{fg=#c8ccd4 bg=#1a1d23}                                                                                                    {/}
-{fg=#1a1d23 bg=#8aa9c9 mod=bold} SETTINGS {/}{bg=#252a33}  {/}{fg=#a8b0bc bg=#252a33}Esc back{/}{bg=#252a33}                                         {/}{fg=#6b7280 bg=#252a33}15 open · 2026-05-06 · tuxedo 2026.8.1 {/}
+{fg=#1a1d23 bg=#8aa9c9 mod=bold} SETTINGS {/}{fg=#a8b0bc bg=#252a33} · Esc back{/}{fg=#6b7280 bg=#252a33} · 15 open · 2026-05-06 · tuxedo 2026.8.1{/}{bg=#252a33}                                      {/}

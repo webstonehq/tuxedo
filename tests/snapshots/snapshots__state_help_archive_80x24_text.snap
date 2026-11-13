@@ -1,0 +1,28 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(buf)
+---
+ FILTERS                   ▶▮◀ done.txt  •  0 tasks  •  sort:compl DETAIL       
+  ┌ tuxedo · HELP ───────────────────────────────────────────────────────────┐  
+ P│ NAVIGATION                                                               │  
+  │ j, ↓ / k, ↑      next / previous task                                    │  
+  │ gg / G           first / last task                                       │  
+  │ Ctrl-d / Ctrl-u  page down / up                                          │  
+  │                                                                          │  
+  │ TASK EDITING                                                             │  
+  │ n                new task                                                │  
+  │ e / i            edit: normal / insert                                   │  
+  │ x / dd           complete / delete                                       │  
+ C│ r / p            reschedule / priority                                   │  
+  │ J / K            move down / up                                          │  
+  │ + / c            project / context                                       │  
+  │ yy / yb          copy line / body                                        │  
+  │ o / O            open / create note                                      │  
+  │ u                undo task change                                        │  
+  │                                                                          │  
+  │ TASK SELECTION                                                           │  
+  │ v                enter / leave selection                                 │  
+  │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 1/79                           │  
+  └──────────────────────────────────────────────────────────────────────────┘  
+                                                                                
+ HELP  · Esc close · j/k scroll · 0 archived · 2026-05-06 · tuxedo 2026.8.1

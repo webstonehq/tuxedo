@@ -1,12 +1,49 @@
-use super::App;
-use super::draft_overlay::DraftOverlay;
+use unicode_segmentation::UnicodeSegmentation;
 
-/// Sub-mode for the edit/add dialog, mirroring vim's modal editing model.
+use super::draft_overlay::DraftOverlay;
+use super::{App, UNDO_LIMIT};
+use std::collections::VecDeque;
+
+/// Editing mode for a task dialog; Extend is used only by the Helix-style editor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DialogInputMode {
     #[default]
     Insert,
     Normal,
+    Extend,
+}
+
+impl DialogInputMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Insert => "Insert",
+            Self::Normal => "Normal",
+            Self::Extend => "Extend",
+        }
+    }
+}
+
+/// Fixed command namespace captured when a task dialog opens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EditingProfile {
+    #[default]
+    Vim,
+    Helix,
+}
+
+impl EditingProfile {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Vim => "vim",
+            Self::Helix => "helix",
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Vim => "Vim",
+            Self::Helix => "Helix",
+        }
+    }
 }
 
 /// Byte offset within a draft `String`. Construction enforces UTF-8 char-boundary
@@ -37,10 +74,22 @@ impl DraftCursor {
     }
 }
 
+/// The selection is part of an edit's state, but modes and overlays are not:
+/// undo/redo preserves Normal/Extend without reviving stale popup ranges.
+#[derive(Debug, Clone)]
+struct DraftSnapshot {
+    text: String,
+    cursor: DraftCursor,
+    anchor: DraftCursor,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct DraftState {
     text: String,
     cursor: DraftCursor,
+    anchor: DraftCursor,
+    profile: EditingProfile,
+    insert_after: bool,
     autocomplete_selected: usize,
     autocomplete_suppressed: bool,
     /// Open metadata picker (slash menu, calendar, recurrence builder,
@@ -48,6 +97,13 @@ pub struct DraftState {
     /// user is just editing text.
     overlay: Option<DraftOverlay>,
     input_mode: DialogInputMode,
+    undo: VecDeque<DraftSnapshot>,
+    redo: Vec<DraftSnapshot>,
+    /// Kept across draft openings; independent of OSC 52 task-list copying.
+    register: String,
+    /// The first text mutation in a compound picker operation records state.
+    history_group_depth: usize,
+    history_group_recorded: bool,
 }
 
 impl DraftState {
@@ -79,17 +135,28 @@ impl DraftState {
         self.overlay = overlay;
     }
 
+    /// Presentation label for the current editor profile. Keep this separate
+    /// from its mode so another editor can supply its own labels later.
+    pub fn editor_profile_label(&self) -> &'static str {
+        self.profile.label()
+    }
+
     pub fn input_mode(&self) -> DialogInputMode {
         self.input_mode
     }
 
     pub fn set_input_mode(&mut self, mode: DialogInputMode) {
         self.input_mode = mode;
+        self.normalize_selection();
     }
 
     pub fn clear(&mut self) {
+        self.reset_history();
         self.text.clear();
         self.cursor = DraftCursor::zero();
+        self.anchor = self.cursor;
+        self.profile = EditingProfile::Vim;
+        self.insert_after = false;
         self.reset_autocomplete();
         self.overlay = None;
         self.input_mode = DialogInputMode::Insert;
@@ -100,7 +167,11 @@ impl DraftState {
     /// sub-mode is the caller's choice — `App::draft_set` (`e`) lands in
     /// Normal mode, `App::draft_set_insert` (`i`) lands in Insert mode.
     pub fn set(&mut self, s: String, mode: DialogInputMode) {
+        self.reset_history();
         self.cursor = DraftCursor::at_end(&s);
+        self.anchor = self.cursor;
+        self.profile = EditingProfile::Vim;
+        self.insert_after = false;
         self.text = s;
         self.reset_autocomplete();
         self.overlay = None;
@@ -109,8 +180,8 @@ impl DraftState {
 
     pub fn insert_char(&mut self, c: char) {
         let pos = self.cursor.byte();
-        self.text.insert(pos, c);
-        self.cursor = DraftCursor(pos + c.len_utf8());
+        self.replace_token(pos, pos, c.encode_utf8(&mut [0; 4]));
+        self.normalize_selection();
         self.reset_autocomplete();
     }
 
@@ -119,9 +190,13 @@ impl DraftState {
         if pos == 0 {
             return;
         }
-        let prev = prev_char_boundary(&self.text, pos);
-        self.text.drain(prev..pos);
-        self.cursor = DraftCursor(prev);
+        let prev = if self.profile == EditingProfile::Helix {
+            helix_draft::grapheme_prev(&self.text, pos)
+        } else {
+            prev_char_boundary(&self.text, pos)
+        };
+        self.replace_token(prev, pos, "");
+        self.normalize_selection();
         self.reset_autocomplete();
     }
 
@@ -130,8 +205,13 @@ impl DraftState {
         if pos >= self.text.len() {
             return;
         }
-        let next = next_char_boundary(&self.text, pos);
-        self.text.drain(pos..next);
+        let next = if self.profile == EditingProfile::Helix {
+            helix_draft::grapheme_next(&self.text, pos)
+        } else {
+            next_char_boundary(&self.text, pos)
+        };
+        self.replace_token(pos, next, "");
+        self.normalize_selection();
         self.reset_autocomplete();
     }
 
@@ -140,7 +220,12 @@ impl DraftState {
         if pos == 0 {
             return;
         }
-        self.cursor = DraftCursor(prev_char_boundary(&self.text, pos));
+        self.cursor = DraftCursor(if self.profile == EditingProfile::Helix {
+            helix_draft::grapheme_prev(&self.text, pos)
+        } else {
+            prev_char_boundary(&self.text, pos)
+        });
+        self.normalize_selection();
     }
 
     pub fn move_right(&mut self) {
@@ -148,15 +233,22 @@ impl DraftState {
         if pos >= self.text.len() {
             return;
         }
-        self.cursor = DraftCursor(next_char_boundary(&self.text, pos));
+        self.cursor = DraftCursor(if self.profile == EditingProfile::Helix {
+            helix_draft::grapheme_next(&self.text, pos)
+        } else {
+            next_char_boundary(&self.text, pos)
+        });
+        self.normalize_selection();
     }
 
     pub fn move_home(&mut self) {
         self.cursor = DraftCursor::zero();
+        self.normalize_selection();
     }
 
     pub fn move_end(&mut self) {
         self.cursor = DraftCursor::at_end(&self.text);
+        self.normalize_selection();
     }
 
     /// Move to the start of the next word (`w`).
@@ -170,6 +262,7 @@ impl DraftState {
             pos = next_char_boundary(s, pos);
         }
         self.cursor = DraftCursor(pos);
+        self.normalize_selection();
     }
 
     /// Move to the start of the current or previous word (`b`).
@@ -187,6 +280,7 @@ impl DraftState {
             p = prev_char_boundary(s, p);
         }
         self.cursor = DraftCursor(p);
+        self.normalize_selection();
     }
 
     /// Delete from the cursor to the start of the next word (`dw`/`cw`).
@@ -201,7 +295,7 @@ impl DraftState {
             end = next_char_boundary(s, end);
         }
         if end > start {
-            self.text.drain(start..end);
+            self.replace_token(start, end, "");
             self.reset_autocomplete();
         }
     }
@@ -223,8 +317,8 @@ impl DraftState {
         while start > 0 && !s.as_bytes()[prev_char_boundary(s, start)].is_ascii_whitespace() {
             start = prev_char_boundary(s, start);
         }
-        self.text.drain(start..end);
-        self.cursor = DraftCursor(start);
+        self.replace_token(start, end, "");
+        self.normalize_selection();
         self.reset_autocomplete();
     }
 
@@ -234,8 +328,8 @@ impl DraftState {
         if pos == 0 {
             return;
         }
-        self.text.drain(0..pos);
-        self.cursor = DraftCursor::zero();
+        self.replace_token(0, pos, "");
+        self.normalize_selection();
         self.reset_autocomplete();
     }
 
@@ -246,7 +340,8 @@ impl DraftState {
         if pos >= self.text.len() {
             return;
         }
-        self.text.truncate(pos);
+        self.replace_token(pos, self.text.len(), "");
+        self.normalize_selection();
         self.reset_autocomplete();
     }
 
@@ -268,6 +363,7 @@ impl DraftState {
             pos = next_char_boundary(s, pos);
         }
         self.cursor = DraftCursor(pos);
+        self.normalize_selection();
     }
 
     /// Cycle the selected autocomplete match. `n` is the current match-list length.
@@ -293,10 +389,117 @@ impl DraftState {
     /// at `start + with.len()`. Used by `autocomplete_accept` to swap in a
     /// chosen suggestion. Caller guarantees `start` and `end` are char boundaries.
     pub fn replace_token(&mut self, start: usize, end: usize, with: &str) {
+        let (start, end) = if self.profile == EditingProfile::Helix {
+            (
+                helix_draft::grapheme_floor(&self.text, start),
+                helix_draft::grapheme_ceil(&self.text, end),
+            )
+        } else {
+            (start, end)
+        };
+        if &self.text[start..end] != with {
+            self.record_edit();
+        }
+        if self.profile == EditingProfile::Helix && self.input_mode == DialogInputMode::Insert {
+            let a = self.anchor.byte();
+            if a > end || (a == end && (!self.insert_after || start != end)) {
+                self.anchor = DraftCursor(a - (end - start) + with.len());
+            } else if a > start {
+                self.anchor = DraftCursor(start + with.len());
+            }
+        }
         self.text.replace_range(start..end, with);
         self.cursor = DraftCursor(start + with.len());
+        self.normalize_selection();
         self.autocomplete_selected = 0;
         self.autocomplete_suppressed = false;
+    }
+
+    pub fn register(&self) -> &str {
+        &self.register
+    }
+
+    pub fn set_register(&mut self, text: String) {
+        self.register = text;
+    }
+
+    fn snapshot(&self) -> DraftSnapshot {
+        DraftSnapshot {
+            text: self.text.clone(),
+            cursor: DraftCursor(self.normal_endpoints().1),
+            anchor: DraftCursor(self.normal_endpoints().0),
+        }
+    }
+
+    /// Call immediately before an actual text mutation, including selections
+    /// and paste. No-op edits must not discard the redo branch.
+    fn record_edit(&mut self) {
+        if self.profile != EditingProfile::Helix
+            || (self.history_group_depth > 0 && self.history_group_recorded)
+        {
+            return;
+        }
+        if self.undo.len() == UNDO_LIMIT {
+            self.undo.pop_front();
+        }
+        self.undo.push_back(self.snapshot());
+        self.redo.clear();
+        if self.history_group_depth > 0 {
+            self.history_group_recorded = true;
+        }
+    }
+
+    /// Group the text replacements performed by one accepted picker into one
+    /// edit. Nested groups are supported; callers must balance begin/end.
+    pub fn begin_history_group(&mut self) {
+        if self.history_group_depth == 0 {
+            self.history_group_recorded = false;
+        }
+        self.history_group_depth += 1;
+    }
+
+    pub fn end_history_group(&mut self) {
+        self.history_group_depth = self.history_group_depth.saturating_sub(1);
+        if self.history_group_depth == 0 {
+            self.history_group_recorded = false;
+        }
+    }
+
+    fn restore_snapshot(&mut self, state: DraftSnapshot) {
+        self.text = state.text;
+        self.cursor = state.cursor;
+        self.anchor = state.anchor;
+        if self.input_mode != DialogInputMode::Extend {
+            self.input_mode = DialogInputMode::Normal;
+        }
+        self.overlay = None;
+        self.normalize_selection();
+        self.reset_autocomplete();
+    }
+
+    pub fn undo(&mut self) -> bool {
+        let Some(state) = self.undo.pop_back() else {
+            return false;
+        };
+        self.redo.push(self.snapshot());
+        self.restore_snapshot(state);
+        true
+    }
+
+    pub fn redo(&mut self) -> bool {
+        let Some(state) = self.redo.pop() else {
+            return false;
+        };
+        self.undo.push_back(self.snapshot());
+        self.restore_snapshot(state);
+        true
+    }
+
+    fn reset_history(&mut self) {
+        self.undo.clear();
+        self.redo.clear();
+        self.history_group_depth = 0;
+        self.history_group_recorded = false;
     }
 
     fn reset_autocomplete(&mut self) {
@@ -309,6 +512,9 @@ impl DraftState {
         self.cursor = DraftCursor::clamped(&self.text, byte);
     }
 }
+
+#[path = "helix_draft.rs"]
+mod helix_draft;
 
 /// App-level delegators. These keep the existing `app.draft_*()` call surface
 /// intact for main.rs key handlers; the actual logic lives on `DraftState`.
@@ -327,6 +533,12 @@ impl App {
     /// typing without the vim modal step.
     pub fn draft_set_insert(&mut self, s: String) {
         self.draft.set(s, DialogInputMode::Insert);
+    }
+
+    /// Open only a task dialog with the currently configured profile.
+    pub fn open_task_draft(&mut self, text: String, mode: DialogInputMode) {
+        self.draft.open(text, mode, self.prefs.editing_profile);
+        self.chord.clear();
     }
 
     pub fn draft_insert_char(&mut self, c: char) {
@@ -553,5 +765,110 @@ mod tests {
         app.draft_kill_to_end();
         assert_eq!(app.draft.text(), "hello");
         assert_eq!(app.draft.cursor(), 5);
+    }
+}
+
+#[cfg(test)]
+mod history_tests {
+    // Add inside draft.rs's existing tests module (or adapt helper to child module).
+    fn helix_history_draft(text: &str) -> super::DraftState {
+        let mut draft = super::DraftState::default();
+        draft.set(text.into(), super::DialogInputMode::Insert);
+        draft.profile = super::EditingProfile::Helix;
+        draft
+    }
+
+    #[test]
+    fn helix_history_is_bounded_and_redoes_each_edit() {
+        let mut draft = helix_history_draft("");
+        for _ in 0..55 {
+            draft.insert_char('a');
+        }
+        assert_eq!(draft.undo.len(), 50);
+        for _ in 0..50 {
+            assert!(draft.undo());
+        }
+        assert!(!draft.undo());
+        assert_eq!(draft.text(), "aaaaa");
+        for _ in 0..50 {
+            assert!(draft.redo());
+        }
+        assert!(!draft.redo());
+        assert_eq!(draft.text().len(), 55);
+    }
+
+    #[test]
+    fn helix_history_noop_preserves_redo_new_edit_discards_it() {
+        let mut draft = helix_history_draft("a");
+        draft.insert_char('b');
+        assert!(draft.undo());
+        draft.replace_token(0, 1, "a");
+        assert!(draft.redo());
+        assert_eq!(draft.text(), "ab");
+        assert!(draft.undo());
+        draft.replace_token(0, 1, "c");
+        assert!(!draft.redo());
+        assert_eq!(draft.text(), "c");
+    }
+
+    #[test]
+    fn helix_history_restores_reverse_unicode_selection() {
+        let mut draft = helix_history_draft("e\u{301}👩‍💻z");
+        draft.input_mode = super::DialogInputMode::Normal;
+        draft.cursor = super::DraftCursor::zero();
+        draft.anchor = super::DraftCursor::clamped(draft.text(), "e\u{301}".len());
+        let original_cursor = draft.cursor;
+        let original_anchor = draft.anchor;
+        let end = draft.text().len();
+        draft.replace_token(0, end, "replacement");
+        assert!(draft.undo());
+        assert_eq!(draft.text(), "e\u{301}👩‍💻z");
+        assert_eq!(draft.cursor, original_cursor);
+        assert_eq!(draft.anchor, original_anchor);
+        assert_eq!(draft.input_mode(), super::DialogInputMode::Normal);
+        assert!(draft.redo());
+        assert_eq!(draft.text(), "replacement");
+    }
+
+    #[test]
+    fn helix_register_outlives_drafts_but_history_does_not() {
+        let mut draft = helix_history_draft("first");
+        draft.set_register("👩‍💻".into());
+        draft.insert_char('!');
+        assert!(draft.undo());
+        assert_eq!(draft.register(), "👩‍💻");
+        draft.clear();
+        assert!(!draft.redo());
+        assert!(!draft.undo());
+        assert_eq!(draft.register(), "👩‍💻");
+        draft.set("second".into(), super::DialogInputMode::Normal);
+        assert!(!draft.undo());
+        assert_eq!(draft.register(), "👩‍💻");
+    }
+
+    #[test]
+    fn helix_compound_replacements_are_one_history_edit() {
+        let mut draft = helix_history_draft("buy milk");
+        draft.begin_history_group();
+        draft.replace_token(0, 0, "(A) ");
+        let end = draft.text().len();
+        draft.replace_token(end, end, " due:2026-11-14");
+        draft.end_history_group();
+        assert_eq!(draft.undo.len(), 1);
+        assert!(draft.undo());
+        assert_eq!(draft.text(), "buy milk");
+        assert!(draft.redo());
+        assert_eq!(draft.text(), "(A) buy milk due:2026-11-14");
+    }
+
+    #[test]
+    fn helix_navigation_and_register_changes_do_not_record_text_history() {
+        let mut draft = helix_history_draft("word");
+        draft.move_home();
+        draft.move_right();
+        draft.set_register("o".into());
+        draft.set_input_mode(super::DialogInputMode::Normal);
+        assert!(!draft.undo());
+        assert_eq!(draft.text(), "word");
     }
 }

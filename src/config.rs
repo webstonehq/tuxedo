@@ -1,23 +1,23 @@
-//! Persisted UI preferences, located per the XDG Base Directory Specification.
+//! Persisted configuration, defaulting to
+//! `${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/config.toml`.
 //!
-//! Path: `${XDG_CONFIG_HOME:-$HOME/.config}/tuxedo/config.toml`
-//!
-//! Format: simple `key = value` lines. Lines starting with `#` and blank lines
-//! are ignored. Unknown keys are ignored so older binaries won't choke on
-//! newer files. Load failures fall back to defaults silently; save failures
-//! print to stderr but never panic.
+//! Uses simple `key = value` lines; comments, blank lines and unknown keys are
+//! ignored. Load failures use defaults; save methods return I/O errors.
+//! Explicit-path methods let callers use another destination.
 
 use std::fmt::Write as _;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::app::WeekStart;
 use crate::app::{Density, Sort};
+use crate::app::{EditingProfile, WeekStart};
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Config {
     pub theme: Option<String>,
+    /// Optional task-draft editing style; missing/unknown uses Vim.
+    pub editing_profile: Option<EditingProfile>,
     pub density: Option<Density>,
     pub sort: Option<Sort>,
     pub show_left: Option<bool>,
@@ -145,6 +145,13 @@ fn parse(s: &str) -> Config {
         let k = k.trim();
         let v = unquote(v.trim());
         match k {
+            "editing_profile" => {
+                c.editing_profile = match v {
+                    "helix" => Some(EditingProfile::Helix),
+                    "vim" => Some(EditingProfile::Vim),
+                    _ => None,
+                }
+            }
             "theme" => c.theme = Some(v.to_string()),
             "density" => c.density = v.parse().ok(),
             "sort" => c.sort = v.parse().ok(),
@@ -199,6 +206,9 @@ fn parse(s: &str) -> Config {
 fn serialize(c: &Config) -> String {
     let mut out = String::from("# tuxedo config\n");
     // writeln! against a String is infallible; the unwrap can never fire.
+    if let Some(v) = c.editing_profile {
+        let _ = writeln!(out, "editing_profile = \"{}\"", v.as_str());
+    }
     if let Some(v) = &c.theme {
         let _ = writeln!(out, "theme = {v}");
     }
@@ -272,8 +282,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn editing_profile_missing_invalid_and_quoted_values() {
+        assert_eq!(
+            parse("").editing_profile.unwrap_or_default(),
+            EditingProfile::Vim
+        );
+        assert_eq!(
+            parse("editing_profile = unknown")
+                .editing_profile
+                .unwrap_or_default(),
+            EditingProfile::Vim
+        );
+        assert_eq!(
+            parse("editing_profile = \"helix\"").editing_profile,
+            Some(EditingProfile::Helix)
+        );
+        assert_eq!(
+            parse("editing_profile = vim").editing_profile,
+            Some(EditingProfile::Vim)
+        );
+    }
+
+    #[test]
     fn round_trips() {
         let c = Config {
+            editing_profile: Some(EditingProfile::Helix),
             theme: Some("Nord".into()),
             density: Some(Density::Cozy),
             sort: Some(Sort::Due),
@@ -434,6 +467,7 @@ mod tests {
         assert!(path.ends_with("tuxedo/config.toml"));
 
         let written = Config {
+            editing_profile: Some(EditingProfile::Vim),
             theme: Some("Dawn".into()),
             density: Some(Density::Compact),
             sort: Some(Sort::File),

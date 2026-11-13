@@ -1,0 +1,36 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_text(buf)
+---
+ FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tasks  •  sor DETAIL                           
+                                                                                                              
+ PROJECTS                  (2)  PRIORITY A  ──────────────────────────────── priority  (A)                    
+   +work             4      1 ▸ (A) Finish Q2 board deck +work @laptop due:2 created   2026-05-01             
+   +health           3      2   (A) Call dentist to reschedule cleaning @pho due       2026-05-06  today      
+   +finance          2     (3)  PRIORITY B  ──────────────────────────────── projects  +work                  
+   +home             1      3   (B) Review pull requests for auth refactor + contexts  @laptop                
+   +learning         1      4   (B) Renew passport before summer trip +trave                                  
+   +personal         1      5   (B) Draft hiring rubric for senior eng +work RAW                              
+   +travel           1     (2)  PRIORITY C  ────────────────────────────────                                  
+                            6   (C) Pay quarterly estimated taxes @home +fin (A) 2026-05-01 Finish Q2 board   
+ CONTEXTS                   7   (C)┌ ADD TASK · Helix · Normal ───────────┐s deck +work @laptop               
+   @errands          4     (8)  NO │                                      │─ due:2026-05-06                   
+   @home             4      8      │  › emonstrate scrolling +work @home  │                                   
+   @laptop           4      9      │  ok · 1 +project 1 @context          │e                                  
+   @phone            3     10      │                                      │                                   
+                           11      │  Enter review/save · Esc cancel      │                                   
+                           12      │                                      │i                                  
+                           13      └──────────────────────────────────────┘                                   
+                           14       Plan Saturday hike with K. @phone +perso                                  
+                           15       Replace bathroom faucet washer +home @er                                  
+                                                                                                              
+                                                                                                              
+                                                                                                              
+                                                                                                              
+                                                                                                              
+                                                                                                              
+                                                                                                              
+                                                                                                              
+                                                                                                              
+                                                                                                              
+ Helix NORMAL  · 15 open · 2026-05-06 · tuxedo 2026.8.1

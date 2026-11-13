@@ -189,7 +189,11 @@ impl App {
             let canonical = nl::format_as_todo_txt(&parsed);
             if canonical != text {
                 let body_was_filled = !parsed.body.trim().is_empty();
-                self.draft_set(canonical);
+                let len = self.draft.text().len();
+                self.draft.replace_token(0, len, &canonical);
+                if self.draft.profile() == super::EditingProfile::Vim {
+                    self.draft.set_input_mode(super::DialogInputMode::Normal);
+                }
                 if body_was_filled {
                     self.flash("parsed natural language; press Enter to save");
                 } else {
@@ -217,20 +221,34 @@ impl App {
         }
     }
 
-    pub fn save_edit(&mut self) {
+    pub fn save_edit(&mut self) -> AddOutcome {
         let Some(idx) = self.selection.editing() else {
-            return;
+            return AddOutcome::Invalid;
         };
+        if self.selection.edit_stale() {
+            self.flash_stale_draft();
+            return AddOutcome::Invalid;
+        }
         let text = self.draft.text().to_string();
         match self.store.edit_line(idx, &text) {
             EditOutcome::Saved { abs } => {
                 self.flash("saved");
                 self.after_mutation(abs);
+                AddOutcome::Saved
             }
-            // Empty draft / vanished index: quiet no-op, as before.
-            EditOutcome::Empty | EditOutcome::OutOfRange | EditOutcome::TermNotFound => {}
-            EditOutcome::Aborted(r) => self.handle_reconcile_abort(r),
-            EditOutcome::Error(e) => self.flash(format!("invalid: {e}")),
+            EditOutcome::Empty => AddOutcome::Empty,
+            EditOutcome::OutOfRange | EditOutcome::TermNotFound => {
+                self.flash("task unavailable; draft kept — cancel and reopen task");
+                AddOutcome::Invalid
+            }
+            EditOutcome::Aborted(r) => {
+                self.handle_reconcile_abort(r);
+                AddOutcome::Invalid
+            }
+            EditOutcome::Error(e) => {
+                self.flash(format!("save failed: {e}"));
+                AddOutcome::Invalid
+            }
         }
     }
 

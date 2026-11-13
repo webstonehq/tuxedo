@@ -3,10 +3,11 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::app::{
-    App, BuilderField, CalendarTarget, DialogInputMode, DraftOverlay, Mode, REC_UNIT_ORDER,
-    TokenKind, WeekStart,
+    App, BuilderField, CalendarTarget, DialogInputMode, DraftOverlay, EditingProfile, Mode,
+    REC_UNIT_ORDER, TokenKind, WeekStart,
 };
 use crate::theme::Theme;
 
@@ -303,7 +304,106 @@ pub fn visible_draft_window(draft: &str, cursor: usize, width: u16) -> (&str, us
     (&draft[start..end], cursor - start)
 }
 
+/// The active edge determines which side of a long selection gets the space.
+/// Every boundary is a complete grapheme; a too-wide cursor falls back to a
+/// one-cell block rather than drawing part of an emoji sequence.
+fn visible_helix_range(
+    draft: &str,
+    cursor: usize,
+    selection: &std::ops::Range<usize>,
+    width: u16,
+) -> std::ops::Range<usize> {
+    let cursor = cursor.min(draft.len());
+    if width == 0 {
+        return cursor..cursor;
+    }
+    let cursor_end = draft[cursor..]
+        .graphemes(true)
+        .next()
+        .map_or(cursor, |g| cursor + g.len());
+    let end_block = usize::from(cursor == draft.len());
+    let cursor_cells = Span::raw(&draft[cursor..cursor_end]).width();
+    if cursor < draft.len() && cursor_cells == 0 {
+        return cursor..cursor;
+    }
+    let mut used = cursor_cells + end_block;
+    if used > usize::from(width) {
+        return cursor..cursor;
+    }
+    let mut start = cursor;
+    let mut end = cursor_end;
+    let right_first = selection.end > cursor_end;
+    for right in [right_first, !right_first] {
+        if right {
+            for (relative, grapheme) in draft[end..].grapheme_indices(true) {
+                let cells = Span::raw(grapheme).width();
+                if used + cells > usize::from(width) {
+                    break;
+                }
+                used += cells;
+                end = cursor_end + relative + grapheme.len();
+            }
+        } else {
+            for (candidate, grapheme) in draft[..start].grapheme_indices(true).rev() {
+                let cells = Span::raw(grapheme).width();
+                if used + cells > usize::from(width) {
+                    break;
+                }
+                used += cells;
+                start = candidate;
+            }
+        }
+    }
+    start..end
+}
+
+fn visible_helix_draft(app: &App, width: u16) -> Vec<Span<'_>> {
+    helix_draft_spans(app, width, app.theme())
+}
+
+fn helix_draft_spans<'a>(app: &'a App, width: u16, theme: &Theme) -> Vec<Span<'a>> {
+    if width == 0 {
+        return Vec::new();
+    }
+    let draft = app.draft.text();
+    let cursor = app.draft.cursor();
+    let selected = app.draft.selected_range();
+    let window = visible_helix_range(draft, cursor, &selected, width);
+    let segments = classify_draft(draft);
+    let mut spans = Vec::new();
+    for (relative, grapheme) in draft[window.clone()].grapheme_indices(true) {
+        let byte = window.start + relative;
+        let kind = segments
+            .iter()
+            .find(|(range, _)| range.contains(&byte))
+            .map_or(SegmentKind::Plain, |(_, kind)| *kind);
+        let mut style = segment_style(kind, theme);
+        if selected.contains(&byte) {
+            let selection_bg = if theme.selection == theme.panel {
+                theme.cursor
+            } else {
+                theme.selection
+            };
+            style = style.bg(selection_bg).add_modifier(Modifier::UNDERLINED);
+        }
+        if byte == cursor {
+            style = Style::default()
+                .fg(theme.panel)
+                .bg(theme.accent)
+                .add_modifier(Modifier::BOLD);
+        }
+        spans.push(Span::styled(grapheme, style));
+    }
+    if cursor == draft.len() || window.is_empty() {
+        spans.push(Span::styled("█", Style::default().fg(theme.accent)));
+    }
+    spans
+}
+
 fn visible_highlighted_draft<'a>(app: &'a App, width: u16) -> Vec<Span<'a>> {
+    if app.draft.profile() == EditingProfile::Helix {
+        return visible_helix_draft(app, width);
+    }
     let draft = app.draft.text();
     let cursor = app.draft.cursor();
     let (window, local_cursor) = visible_draft_window(draft, cursor, width);
@@ -458,24 +558,39 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
 fn editor_hint(app: &App, width: u16) -> String {
     let insert = app.draft.input_mode() == DialogInputMode::Insert;
-    if insert {
-        if let Some(overlay) = app.draft.overlay() {
-            return match overlay {
-                DraftOverlay::RecurrenceBuilder(_) => "Repeat picker: save/cancel below".into(),
-                DraftOverlay::Calendar(_) => String::new(),
-                _ => "Enter choose · Esc back".into(),
-            };
-        }
-        if app.autocomplete_visible() {
-            return "Tab/Enter accept · Esc dismiss".into();
-        }
+    if let Some(overlay) = app.draft.overlay() {
+        return match overlay {
+            DraftOverlay::RecurrenceBuilder(_) => "Repeat picker: save/cancel below".into(),
+            DraftOverlay::Calendar(_) => String::new(),
+            _ => "Enter choose · Esc back".into(),
+        };
+    }
+    if insert && app.autocomplete_visible() {
+        return "Tab/Enter accept · Esc dismiss".into();
     }
     let save = if app.selection.editing().is_some() {
         "save"
     } else {
         "review/save"
     };
-    let candidates = if insert {
+    let candidates = if app.draft.input_mode() == DialogInputMode::Extend {
+        vec![
+            format!("Enter {save} · Esc normal → Esc cancel · v normal"),
+            format!("Enter {save} · Esc normal → Esc cancel"),
+            "Enter save · Esc→Normal→cancel".into(),
+            "Enter OK · Esc×2 cancel".into(),
+            "↵ · Esc×2".into(),
+        ]
+    } else if app.draft.profile() == EditingProfile::Helix && !insert {
+        vec![
+            format!("Enter {save} · Esc cancel · v extend · d/c delete/change"),
+            format!("Enter {save} · Esc cancel · v extend"),
+            format!("Enter {save} · Esc cancel"),
+            "Enter save · Esc cancel".into(),
+            "Enter · Esc cancel".into(),
+            "↵ · Esc".into(),
+        ]
+    } else if insert {
         vec![
             format!("Enter {save} · Esc normal → Esc cancel"),
             format!("Enter {save} · Esc→Normal→cancel"),
@@ -1972,5 +2087,144 @@ mod tests {
             !popup.contains("work"),
             "expected 'work' not to be in popup (doesn't match 'hea')\n{popup}"
         );
+    }
+}
+
+#[cfg(test)]
+mod helix_render_tests {
+    use super::*;
+    use crate::config::Config;
+    use ratatui::{Terminal, backend::TestBackend};
+
+    fn app(text: &str) -> App {
+        let mut app = App::new(
+            "/tmp/unused-helix-render-todo.txt".into(),
+            String::new(),
+            "2026-11-13".into(),
+            Config::default(),
+        );
+        app.mode = Mode::Insert;
+        app.draft
+            .open(text.into(), DialogInputMode::Normal, EditingProfile::Helix);
+        app
+    }
+
+    #[test]
+    fn selected_graphemes_and_active_cursor_have_distinct_styles() {
+        let mut app = app("e\u{301}👩‍💻z");
+        app.draft.helix_toggle_extend();
+        app.draft.helix_move(true);
+        let spans = visible_helix_draft(&app, 10);
+        assert_eq!(
+            spans.iter().map(|s| s.content.as_ref()).collect::<String>(),
+            "e\u{301}👩‍💻z"
+        );
+        assert_eq!(spans[0].style.bg, Some(app.theme().selection));
+        assert_eq!(spans[1].style.bg, Some(app.theme().accent));
+        assert_eq!(spans[1].style.fg, Some(app.theme().panel));
+        assert!(spans[1].style.add_modifier.contains(Modifier::BOLD));
+        assert_ne!(spans[0].style, spans[1].style);
+        assert_eq!(spans[2].style.bg, None);
+    }
+
+    #[test]
+    fn gruvbox_selection_and_selected_whitespace_are_visible() {
+        let mut app = app("one two");
+        app.draft.helix_word('w');
+        app.draft.helix_toggle_extend();
+        app.draft.helix_move(true); // active 't'; previous space remains selected
+        let themes = crate::theme::load_user_themes(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/docs/themes"
+        )))
+        .0;
+        let theme = themes
+            .iter()
+            .find(|theme| theme.name == "Gruvbox Dark Soft")
+            .expect("fixture theme");
+        assert_eq!(theme.selection, theme.panel);
+        let spans = helix_draft_spans(&app, 10, theme);
+        for span in &spans[..4] {
+            assert_eq!(span.style.bg, Some(theme.cursor));
+            assert_ne!(span.style.bg, Some(theme.panel));
+            assert!(span.style.add_modifier.contains(Modifier::UNDERLINED));
+        }
+        assert_eq!(spans[3].content, " ");
+        assert_eq!(spans[4].style.bg, Some(theme.accent));
+    }
+
+    #[test]
+    fn grapheme_windows_fit_and_keep_the_active_selection_edge() {
+        for text in ["ab e\u{301} 👩‍💻 🧑🏽‍🚀 終", "", "abc"] {
+            let boundaries: Vec<_> = text
+                .grapheme_indices(true)
+                .map(|(i, _)| i)
+                .chain(std::iter::once(text.len()))
+                .collect();
+            for &cursor in &boundaries {
+                for selected in [0..text.len(), cursor..cursor] {
+                    for width in 0..14 {
+                        let window = visible_helix_range(text, cursor, &selected, width);
+                        assert!(boundaries.contains(&window.start));
+                        assert!(boundaries.contains(&window.end));
+                        assert!(window.start <= cursor && window.end >= cursor);
+                        let cells = Span::raw(&text[window.clone()]).width()
+                            + usize::from(cursor == text.len());
+                        assert!(width == 0 || cells <= usize::from(width));
+                    }
+                }
+            }
+        }
+        let text = "abcdefghijk";
+        let reverse = visible_helix_range(text, 2, &(2..11), 5);
+        assert_eq!(&text[reverse], "cdefg");
+        let forward = visible_helix_range(text, 8, &(0..9), 5);
+        assert_eq!(&text[forward], "efghi");
+        let mut app = app("👩‍💻");
+        let spans = visible_helix_draft(&app, 1);
+        assert_eq!(Line::from(spans).width(), 1);
+        app.draft.helix_insert_boundary(true);
+        assert!(Line::from(visible_helix_draft(&app, 1)).width() <= 1);
+    }
+
+    #[test]
+    fn helix_profile_modes_controls_and_selection_survive_layouts() {
+        let mut app = app("long selection e\u{301} 👩‍💻 text");
+        app.prefs.layout.status_bar = false;
+        app.draft.helix_select_all();
+        for mode in [DialogInputMode::Normal, DialogInputMode::Extend] {
+            app.draft.set_input_mode(mode);
+            for (width, height) in [(110, 32), (80, 24), (30, 8)] {
+                let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+                terminal.draw(|frame| crate::ui::draw(frame, &app)).unwrap();
+                let buffer = terminal.backend().buffer();
+                let text: String = buffer.content.iter().map(|c| c.symbol()).collect();
+                assert!(text.contains("Helix"), "{width}×{height}");
+                if width >= 80 {
+                    assert!(text.contains(mode.label()), "{width}×{height}");
+                }
+                assert!(text.contains("Enter") && text.contains("Esc"));
+                assert!(
+                    buffer
+                        .content
+                        .iter()
+                        .any(|cell| cell.bg == app.theme().selection)
+                );
+                assert!(
+                    buffer
+                        .content
+                        .iter()
+                        .any(|cell| cell.bg == app.theme().accent)
+                );
+            }
+        }
+        for width in 0..12 {
+            for height in 0..8 {
+                let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+                terminal
+                    .draw(|frame| render(frame, frame.area(), &app))
+                    .unwrap();
+            }
+        }
     }
 }

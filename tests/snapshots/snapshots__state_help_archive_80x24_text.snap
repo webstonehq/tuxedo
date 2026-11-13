@@ -22,7 +22,7 @@ expression: buffer_to_text(buf)
   │                                                                          │  
   │ TASK SELECTION                                                           │  
   │ v                enter / leave selection                                 │  
-  │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 1/53                           │  
+  │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 1/79                           │  
   └──────────────────────────────────────────────────────────────────────────┘  
                                                                                 
  HELP  · Esc close · j/k scroll · 0 archived · 2026-05-06 · tuxedo 2026.8.1

@@ -45,13 +45,21 @@ fn help_uses_effective_keys_and_scrolls_to_editor_recurrence_and_format() {
             assert!(first.contains("scroll"));
         }
         let mut all = first;
-        for _ in 0..150 {
-            app.help_scroll.set(app.help_scroll.get().saturating_add(1));
+        for _ in 0..1000 {
+            let previous = app.help_scroll.get();
+            app.help_scroll.set(previous.saturating_add(1));
             all.push_str(&screen(&app, width, height));
+            if app.help_scroll.get() == previous {
+                break;
+            }
         }
         assert!(all.contains("INLINE EDITOR"));
         assert!(all.contains("RECURRENCE"));
         assert!(all.contains("FORMAT"));
+        if width >= 80 {
+            assert!(all.contains("HELIX DRAFT"));
+            assert!(all.contains("editing_profile"));
+        }
         if width >= 80 {
             assert!(all.contains("Enter, j") && all.contains("save recurrence"));
         }
@@ -88,7 +96,7 @@ fn help_draws_safely_in_tiny_panes() {
 }
 
 #[test]
-fn default_help_keeps_the_task_overview_together_and_fits_a_large_pane() {
+fn default_help_keeps_the_task_overview_together_and_full_reference_reachable() {
     let mut app = app();
     app.mode = Mode::Help;
     let text = screen(&app, 110, 32);
@@ -109,11 +117,10 @@ fn default_help_keeps_the_task_overview_together_and_fits_a_large_pane() {
     }
     app.help_scroll.set(u16::MAX);
     screen(&app, 164, 52);
-    assert_eq!(
-        app.help_scroll.get(),
-        0,
-        "default help should fit this pane"
-    );
+    assert!(app.help_scroll.get() > 0, "extended reference scrolls");
+    let bottom = screen(&app, 164, 52);
+    assert!(bottom.contains("HELIX DRAFT"));
+    assert!(bottom.contains("Unsupported:"));
 }
 
 #[test]

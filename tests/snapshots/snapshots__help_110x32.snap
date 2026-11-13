@@ -28,9 +28,9 @@ expression: buffer_to_text(terminal.backend().buffer())
      │                                                                                                 │      
      │ ─────────────────────────────────────────────────────────────────────────────────────────────── │      
      │                                                                                                 │      
-     │ INLINE EDITOR · fixed keys                       RECURRENCE · rec: picker                       │      
+     │ INLINE EDITOR · Vim default                      RECURRENCE · rec: picker                       │      
      │ Enter               review / save draft          j, ↓, Tab        next field                    │      
-     │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 1/18                                                  │      
+     │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 1/35                                                  │      
      └─────────────────────────────────────────────────────────────────────────────────────────────────┘      
                                                                                                               
  HELP  · Esc close · j/k scroll · 15 open · 2026-05-06 · tuxedo 2026.8.1

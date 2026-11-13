@@ -184,13 +184,19 @@ impl Store {
         };
         match parsed {
             Ok(task) => {
-                self.push_history();
+                let previous = self.tasks.clone();
                 self.tasks.push(task);
                 match self.persist() {
-                    Ok(()) => AddOutcome::Added {
-                        abs: self.tasks.len() - 1,
-                    },
-                    Err(e) => AddOutcome::Error(e),
+                    Ok(()) => {
+                        self.history.push(previous);
+                        AddOutcome::Added {
+                            abs: self.tasks.len() - 1,
+                        }
+                    }
+                    Err(e) => {
+                        self.tasks = previous;
+                        AddOutcome::Error(e)
+                    }
                 }
             }
             Err(e) => AddOutcome::Error(StoreError::Parse(e)),
@@ -286,11 +292,17 @@ impl Store {
     fn rewrite_raw(&mut self, abs: usize, new_raw: &str) -> EditOutcome {
         match todo::parse_line(new_raw) {
             Ok(task) => {
-                self.push_history();
+                let previous = self.tasks.clone();
                 self.tasks[abs] = task;
                 match self.persist() {
-                    Ok(()) => EditOutcome::Saved { abs },
-                    Err(e) => EditOutcome::Error(e),
+                    Ok(()) => {
+                        self.history.push(previous);
+                        EditOutcome::Saved { abs }
+                    }
+                    Err(e) => {
+                        self.tasks = previous;
+                        EditOutcome::Error(e)
+                    }
                 }
             }
             Err(e) => EditOutcome::Error(StoreError::Parse(e)),

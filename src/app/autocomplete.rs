@@ -104,7 +104,11 @@ impl App {
     /// when there's no active token, the corpus has no matches, or the user
     /// has explicitly dismissed the popup with Esc.
     pub fn autocomplete_visible(&self) -> bool {
-        !self.draft.autocomplete_suppressed() && !self.autocomplete_matches().is_empty()
+        !(self.mode == Mode::Insert
+            && self.draft.profile() == super::EditingProfile::Helix
+            && self.draft.input_mode() != super::DialogInputMode::Insert)
+            && !self.draft.autocomplete_suppressed()
+            && !self.autocomplete_matches().is_empty()
     }
 
     /// Suggestions for the `+project` / `@context` token currently under the

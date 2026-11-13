@@ -5,7 +5,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::action::Action;
-use crate::app::{App, DialogInputMode, Mode, View};
+use crate::app::{App, DialogInputMode, EditingProfile, Mode, View};
 use crate::ui::dialog::draft_cursor_spans;
 
 /// The current interaction owns the label; an underlying archive never masks
@@ -14,10 +14,12 @@ fn mode_label(app: &App) -> &'static str {
     match app.mode {
         Mode::Normal if app.view() == View::Archive => "ARCHIVE",
         Mode::Normal => "NORMAL",
-        Mode::Insert => match app.draft.input_mode() {
-            DialogInputMode::Normal => "Vim NORMAL",
-            DialogInputMode::Insert => "Vim INSERT",
-            DialogInputMode::Extend => "Helix EXTEND",
+        Mode::Insert => match (app.draft.profile(), app.draft.input_mode()) {
+            (EditingProfile::Helix, DialogInputMode::Normal) => "Helix NORMAL",
+            (EditingProfile::Helix, DialogInputMode::Insert) => "Helix INSERT",
+            (EditingProfile::Helix, DialogInputMode::Extend) => "Helix EXTEND",
+            (_, DialogInputMode::Normal) => "Vim NORMAL",
+            _ => "Vim INSERT",
         },
         Mode::Search => "SEARCH",
         Mode::Visual => "TASK SELECT",
@@ -295,5 +297,33 @@ pub fn render_notice(frame: &mut Frame, area: Rect, app: &App) {
             ),
             area,
         );
+    }
+}
+
+#[cfg(test)]
+mod helix_status_tests {
+    use super::*;
+    use crate::config::Config;
+
+    #[test]
+    fn editor_status_uses_the_open_drafts_profile_and_mode() {
+        let mut app = App::new(
+            "/tmp/unused-helix-status.txt".into(),
+            String::new(),
+            "2026-11-13".into(),
+            Config::default(),
+        );
+        app.mode = Mode::Insert;
+        for (mode, expected) in [
+            (DialogInputMode::Normal, "Helix NORMAL"),
+            (DialogInputMode::Insert, "Helix INSERT"),
+            (DialogInputMode::Extend, "Helix EXTEND"),
+        ] {
+            app.draft.open("text".into(), mode, EditingProfile::Helix);
+            assert_eq!(mode_label(&app), expected);
+        }
+        app.draft
+            .open("text".into(), DialogInputMode::Normal, EditingProfile::Vim);
+        assert_eq!(mode_label(&app), "Vim NORMAL");
     }
 }

@@ -595,10 +595,23 @@ impl App {
     /// `apply_external_state` behavior.
     pub(crate) fn on_reload(&mut self) {
         self.selection.clear();
-        self.selection.exit_edit();
+        if self.mode == Mode::Insert && self.selection.editing().is_some() {
+            self.selection.invalidate_edit();
+            self.flash_stale_draft();
+        } else {
+            self.selection.exit_edit();
+            self.flash("file changed on disk — reloaded");
+        }
         self.recompute_visible();
         self.clamp_cursor();
-        self.flash("file changed on disk — reloaded");
+    }
+
+    pub(crate) fn flash_stale_draft(&mut self) {
+        self.flash(if self.draft.profile() == EditingProfile::Helix {
+            "file changed; draft kept — Normal: % y, then cancel/reopen task"
+        } else {
+            "file changed; draft kept — copy text in terminal, then cancel/reopen task"
+        });
     }
 
     /// Map a store reconcile result to the matching flash + view refresh for a
@@ -661,8 +674,14 @@ impl App {
     /// unreadable. The TUI run loop and `handle_key` call this each tick.
     pub fn check_external_changes(&mut self) -> bool {
         let reconcile = self.store.reconcile();
-        if matches!(reconcile, Reconcile::Reloaded) {
-            self.on_reload();
+        match reconcile {
+            Reconcile::Reloaded => self.on_reload(),
+            Reconcile::ReadError => self.flash(if self.mode == Mode::Insert {
+                "read failed; draft kept"
+            } else {
+                "read failed"
+            }),
+            Reconcile::Unchanged => {}
         }
         let report = self.store.drain_inbox();
         self.apply_drain(report);

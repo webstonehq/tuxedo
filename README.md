@@ -394,13 +394,13 @@ must be fully visible within one sort tie.
 
 ### Edit dialog
 
-The edit dialog uses Vim-style modal editing, with the profile and mode in
-its title. Press `i` to edit in **Insert mode**, or `e` for **Normal mode**.
+The edit dialog defaults to Vim-style modal editing, with the profile and mode
+in its title. Press `i` to edit in **Insert mode**, or `e` for **Normal mode**.
 The add prompt (`n`) starts in Insert mode. Long drafts scroll to keep the
 cursor visible; mode and save/cancel controls also work with the status bar
 hidden.
 
-The modal keys below apply in Normal mode:
+The Vim modal keys below apply in Normal mode:
 
 | Key | Action |
 | --- | --- |
@@ -418,6 +418,63 @@ The modal keys below apply in Normal mode:
 | `Esc` (in Insert) | return to Normal mode |
 | `Esc` (in Normal) | cancel and close |
 | `Enter` (in Insert and Normal) | save |
+
+To opt into a limited **Helix-inspired single-selection subset**, set this in
+`config.toml`, or press `E` in settings (`,`):
+
+```toml
+editing_profile = "helix" # "vim" is the default; unknown values use Vim
+```
+
+The choice applies to the next task dialog; hot reload keeps an open draft's
+profile. Search, tag/name prompts, the palette, recurrence controls, and task-list
+keys keep their existing behavior. `e` opens a Helix draft in Normal mode at the
+first character; `i` and `n` open in Insert mode at the end.
+
+| Helix draft key | Action |
+| --- | --- |
+| `h` / `l`, arrows | select previous / next grapheme |
+| `w` / `b` / `e` | select through next word start / previous word start / next word end |
+| Home / End | select first / last grapheme |
+| `v` | toggle Extend mode; movement retains the anchor |
+| `%` / `x` | select the whole task draft |
+| `;` | collapse to the active cursor |
+| `y` | yank selection to the application’s internal register |
+| `d` / `c` | yank and delete selection; `c` also enters Insert |
+| `i` / `a` | insert before / after the selection, preserving it |
+| `I` / `A` | insert at absolute draft start / end |
+| `p` / `P` | paste the internal register after / before selection |
+| `u` / `U` | undo / redo draft text edits (up to 50) |
+| Enter | submit; natural-language add still asks for confirmation |
+| Escape | dismiss popup first; Insert / Extend → Normal; Normal → cancel |
+
+Selected text has a background highlight; the active cursor has a separate
+inverted highlight. Word motions distinguish punctuation and include traversed
+spaces: on `one two`, `w` selects `one `, another `w` selects `two`, and `b`
+selects it backwards. Insert preserves selection as in Helix: `w`, `i`, `!`,
+Escape produces `!one two` with `one ` selected backwards; `w`, `a`, `!`,
+Escape produces `one !two` with `one !` selected forwards.
+
+This subset is one task line and one selection, with grapheme-safe movement
+(including combining marks and emoji). `I` deliberately uses the **absolute
+start**, including before leading spaces; Helix uses the first non-whitespace
+character. The end-of-input position is safe without adding a newline. Counts,
+multiple selections, regex selection, text objects, macros, shell commands,
+soft wrapping, and general editor-key remapping are unsupported.
+
+The internal register lasts across task dialogs in the running app, independently
+of task-list clipboard copying. An empty register reports a harmless no-op.
+Draft history starts fresh for each dialog; typing characters, deletion/change,
+paste, and accepted completion/picker replacements are undoable. Moving, yanking,
+and mode changes add no history. Saving uses normal task persistence and task
+undo; cancelling discards draft changes.
+
+Failed submissions retain the editable draft. If the file changes externally
+while editing, the draft keeps its EDIT identity and blocks further saves to
+avoid overwriting another task or adding a duplicate. Preserve the text before
+cancelling and reopening the intended task: in Helix Normal mode use `%`, `y`
+(and later `p`); in Vim use your terminal’s text-copy facility. Review the task
+again before reapplying changes. Automatic conflict rebasing is unsupported.
 
 ### Filtering, sort, view
 

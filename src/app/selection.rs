@@ -4,6 +4,7 @@ use std::collections::HashSet;
 pub struct Selection {
     selected: HashSet<usize>,
     editing: Option<usize>,
+    edit_stale: bool,
 }
 
 impl Selection {
@@ -55,10 +56,21 @@ impl Selection {
     /// (`complete_selected` would double-handle the editing index).
     pub fn enter_edit(&mut self, abs: usize) {
         self.editing = Some(abs);
+        self.edit_stale = false;
         self.selected.clear();
+    }
+
+    /// A disk reload invalidates row identity, while the draft stays recoverable.
+    pub fn invalidate_edit(&mut self) {
+        self.edit_stale = self.editing.is_some();
+    }
+
+    pub fn edit_stale(&self) -> bool {
+        self.edit_stale
     }
 
     pub fn exit_edit(&mut self) {
         self.editing = None;
+        self.edit_stale = false;
     }
 }

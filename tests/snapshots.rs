@@ -651,3 +651,36 @@ fn calendar_controls_required_layouts() {
         }
     }
 }
+
+#[test]
+fn helix_draft_required_layouts_and_selection_styles() {
+    use tuxedo::app::{DialogInputMode, EditingProfile};
+    for (width, height) in [(110, 32), (80, 24)] {
+        for reverse in [false, true] {
+            let mut app = make_app();
+            app.prefs.layout.status_bar = !reverse;
+            app.mode = Mode::Insert;
+            app.draft.open("one two e\u{301} 👩‍💻 🧑🏽‍🚀 a long task draft with enough text to demonstrate scrolling +work @home".into(), DialogInputMode::Normal, EditingProfile::Helix);
+            app.draft.helix_select_all();
+            if reverse {
+                app.draft.helix_collapse();
+                app.draft.helix_toggle_extend();
+                app.draft.helix_boundary(false);
+            }
+            let mut terminal =
+                Terminal::new(TestBackend::new(width, height)).expect("terminal init");
+            terminal.draw(|frame| ui::draw(frame, &app)).expect("draw");
+            let name = format!(
+                "helix_{}_{width}x{height}",
+                if reverse {
+                    "reverse_no_status"
+                } else {
+                    "forward"
+                }
+            );
+            let buf = terminal.backend().buffer();
+            insta::assert_snapshot!(format!("{name}_text"), buffer_to_text(buf));
+            insta::assert_snapshot!(format!("{name}_styled"), buffer_to_styled(buf));
+        }
+    }
+}

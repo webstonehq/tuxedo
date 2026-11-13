@@ -50,6 +50,10 @@ impl DraftState {
     }
 
     pub fn helix_toggle_extend(&mut self) {
+        if self.cursor() == self.text.len() && !self.text.is_empty() {
+            self.cursor = DraftCursor(grapheme_prev(&self.text, self.cursor()));
+            self.anchor = self.cursor;
+        }
         self.input_mode = if self.input_mode == DialogInputMode::Extend {
             DialogInputMode::Normal
         } else {
@@ -212,6 +216,9 @@ impl DraftState {
 
     pub fn helix_yank(&mut self) {
         self.register = self.text[self.selected_range()].to_string();
+        if self.input_mode == DialogInputMode::Extend {
+            self.input_mode = DialogInputMode::Normal;
+        }
     }
 
     pub fn helix_delete(&mut self, change: bool) {

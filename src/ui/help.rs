@@ -143,7 +143,7 @@ fn details(app: &App) -> (Vec<Section>, Vec<Section>) {
     };
     let left = vec![
         Section {
-            title: "INLINE EDITOR · fixed keys",
+            title: "INLINE EDITOR · Vim default",
             entries: vec![
                 fixed("Enter", "review / save draft"),
                 fixed("Esc", "popup → normal → cancel"),
@@ -169,17 +169,41 @@ fn details(app: &App) -> (Vec<Section>, Vec<Section>) {
         keys: key_label(app.keybinds.effective_recurrence_keys(action)),
         description,
     };
-    let right = vec![Section {
-        title: "RECURRENCE · rec: picker",
-        entries: vec![
-            recurrence(RecAction::FocusNext, "next field"),
-            recurrence(RecAction::FocusPrev, "previous field"),
-            recurrence(RecAction::ValueNext, "increase value"),
-            recurrence(RecAction::ValuePrev, "decrease value"),
-            recurrence(RecAction::Accept, "save recurrence"),
-            recurrence(RecAction::Cancel, "cancel recurrence"),
-        ],
-    }];
+    let right = vec![
+        Section {
+            title: "RECURRENCE · rec: picker",
+            entries: vec![
+                recurrence(RecAction::FocusNext, "next field"),
+                recurrence(RecAction::FocusPrev, "previous field"),
+                recurrence(RecAction::ValueNext, "increase value"),
+                recurrence(RecAction::ValuePrev, "decrease value"),
+                recurrence(RecAction::Accept, "save recurrence"),
+                recurrence(RecAction::Cancel, "cancel recurrence"),
+            ],
+        },
+        Section {
+            title: "HELIX DRAFT · optional subset",
+            entries: vec![
+                fixed("E in settings", "profile for next task draft"),
+                fixed("editing_profile", "config: vim (default) / helix"),
+                fixed("h / l, ← / →", "move / extend one grapheme"),
+                fixed("w / b / e", "next start / prev start / end"),
+                fixed("Home / End", "draft start / end"),
+                fixed("v", "toggle normal / extend"),
+                fixed("% / x", "select whole task draft"),
+                fixed(";", "collapse to active cursor"),
+                fixed("d / c", "yank + delete / then insert"),
+                fixed("i / a", "insert before / after selection"),
+                fixed("I / A", "insert at absolute start / end"),
+                fixed("y", "yank to app register"),
+                fixed("p / P", "paste register after / before"),
+                fixed("u / U", "undo / redo draft text"),
+                fixed("Enter", "review / save draft"),
+                fixed("Esc", "popup → normal → cancel"),
+                fixed("Tab", "autocomplete (insert)"),
+            ],
+        },
+    ];
     (left, right)
 }
 
@@ -325,6 +349,13 @@ fn rows(app: &App, width: u16) -> Vec<Line<'static>> {
     rows.extend(columns(app.theme(), &left, &right, width));
     rows.push(Line::raw(""));
     for note in wrap(
+        "Helix is a fixed single-selection subset for task drafts only. Its register stays in memory across dialogs; it does not read the system clipboard. Draft undo is separate from task undo. Unsupported: multiple selections, counts, text objects, regex selection, macros, shell commands, multiline editing and editor-key remapping. I uses absolute draft start rather than first nonblank.",
+        width,
+    ) {
+        rows.push(Line::styled(note, Style::default().fg(app.theme().dim)));
+    }
+    rows.push(Line::raw(""));
+    for note in wrap(
         "Commas separate aliases; / pairs keys with actions. 'palette' means command palette only.",
         width,
     ) {
@@ -456,6 +487,49 @@ mod tests {
                 }
             );
             assert_eq!(cell.modifier.contains(Modifier::BOLD), heading, "{needle}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod helix_help_tests {
+    use super::*;
+    use crate::config::Config;
+
+    #[test]
+    fn supported_subset_and_departures_remain_reachable_at_required_widths() {
+        let app = App::new(
+            "/tmp/unused-helix-help.txt".into(),
+            String::new(),
+            "2026-11-13".into(),
+            Config::default(),
+        );
+        for width in [72, 95] {
+            let all_rows = rows(&app, width);
+            assert!(all_rows.iter().all(|row| row.width() <= usize::from(width)));
+            let text = all_rows
+                .iter()
+                .map(|row| {
+                    row.spans
+                        .iter()
+                        .map(|s| s.content.as_ref())
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            for needle in [
+                "HELIX DRAFT",
+                "editing_profile",
+                "Home / End",
+                "u / U",
+                "p / P",
+                "I / A",
+                "absolute",
+                "single-selection",
+                "Unsupported:",
+            ] {
+                assert!(text.contains(needle), "missing {needle} at {width}");
+            }
         }
     }
 }

@@ -11,7 +11,9 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 use std::io::Write;
 
 use tuxedo::action::{Action, RecAction};
-use tuxedo::app::{AddOutcome, App, CalendarTarget, DialogInputMode, Mode, OverlayKind, View};
+use tuxedo::app::{
+    AddOutcome, App, CalendarTarget, DialogInputMode, EditingProfile, Mode, OverlayKind, View,
+};
 use tuxedo::cli;
 use tuxedo::config::Config;
 use tuxedo::config_watcher;
@@ -551,21 +553,73 @@ fn apply_to_draft(app: &mut App, key: KeyEvent) -> DraftEffect {
     }
 }
 
-fn handle_insert_normal(app: &mut App, key: KeyEvent) {
+fn submit_task_draft(app: &mut App) {
+    let outcome = if app.selection.editing().is_some() {
+        app.save_edit()
+    } else {
+        app.add_from_draft()
+    };
+    if matches!(outcome, AddOutcome::Saved | AddOutcome::Empty) {
+        app.mode = Mode::Normal;
+        app.draft_clear();
+        app.selection.exit_edit();
+        app.chord.clear();
+    }
+}
+
+fn handle_helix_normal(app: &mut App, key: KeyEvent) {
+    if key
+        .modifiers
+        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+    {
+        return;
+    }
     match key.code {
-        KeyCode::Enter => {
-            let outcome = if app.selection.editing().is_some() {
-                app.save_edit();
-                AddOutcome::Saved
-            } else {
-                app.add_from_draft()
-            };
-            if !matches!(outcome, AddOutcome::Parsed) {
-                app.mode = Mode::Normal;
-                app.draft_clear();
-                app.selection.exit_edit();
+        KeyCode::Enter => submit_task_draft(app),
+        KeyCode::Esc if app.draft.input_mode() == DialogInputMode::Extend => {
+            app.draft.helix_normal()
+        }
+        KeyCode::Esc => {
+            app.mode = Mode::Normal;
+            app.draft_clear();
+            app.selection.exit_edit();
+        }
+        KeyCode::Char('h') | KeyCode::Left => app.draft.helix_move(false),
+        KeyCode::Char('l') | KeyCode::Right => app.draft.helix_move(true),
+        KeyCode::Char(c @ ('w' | 'b' | 'e')) => app.draft.helix_word(c),
+        KeyCode::Home => app.draft.helix_boundary(false),
+        KeyCode::End => app.draft.helix_boundary(true),
+        KeyCode::Char('v') => app.draft.helix_toggle_extend(),
+        KeyCode::Char('%' | 'x') => app.draft.helix_select_all(),
+        KeyCode::Char(';') => app.draft.helix_collapse(),
+        KeyCode::Char('d') => app.draft.helix_delete(false),
+        KeyCode::Char('c') => app.draft.helix_delete(true),
+        KeyCode::Char('i') => app.draft.helix_insert(false),
+        KeyCode::Char('a') => app.draft.helix_insert(true),
+        KeyCode::Char('I') => app.draft.helix_insert_boundary(false),
+        KeyCode::Char('A') => app.draft.helix_insert_boundary(true),
+        KeyCode::Char('y') => {
+            app.draft.helix_yank();
+            app.flash("yanked draft selection");
+        }
+        KeyCode::Char(c @ ('p' | 'P')) => {
+            if !app.draft.helix_paste(c == 'P') {
+                app.flash("draft register is empty");
             }
         }
+        KeyCode::Char('u') => {
+            if !app.draft.undo() {
+                app.flash("no draft edits to undo");
+            }
+        }
+        KeyCode::Char('U') if !app.draft.redo() => app.flash("no draft edits to redo"),
+        _ => {}
+    }
+}
+
+fn handle_insert_normal(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Enter => submit_task_draft(app),
         KeyCode::Esc => {
             app.mode = Mode::Normal;
             app.draft_clear();
@@ -598,11 +652,12 @@ fn handle_insert_normal(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_insert(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
-    if app.draft.input_mode() == DialogInputMode::Normal {
-        handle_insert_normal(app, key);
-        return;
-    }
+    app.draft.begin_history_group();
+    handle_task_draft_key(app, key, keybinds);
+    app.draft.end_history_group();
+}
 
+fn handle_task_draft_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
     // Metadata-picker overlays take precedence. Non-slash overlays fully
     // consume keys until accepted or cancelled; the slash menu intercepts
     // only its navigation keys and lets text editing flow through so the
@@ -636,6 +691,15 @@ fn handle_insert(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
         None => {}
     }
 
+    if app.draft.input_mode() != DialogInputMode::Insert {
+        if app.draft.profile() == EditingProfile::Helix {
+            handle_helix_normal(app, key);
+        } else {
+            handle_insert_normal(app, key);
+        }
+        return;
+    }
+
     // Autocomplete bindings take precedence — only when the popup is visible.
     // Tab accepts; Enter falls through to save so the popup never swallows the
     // submit keystroke (e.g. when the typed token already matches an existing
@@ -658,24 +722,13 @@ fn handle_insert(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
 
     match key.code {
         KeyCode::Esc => {
-            app.draft.set_input_mode(DialogInputMode::Normal);
-        }
-        KeyCode::Enter => {
-            let outcome = if app.selection.editing().is_some() {
-                app.save_edit();
-                AddOutcome::Saved
+            if app.draft.profile() == EditingProfile::Helix {
+                app.draft.helix_normal();
             } else {
-                app.add_from_draft()
-            };
-            // `Parsed` means the NL parser rewrote the draft into canonical
-            // todo.txt and is asking the user to confirm — stay in Insert so
-            // they can review/edit before a second Enter saves.
-            if !matches!(outcome, AddOutcome::Parsed) {
-                app.mode = Mode::Normal;
-                app.draft_clear();
-                app.selection.exit_edit();
+                app.draft.set_input_mode(DialogInputMode::Normal);
             }
         }
+        KeyCode::Enter => submit_task_draft(app),
         _ => {
             let before = app.draft.text().len();
             let effect = apply_to_draft(app, key);
@@ -835,6 +888,18 @@ fn handle_settings(app: &mut App, key: KeyEvent) {
 
     match key.code {
         KeyCode::Esc | KeyCode::Char(',') => app.mode = Mode::Normal,
+        KeyCode::Char('E') => {
+            app.prefs.editing_profile = if app.prefs.editing_profile == EditingProfile::Vim {
+                EditingProfile::Helix
+            } else {
+                EditingProfile::Vim
+            };
+            app.flash(format!(
+                "next task draft: {}",
+                app.prefs.editing_profile.label()
+            ));
+            app.save_prefs();
+        }
         KeyCode::Char('T') => apply_action(app, Action::CycleTheme),
         KeyCode::Char('D') => apply_action(app, Action::CycleDensity),
         KeyCode::Char('L') => apply_action(app, Action::ToggleLineNum),
@@ -1073,7 +1138,7 @@ fn apply_action(app: &mut App, action: Action) {
             // view the moment it saves. The cursor parks after the seed, so
             // an unwanted tag is a backspace away.
             let seed = app.filter().tag_seed();
-            app.draft_set_insert(seed);
+            app.open_task_draft(seed, DialogInputMode::Insert);
             app.selection.exit_edit();
         }
         Action::BeginEdit => {
@@ -1081,7 +1146,7 @@ fn apply_action(app: &mut App, action: Action) {
                 && let Some(raw) = app.task_raw(abs)
             {
                 app.selection.enter_edit(abs);
-                app.draft_set(raw);
+                app.open_task_draft(raw, DialogInputMode::Normal);
                 app.mode = Mode::Insert;
             }
         }
@@ -1090,7 +1155,7 @@ fn apply_action(app: &mut App, action: Action) {
                 && let Some(raw) = app.task_raw(abs)
             {
                 app.selection.enter_edit(abs);
-                app.draft_set_insert(raw);
+                app.open_task_draft(raw, DialogInputMode::Insert);
                 app.mode = Mode::Insert;
             }
         }
@@ -1257,7 +1322,7 @@ fn apply_action(app: &mut App, action: Action) {
                 && let Some(raw) = app.task_raw(abs)
             {
                 app.selection.enter_edit(abs);
-                app.draft_set_insert(raw);
+                app.open_task_draft(raw, DialogInputMode::Insert);
                 app.mode = Mode::Insert;
                 app.open_calendar(CalendarTarget::Due);
             }
@@ -2280,3 +2345,6 @@ mod tests {
         assert_eq!(app.draft.text(), "");
     }
 }
+
+#[cfg(test)]
+mod helix_input_tests;

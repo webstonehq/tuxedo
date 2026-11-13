@@ -4,7 +4,7 @@ use super::draft_overlay::DraftOverlay;
 use super::{App, UNDO_LIMIT};
 use std::collections::VecDeque;
 
-/// Sub-mode for the edit/add dialog, mirroring vim's modal editing model.
+/// Editing mode for a task dialog; Extend is used only by the Helix subset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DialogInputMode {
     #[default]
@@ -75,7 +75,7 @@ impl DraftCursor {
 }
 
 /// The selection is part of an edit's state, but modes and overlays are not:
-/// undo/redo runs in Normal mode without reviving stale popup ranges.
+/// undo/redo preserves Normal/Extend without reviving stale popup ranges.
 #[derive(Debug, Clone)]
 struct DraftSnapshot {
     text: String,
@@ -469,8 +469,9 @@ impl DraftState {
         self.text = state.text;
         self.cursor = state.cursor;
         self.anchor = state.anchor;
-        self.input_mode = DialogInputMode::Normal;
-        self.normalize_selection();
+        if self.input_mode != DialogInputMode::Extend {
+            self.input_mode = DialogInputMode::Normal;
+        }
         self.overlay = None;
         self.normalize_selection();
         self.reset_autocomplete();
@@ -532,6 +533,12 @@ impl App {
     /// typing without the vim modal step.
     pub fn draft_set_insert(&mut self, s: String) {
         self.draft.set(s, DialogInputMode::Insert);
+    }
+
+    /// Open only a task dialog with the currently configured profile.
+    pub fn open_task_draft(&mut self, text: String, mode: DialogInputMode) {
+        self.draft.open(text, mode, self.prefs.editing_profile);
+        self.chord.clear();
     }
 
     pub fn draft_insert_char(&mut self, c: char) {

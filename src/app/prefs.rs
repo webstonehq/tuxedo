@@ -2,7 +2,7 @@ use std::io;
 use std::path::Path;
 
 use super::types::{Density, Sort};
-use crate::app::WeekStart;
+use crate::app::{EditingProfile, WeekStart};
 use crate::config::Config;
 use crate::theme::{self, Theme};
 
@@ -31,6 +31,7 @@ impl Default for Layout {
 #[derive(Debug, Clone)]
 pub struct Prefs {
     theme_idx: usize,
+    pub editing_profile: EditingProfile,
     pub density: Density,
     pub sort: Sort,
     pub layout: Layout,
@@ -55,6 +56,7 @@ impl Prefs {
             .unwrap_or(0);
         Self {
             theme_idx,
+            editing_profile: cfg.editing_profile.unwrap_or_default(),
             density: cfg.density.unwrap_or(Density::Comfortable),
             sort: cfg.sort.unwrap_or(Sort::Priority),
             layout: Layout {
@@ -146,6 +148,7 @@ impl Prefs {
     /// Returns I/O errors for the caller to report.
     pub fn save_to(&self, path: &Path) -> io::Result<()> {
         let mut cfg = Config::load_from(path);
+        cfg.editing_profile = Some(self.editing_profile);
         cfg.theme = Some(self.theme().name.to_string());
         cfg.density = Some(self.density);
         cfg.sort = Some(self.sort);

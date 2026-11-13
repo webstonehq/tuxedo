@@ -81,6 +81,13 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             "  default sort",
             Some(format!("{} (S to cycle)", app.sort_label())),
         ),
+        (
+            "  editor profile",
+            Some(format!(
+                "{} (E toggle; next draft)",
+                app.prefs.editing_profile.as_str()
+            )),
+        ),
         ("", Some("".into())),
         ("KEYBINDINGS", None),
         ("  ", Some("press ? for the full list".into())),
@@ -120,4 +127,39 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let para = Paragraph::new(lines).style(Style::default().bg(theme.bg).fg(theme.fg));
     frame.render_widget(para, body_area);
+}
+
+#[cfg(test)]
+mod helix_settings_tests {
+    use super::*;
+    use crate::{
+        app::{EditingProfile, Mode},
+        config::Config,
+    };
+    use ratatui::{Terminal, backend::TestBackend};
+
+    #[test]
+    fn editing_profile_and_next_draft_toggle_are_visible_at_required_sizes() {
+        let mut app = App::new(
+            "/tmp/unused-helix-settings.txt".into(),
+            String::new(),
+            "2026-11-13".into(),
+            Config::default(),
+        );
+        app.mode = Mode::Settings;
+        app.prefs.editing_profile = EditingProfile::Helix;
+        for (width, height) in [(110, 32), (80, 24)] {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal.draw(|frame| crate::ui::draw(frame, &app)).unwrap();
+            let text: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(text.contains("editor profile"));
+            assert!(text.contains("helix (E toggle; next draft)"));
+        }
+    }
 }

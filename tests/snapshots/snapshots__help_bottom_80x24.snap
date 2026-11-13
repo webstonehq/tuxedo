@@ -4,25 +4,25 @@ expression: buffer_to_text(terminal.backend().buffer())
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL       
   ┌ tuxedo · HELP ───────────────────────────────────────────────────────────┐  
- P│                                                                          │A)
-  │ FORMAT · todo.txt                                                        │02
-  │ (A), YYYY-MM-DD     priority, creation date                              │02
-  │ +project, @context  project and context tags                             │wo
-  │ due:YYYY-MM-DD      due date; search due:+1w                             │la
-  │ rec:Nu / rec:+Nu    d/w/m/y/b; + anchors due                             │  
-  │ x DATE BODY         completed task                                       │  
-  │                                                                          │  
-  │ RECURRENCE · rec: picker                                                 │-0
- C│ j, ↓, Tab        next field                                              │oa
-  │ k, ↑, Shift-Tab  previous field                                          │  
-  │ l, →, +, =       increase value                                          │  
-  │ h, ←, -, _       decrease value                                          │-0
-  │ Enter            save recurrence                                         │  
-  │ Esc              cancel recurrence                                       │  
+ P│ i / a            insert before / after selection                         │A)
+  │ I / A            insert at absolute start / end                          │02
+  │ y                yank to app register                                    │02
+  │ p / P            paste register after / before                           │wo
+  │ u / U            undo / redo draft text                                  │la
+  │ Enter            review / save draft                                     │  
+  │ Esc              popup → normal → cancel                                 │  
+  │ Tab              autocomplete (insert)                                   │  
+  │                                                                          │-0
+ C│ Helix is a fixed single-selection subset for task drafts only. Its       │oa
+  │ register stays in memory across dialogs; it does not read the system     │  
+  │ clipboard. Draft undo is separate from task undo. Unsupported: multiple  │  
+  │ selections, counts, text objects, regex selection, macros, shell         │-0
+  │ commands, multiline editing and editor-key remapping. I uses absolute    │  
+  │ draft start rather than first nonblank.                                  │  
   │                                                                          │  
   │ Commas separate aliases; / pairs keys with actions. 'palette' means      │  
   │ command palette only.                                                    │  
-  │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 53/53                          │  
+  │ j/k ↑↓ PgUp/PgDn scroll · Esc/?/q close · 79/79                          │  
   └──────────────────────────────────────────────────────────────────────────┘  
                                                                                 
  HELP  · Esc close · j/k scroll · 15 open · 2026-05-06 · tuxedo 2026.8.1

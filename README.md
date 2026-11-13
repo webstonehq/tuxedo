@@ -419,7 +419,7 @@ The Vim modal keys below apply in Normal mode:
 | `Esc` (in Normal) | cancel and close |
 | `Enter` (in Insert and Normal) | save |
 
-To opt into a limited **Helix-inspired single-selection subset**, set this in
+To opt into **Helix-style editing**, set this in
 `config.toml`, or press `E` in settings (`,`):
 
 ```toml
@@ -455,7 +455,7 @@ selects it backwards. Insert preserves selection as in Helix: `w`, `i`, `!`,
 Escape produces `!one two` with `one ` selected backwards; `w`, `a`, `!`,
 Escape produces `one !two` with `one !` selected forwards.
 
-This subset is one task line and one selection, with grapheme-safe movement
+The editor supports one task line and one selection, with grapheme-safe movement
 (including combining marks and emoji). `I` deliberately uses the **absolute
 start**, including before leading spaces; Helix uses the first non-whitespace
 character. The end-of-input position is safe without adding a newline. Counts,

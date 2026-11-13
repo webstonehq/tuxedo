@@ -9,7 +9,7 @@ expression: buffer_to_text(buf)
    +health           3      2   (A) Call dentist to reschedule cle due       202
    +finance          2     (3)  PRIORITY B  ────────────────────── projects  +wo
    +home             1      3   (B) Review pull requests for auth  contexts  @la
-   +learning        ┌ ADD TASK · Helix subset · Normal ────┐mmer t              
+   +learning        ┌ ADD TASK · Helix · Normal ───────────┐mmer t              
    +personal        │                                      │senior RAW          
    +travel          │  › emonstrate scrolling +work @home  │──────              
                     │  ok · 1 +project 1 @context          │taxes  (A) 2026-05-0

@@ -57,7 +57,7 @@ fn help_uses_effective_keys_and_scrolls_to_editor_recurrence_and_format() {
         assert!(all.contains("RECURRENCE"));
         assert!(all.contains("FORMAT"));
         if width >= 80 {
-            assert!(all.contains("HELIX DRAFT"));
+            assert!(all.contains("HELIX-STYLE DRAFT"));
             assert!(all.contains("editing_profile"));
         }
         if width >= 80 {
@@ -119,7 +119,7 @@ fn default_help_keeps_the_task_overview_together_and_full_reference_reachable() 
     screen(&app, 164, 52);
     assert!(app.help_scroll.get() > 0, "extended reference scrolls");
     let bottom = screen(&app, 164, 52);
-    assert!(bottom.contains("HELIX DRAFT"));
+    assert!(bottom.contains("HELIX-STYLE DRAFT"));
     assert!(bottom.contains("Unsupported:"));
 }
 

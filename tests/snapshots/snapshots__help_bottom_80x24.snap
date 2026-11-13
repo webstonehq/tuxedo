@@ -13,12 +13,12 @@ expression: buffer_to_text(terminal.backend().buffer())
   │ Esc              popup → normal → cancel                                 │  
   │ Tab              autocomplete (insert)                                   │  
   │                                                                          │-0
- C│ Helix is a fixed single-selection subset for task drafts only. Its       │oa
-  │ register stays in memory across dialogs; it does not read the system     │  
-  │ clipboard. Draft undo is separate from task undo. Unsupported: multiple  │  
-  │ selections, counts, text objects, regex selection, macros, shell         │-0
-  │ commands, multiline editing and editor-key remapping. I uses absolute    │  
-  │ draft start rather than first nonblank.                                  │  
+ C│ Helix-style editing supports one selection in task drafts. Its register  │oa
+  │ stays in memory across dialogs; it does not read the system clipboard.   │  
+  │ Draft undo is separate from task undo. Unsupported: multiple selections, │  
+  │ counts, text objects, regex selection, macros, shell commands, multiline │-0
+  │ editing and editor-key remapping. I uses absolute draft start rather     │  
+  │ than first nonblank.                                                     │  
   │                                                                          │  
   │ Commas separate aliases; / pairs keys with actions. 'palette' means      │  
   │ command palette only.                                                    │  

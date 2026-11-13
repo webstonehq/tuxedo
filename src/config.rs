@@ -16,7 +16,7 @@ use crate::app::{EditingProfile, WeekStart};
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Config {
     pub theme: Option<String>,
-    /// Optional single-task draft command subset; missing/unknown uses Vim.
+    /// Optional task-draft editing style; missing/unknown uses Vim.
     pub editing_profile: Option<EditingProfile>,
     pub density: Option<Density>,
     pub sort: Option<Sort>,

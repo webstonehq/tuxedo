@@ -13,7 +13,7 @@ expression: buffer_to_text(buf)
    +personal         1      5   (B) Draft hiring rubric for senior eng +work RAW                              
    +travel           1     (2)  PRIORITY C  ────────────────────────────────                                  
                             6   (C) Pay quarterly estimated taxes @home +fin (A) 2026-05-01 Finish Q2 board   
- CONTEXTS                   7   (C)┌ ADD TASK · Helix subset · Normal ────┐s deck +work @laptop               
+ CONTEXTS                   7   (C)┌ ADD TASK · Helix · Normal ───────────┐s deck +work @laptop               
    @errands          4     (8)  NO │                                      │─ due:2026-05-06                   
    @home             4      8      │  › emonstrate scrolling +work @home  │                                   
    @laptop           4      9      │  ok · 1 +project 1 @context          │e                                  

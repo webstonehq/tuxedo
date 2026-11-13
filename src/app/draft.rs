@@ -4,7 +4,7 @@ use super::draft_overlay::DraftOverlay;
 use super::{App, UNDO_LIMIT};
 use std::collections::VecDeque;
 
-/// Editing mode for a task dialog; Extend is used only by the Helix subset.
+/// Editing mode for a task dialog; Extend is used only by the Helix-style editor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DialogInputMode {
     #[default]
@@ -41,7 +41,7 @@ impl EditingProfile {
     pub fn label(self) -> &'static str {
         match self {
             Self::Vim => "Vim",
-            Self::Helix => "Helix subset",
+            Self::Helix => "Helix",
         }
     }
 }

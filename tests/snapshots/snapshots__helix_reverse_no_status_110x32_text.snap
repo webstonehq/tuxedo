@@ -14,7 +14,7 @@ expression: buffer_to_text(buf)
    +travel           1     (2)  PRIORITY C  ────────────────────────────────                                  
                             6   (C) Pay quarterly estimated taxes @home +fin (A) 2026-05-01 Finish Q2 board   
  CONTEXTS                   7   (C) Order new running shoes +health @errands deck +work @laptop               
-   @errands          4     (8)  NO ┌ ADD TASK · Helix subset · Extend ────┐─ due:2026-05-06                   
+   @errands          4     (8)  NO ┌ ADD TASK · Helix · Extend ───────────┐─ due:2026-05-06                   
    @home             4      8      │                                      │                                   
    @laptop           4      9      │  › one two é 👩‍💻  🧑🏽‍🚀  a long task draf  │e                                  
    @phone            3     10      │  ok · 1 +project 1 @context          │                                   

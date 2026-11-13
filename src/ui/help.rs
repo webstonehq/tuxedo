@@ -182,7 +182,7 @@ fn details(app: &App) -> (Vec<Section>, Vec<Section>) {
             ],
         },
         Section {
-            title: "HELIX DRAFT · optional subset",
+            title: "HELIX-STYLE DRAFT · optional",
             entries: vec![
                 fixed("E in settings", "profile for next task draft"),
                 fixed("editing_profile", "config: vim (default) / helix"),
@@ -349,7 +349,7 @@ fn rows(app: &App, width: u16) -> Vec<Line<'static>> {
     rows.extend(columns(app.theme(), &left, &right, width));
     rows.push(Line::raw(""));
     for note in wrap(
-        "Helix is a fixed single-selection subset for task drafts only. Its register stays in memory across dialogs; it does not read the system clipboard. Draft undo is separate from task undo. Unsupported: multiple selections, counts, text objects, regex selection, macros, shell commands, multiline editing and editor-key remapping. I uses absolute draft start rather than first nonblank.",
+        "Helix-style editing supports one selection in task drafts. Its register stays in memory across dialogs; it does not read the system clipboard. Draft undo is separate from task undo. Unsupported: multiple selections, counts, text objects, regex selection, macros, shell commands, multiline editing and editor-key remapping. I uses absolute draft start rather than first nonblank.",
         width,
     ) {
         rows.push(Line::styled(note, Style::default().fg(app.theme().dim)));
@@ -518,14 +518,14 @@ mod helix_help_tests {
                 .collect::<Vec<_>>()
                 .join(" ");
             for needle in [
-                "HELIX DRAFT",
+                "HELIX-STYLE DRAFT",
                 "editing_profile",
                 "Home / End",
                 "u / U",
                 "p / P",
                 "I / A",
                 "absolute",
-                "single-selection",
+                "one selection",
                 "Unsupported:",
             ] {
                 assert!(text.contains(needle), "missing {needle} at {width}");

@@ -17,6 +17,7 @@ use tuxedo::app::{
 use tuxedo::cli;
 use tuxedo::config::Config;
 use tuxedo::config_watcher;
+use tuxedo::core::outcome::Reconcile;
 use tuxedo::keybinds::KeyBindings;
 use tuxedo::theme;
 use tuxedo::ui::hyperlinks;
@@ -338,8 +339,12 @@ fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
     // Detect external edits before processing the key. On detection the
     // file is reloaded, the keystroke is consumed (re-press to act on the
     // new state), and the per-mutator checks become no-ops downstream.
-    if !app.check_external_changes() {
-        return;
+    match app.poll_external_changes() {
+        Reconcile::Reloaded => return,
+        Reconcile::ReadError if app.mode != Mode::Insert => return,
+        // Draft commands stay usable through read failure. Submit still goes
+        // through store reconciliation, which refuses unverified disk state.
+        Reconcile::ReadError | Reconcile::Unchanged => {}
     }
     match app.mode {
         Mode::Insert => handle_insert(app, key, keybinds),

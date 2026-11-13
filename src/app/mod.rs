@@ -671,8 +671,16 @@ impl App {
 
     /// Reconcile against disk and drain the inbox. Returns `true` when it is
     /// safe to proceed (disk unchanged); `false` when the file was reloaded or
-    /// unreadable. The TUI run loop and `handle_key` call this each tick.
+    /// unreadable. The TUI uses this on idle ticks; input dispatch uses
+    /// `poll_external_changes` to keep local draft recovery available.
     pub fn check_external_changes(&mut self) -> bool {
+        matches!(self.poll_external_changes(), Reconcile::Unchanged)
+    }
+
+    /// Keep the reconcile outcome available to input dispatch: a failed read
+    /// blocks persistence, but must not block local draft editing or cancel.
+    /// Successful reloads still invalidate row identities and consume the key.
+    pub fn poll_external_changes(&mut self) -> Reconcile {
         let reconcile = self.store.reconcile();
         match reconcile {
             Reconcile::Reloaded => self.on_reload(),
@@ -683,8 +691,12 @@ impl App {
             }),
             Reconcile::Unchanged => {}
         }
-        let report = self.store.drain_inbox();
-        self.apply_drain(report);
-        matches!(reconcile, Reconcile::Unchanged)
+        // Inbox draining also persists tasks. Leave captures pending when
+        // disk content could not be verified, just as store mutators do.
+        if reconcile != Reconcile::ReadError {
+            let report = self.store.drain_inbox();
+            self.apply_drain(report);
+        }
+        reconcile
     }
 }

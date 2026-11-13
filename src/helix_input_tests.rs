@@ -419,3 +419,173 @@ fn failed_write_can_retry_the_same_editable_draft_once_storage_recovers() {
         }
     }
 }
+
+#[test]
+fn persistent_read_error_allows_draft_edit_yank_history_and_cancel_without_mutation() {
+    for profile in [EditingProfile::Vim, EditingProfile::Helix] {
+        for edit in [false, true] {
+            let mut f = Fixture::new(profile);
+            let original = f.disk();
+            if edit {
+                f.keys("i");
+            } else {
+                f.keys("n");
+            }
+            f.keys(" recover");
+            let before = f.app.draft.text().to_string();
+            std::fs::remove_file(f.dir.join("todo.txt")).unwrap();
+            std::fs::create_dir(f.dir.join("todo.txt")).unwrap();
+            for _ in 0..2 {
+                f.press(KeyCode::Enter);
+            }
+            assert_eq!(f.app.draft.text(), before);
+            assert_eq!(f.app.draft.profile(), profile);
+            assert_eq!(f.app.selection.editing(), edit.then_some(0));
+            assert!(!f.app.selection.edit_stale());
+            assert_eq!(
+                f.app
+                    .tasks()
+                    .iter()
+                    .map(|t| t.raw.as_str())
+                    .collect::<Vec<_>>(),
+                ["one two", "other +work @home"]
+            );
+            assert!(f.dir.join("todo.txt").is_dir());
+            assert!(!f.dir.join("todo.tmp").exists());
+            f.keys("!"); // must work while the read error is still present
+            assert_eq!(f.app.draft.text(), format!("{before}!"));
+            f.press(KeyCode::Esc);
+            assert_eq!(f.app.draft.input_mode(), DialogInputMode::Normal);
+            if profile == EditingProfile::Helix {
+                f.keys("u");
+                assert_eq!(f.app.draft.text(), before);
+                f.keys("U%y");
+                assert_eq!(f.app.draft.register(), format!("{before}!"));
+                f.keys("v");
+                f.press(KeyCode::Esc);
+                assert_eq!(f.app.draft.input_mode(), DialogInputMode::Normal);
+            }
+            f.press(KeyCode::Esc);
+            assert_eq!(f.app.mode, Mode::Normal);
+            assert_eq!(f.app.selection.editing(), None);
+            assert_eq!(f.app.draft.text(), "");
+            std::fs::remove_dir(f.dir.join("todo.txt")).unwrap();
+            std::fs::write(f.dir.join("todo.txt"), &original).unwrap();
+            f.app.clear_flash();
+            f.keys("u");
+            assert_eq!(
+                f.app.flash_active(),
+                None,
+                "failed submits add no task undo entry"
+            );
+            assert_eq!(f.disk(), original);
+            f.keys("nintended");
+            f.press(KeyCode::Enter);
+            assert_eq!(f.app.mode, Mode::Normal);
+            assert!(!f.disk().contains("recover"));
+            assert_eq!(f.disk().matches("intended").count(), 1);
+            f.keys("u");
+            assert_eq!(f.disk(), original);
+        }
+    }
+}
+
+#[test]
+fn persistent_read_error_keeps_overlay_escape_ahead_of_mode_and_cancel() {
+    for profile in [EditingProfile::Vim, EditingProfile::Helix] {
+        for edit in [false, true] {
+            let mut f = Fixture::new(profile);
+            if edit {
+                f.keys("i");
+            } else {
+                f.keys("n");
+            }
+            f.keys(" due:");
+            assert!(f.app.draft.overlay().is_some());
+            std::fs::remove_file(f.dir.join("todo.txt")).unwrap();
+            std::fs::create_dir(f.dir.join("todo.txt")).unwrap();
+            f.press(KeyCode::Esc);
+            assert!(f.app.draft.overlay().is_none());
+            assert_eq!(f.app.draft.input_mode(), DialogInputMode::Insert);
+            assert_eq!(f.app.selection.editing(), edit.then_some(0));
+            f.keys(" continued");
+            assert!(f.app.draft.text().ends_with(" continued"));
+            f.press(KeyCode::Esc);
+            assert_eq!(f.app.draft.input_mode(), DialogInputMode::Normal);
+            f.press(KeyCode::Esc);
+            assert_eq!(f.app.mode, Mode::Normal);
+            assert!(f.dir.join("todo.txt").is_dir());
+        }
+    }
+}
+
+#[test]
+fn recovered_readable_storage_saves_only_the_intended_retained_draft_once() {
+    for profile in [EditingProfile::Vim, EditingProfile::Helix] {
+        for edit in [false, true] {
+            let mut f = Fixture::new(profile);
+            let original = f.disk();
+            if edit {
+                f.keys("i");
+            } else {
+                f.keys("n");
+            }
+            f.keys(" recover");
+            std::fs::remove_file(f.dir.join("todo.txt")).unwrap();
+            std::fs::create_dir(f.dir.join("todo.txt")).unwrap();
+            f.press(KeyCode::Enter);
+            f.keys("!");
+            let intended = f.app.draft.text().to_string();
+            std::fs::remove_dir(f.dir.join("todo.txt")).unwrap();
+            std::fs::write(f.dir.join("todo.txt"), &original).unwrap();
+            f.press(KeyCode::Enter);
+            assert_eq!(f.app.mode, Mode::Normal);
+            assert!(f.disk().contains(intended.trim()));
+            assert_eq!(f.disk().matches("recover!").count(), 1);
+            assert_eq!(f.app.tasks().len(), if edit { 2 } else { 3 });
+            f.keys("u");
+            assert_eq!(f.disk(), original);
+        }
+    }
+}
+
+#[test]
+fn unreadable_utf8_with_pending_inbox_never_overwrites_unverified_disk() {
+    for profile in [EditingProfile::Vim, EditingProfile::Helix] {
+        for edit in [false, true] {
+            let mut f = Fixture::new(profile);
+            let original = f.disk();
+            if edit {
+                f.keys("i");
+            } else {
+                f.keys("n");
+            }
+            f.keys(" cancelled");
+            let unreadable = [0xff, 0xfe, b'\n'];
+            std::fs::write(f.dir.join("todo.txt"), unreadable).unwrap();
+            let inbox = "incoming due:2026-11-15\n";
+            std::fs::write(f.dir.join("inbox.txt"), inbox).unwrap();
+            f.keys("!");
+            assert!(f.app.draft.text().ends_with("cancelled!"));
+            for _ in 0..2 {
+                f.press(KeyCode::Enter);
+            }
+            assert_eq!(std::fs::read(f.dir.join("todo.txt")).unwrap(), unreadable);
+            assert_eq!(
+                std::fs::read_to_string(f.dir.join("inbox.txt")).unwrap(),
+                inbox
+            );
+            assert_eq!(f.app.tasks().len(), 2);
+            assert_eq!(f.app.selection.editing(), edit.then_some(0));
+            f.press(KeyCode::Esc);
+            f.press(KeyCode::Esc);
+            std::fs::write(f.dir.join("todo.txt"), &original).unwrap();
+            f.press(KeyCode::Down); // only readable recovery may merge the pending capture
+            assert_eq!(f.app.tasks().len(), 3);
+            assert!(f.disk().contains("incoming"));
+            assert!(!f.disk().contains("cancelled"));
+            f.keys("u");
+            assert_eq!(f.disk(), original);
+        }
+    }
+}

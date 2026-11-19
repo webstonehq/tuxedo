@@ -271,11 +271,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     };
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
+        .border_style(Style::default().fg(theme.dialog_border()).bg(theme.panel))
         .title(Line::from(vec![Span::styled(
             title,
             Style::default()
-                .fg(theme.accent)
+                .fg(theme.dialog_title())
                 .add_modifier(Modifier::BOLD),
         )]))
         .style(Style::default().bg(theme.panel));
@@ -306,7 +306,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Span::styled(
             "› ",
             Style::default()
-                .fg(theme.accent)
+                .fg(theme.dialog_prompt())
                 .add_modifier(Modifier::BOLD),
         ),
     ])
@@ -430,11 +430,11 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
     };
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
+        .border_style(Style::default().fg(theme.dialog_border()).bg(theme.panel))
         .title(Line::from(Span::styled(
             label,
             Style::default()
-                .fg(theme.accent)
+                .fg(theme.dialog_title())
                 .add_modifier(Modifier::BOLD),
         )))
         .style(Style::default().bg(theme.panel));
@@ -546,13 +546,25 @@ pub fn render_autocomplete(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App
         .enumerate()
         .map(|(i, s)| {
             let is_sel = i == selected;
-            let bg = if is_sel { theme.accent } else { theme.panel };
-            let fg = if is_sel { theme.bg } else { theme.fg };
+            let bg = if is_sel {
+                theme.autocomplete_sel_bg()
+            } else {
+                theme.autocomplete_bg()
+            };
+            let fg = if is_sel {
+                theme.autocomplete_sel_fg()
+            } else {
+                theme.autocomplete_fg()
+            };
             Line::from(vec![
                 Span::styled(
                     format!(" {}", sigil),
                     Style::default()
-                        .fg(sigil_color)
+                        .fg(if is_sel {
+                            theme.autocomplete_sigil_sel()
+                        } else {
+                            sigil_color
+                        })
                         .bg(bg)
                         .add_modifier(Modifier::BOLD),
                 ),
@@ -563,7 +575,7 @@ pub fn render_autocomplete(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App
         .collect();
 
     frame.render_widget(
-        Paragraph::new(lines).style(Style::default().bg(theme.panel)),
+        Paragraph::new(lines).style(Style::default().bg(theme.autocomplete_bg())),
         area,
     );
 }
@@ -650,7 +662,7 @@ fn render_slash_menu(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     frame.render_widget(Clear, area);
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
+        .border_style(Style::default().fg(theme.dialog_border()).bg(theme.panel))
         .style(Style::default().bg(theme.panel));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -761,11 +773,11 @@ fn render_calendar(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App) {
     };
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
+        .border_style(Style::default().fg(theme.dialog_border()).bg(theme.panel))
         .title(Line::from(Span::styled(
             format!(" {label} "),
             Style::default()
-                .fg(theme.accent)
+                .fg(theme.dialog_title())
                 .add_modifier(Modifier::BOLD),
         )))
         .style(Style::default().bg(theme.panel));
@@ -885,11 +897,11 @@ fn render_recurrence_builder(frame: &mut Frame, dlg: Rect, screen: Rect, app: &A
     frame.render_widget(Clear, area);
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
+        .border_style(Style::default().fg(theme.dialog_border()).bg(theme.panel))
         .title(Line::from(Span::styled(
             " ↻ REPEAT ",
             Style::default()
-                .fg(theme.accent)
+                .fg(theme.dialog_title())
                 .add_modifier(Modifier::BOLD),
         )))
         .style(Style::default().bg(theme.panel));
@@ -1077,11 +1089,11 @@ fn render_priority_chooser(frame: &mut Frame, dlg: Rect, screen: Rect, app: &App
     frame.render_widget(Clear, area);
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border).bg(theme.panel))
+        .border_style(Style::default().fg(theme.dialog_border()).bg(theme.panel))
         .title(Line::from(Span::styled(
             " PRIORITY ",
             Style::default()
-                .fg(theme.accent)
+                .fg(theme.dialog_title())
                 .add_modifier(Modifier::BOLD),
         )))
         .style(Style::default().bg(theme.panel));

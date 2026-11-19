@@ -41,9 +41,9 @@ pub fn render(frame: &mut Frame, area: Rect, theme: &Theme, props: HeaderProps<'
     // mark used in the empty state and help overlay.
     let mut spans: Vec<Span> = vec![
         Span::raw(" "),
-        Span::styled("▶", Style::default().fg(theme.accent)),
-        Span::styled("▮", Style::default().fg(theme.pri_a)),
-        Span::styled("◀", Style::default().fg(theme.accent)),
+        Span::styled("▶", Style::default().fg(theme.header_logo())),
+        Span::styled("▮", Style::default().fg(theme.header_logo_knot())),
+        Span::styled("◀", Style::default().fg(theme.header_logo())),
         Span::raw(" "),
     ];
     if let Some(t) = props.title {
@@ -63,7 +63,7 @@ pub fn render(frame: &mut Frame, area: Rect, theme: &Theme, props: HeaderProps<'
         Span::styled("  •  ", Style::default().fg(theme.dim)),
         Span::styled(
             format!("sort:{}", props.sort),
-            Style::default().fg(theme.accent),
+            Style::default().fg(theme.header_sort()),
         ),
     ]);
     if let Some(f) = props.filter {

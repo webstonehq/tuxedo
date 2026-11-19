@@ -54,7 +54,7 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
     let glyph_color = if task.done && !opts.cursor {
         theme.done
     } else {
-        theme.accent
+        theme.list_cursor_marker()
     };
     let mut glyph_style = Style::default().fg(glyph_color);
     if opts.cursor {

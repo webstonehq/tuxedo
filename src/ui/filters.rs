@@ -29,7 +29,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         vec![Span::styled(
             " PROJECTS",
             Style::default()
-                .fg(theme.project)
+                .fg(theme.filters_projects_heading())
                 .add_modifier(Modifier::BOLD),
         )],
     ));
@@ -47,7 +47,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         vec![Span::styled(
             " CONTEXTS",
             Style::default()
-                .fg(theme.context)
+                .fg(theme.filters_contexts_heading())
                 .add_modifier(Modifier::BOLD),
         )],
     ));
@@ -68,7 +68,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             vec![Span::styled(
                 " SAVED",
                 Style::default()
-                    .fg(theme.accent)
+                    .fg(theme.filters_saved_heading())
                     .add_modifier(Modifier::BOLD),
             )],
         ));
@@ -86,7 +86,14 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                     !t.done && filter::passes_user_filter(t, &default_filter, Some(&needle))
                 })
                 .count();
-            lines.push(filter_row(theme, "", &f.name, count, active, theme.accent));
+            lines.push(filter_row(
+                theme,
+                "",
+                &f.name,
+                count,
+                active,
+                theme.filters_saved(),
+            ));
         }
     }
 
@@ -111,7 +118,10 @@ fn filter_row<'a>(
     }
     Line::from(vec![
         Span::raw(" "),
-        Span::styled(prefix.to_string(), Style::default().fg(theme.accent)),
+        Span::styled(
+            prefix.to_string(),
+            Style::default().fg(theme.filters_marker()),
+        ),
         Span::styled(padded, Style::default().fg(sigil_color)),
         Span::styled(format!("{:>3}", count), Style::default().fg(theme.dim)),
     ])

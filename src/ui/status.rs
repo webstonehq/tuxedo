@@ -104,11 +104,21 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     ])
     .areas(area);
 
+    let chip_bg = match app.mode {
+        Mode::Normal => theme.mode_normal_bg(),
+        Mode::Insert => match app.draft.input_mode() {
+            DialogInputMode::Normal => theme.mode_normal_bg(),
+            DialogInputMode::Insert => theme.mode_insert_bg(),
+        },
+        Mode::Search => theme.mode_search_bg(),
+        Mode::Visual => theme.mode_visual_bg(),
+        _ => theme.mode_chip_bg(),
+    };
     let chip = Paragraph::new(Span::styled(
         chip_text,
         Style::default()
-            .bg(theme.mode_bg)
-            .fg(theme.mode_fg)
+            .bg(chip_bg)
+            .fg(theme.mode_chip_fg())
             .add_modifier(Modifier::BOLD),
     ))
     .style(Style::default().bg(theme.statusbar));

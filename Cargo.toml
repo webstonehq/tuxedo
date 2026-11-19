@@ -12,6 +12,9 @@ notify = "8"
 qrcode = { version = "0.14", default-features = false }
 ratatui = "0.30.0"
 tiny_http = "0.12"
+unicode-linebreak = "0.1"
+unicode-segmentation = "1.13"
+unicode-width = "0.2"
 
 [dev-dependencies]
 insta = "1.47"

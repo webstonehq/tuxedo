@@ -116,6 +116,31 @@ another theme is skipped with a warning at startup.
 | `selected` | selected-row background (visual mode) and the active filter |
 | `matched` | search-match highlight |
 
+**Per-element overrides** (optional). Each base field above colors many UI
+elements at once. To recolor a single element, add its dotted key; any
+element you leave out keeps falling back to the base field shown.
+
+| Element key | Colors | Falls back to |
+| --- | --- | --- |
+| `autocomplete.bg` / `autocomplete.fg` | completion popup row | `panel` / `fg` |
+| `autocomplete.sel_bg` / `autocomplete.sel_fg` | selected completion row | `accent` / `bg` |
+| `autocomplete.sigil_sel` | `+`/`@` on the selected completion row | `autocomplete.sel_fg` |
+| `mode.bg` / `mode.fg` | mode chip, all modes | `mode_bg` / `mode_fg` |
+| `mode.normal_bg` `mode.insert_bg` `mode.search_bg` `mode.visual_bg` | mode chip in that mode | `mode.bg` |
+| `dialog.title` / `dialog.border` | dialog title / border | `accent` / `border` |
+| `dialog.prompt` | `›` prompt in the task editor | `accent` |
+| `filters.projects_heading` / `filters.contexts_heading` | filter panel headings | `project` / `context` |
+| `filters.saved_heading` / `filters.saved` | SAVED heading / saved filter names | `accent` |
+| `filters.marker` | `▸` on the active filter | `accent` |
+| `header.logo` / `header.logo_knot` | header `▶◀` / `▮` | `accent` / `pri_a` |
+| `header.sort` | `sort:` label | `accent` |
+| `list.cursor_marker` | `▸`/`✓` on the cursor row | `accent` |
+
+```toml
+mode.insert_bg = #b26fc1
+autocomplete.sigil_sel = #262626
+```
+
 </details>
 
 ## Install

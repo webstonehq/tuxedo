@@ -33,6 +33,9 @@ pub struct Theme {
     pub done: Color,
     pub selected: Color,
     pub matched: Color,
+    /// Optional per-element overrides; unset elements fall back to the
+    /// base palette above (see `elements!`).
+    pub el: Elements,
 }
 
 impl Theme {
@@ -45,6 +48,98 @@ impl Theme {
             _ => self.pri_other,
         }
     }
+}
+
+/// Declares the optional per-element color overrides. Each entry is
+/// `accessor = "theme.key" => |t| fallback;` — the accessor returns the
+/// override when the theme file sets `theme.key`, else `fallback`, which may
+/// reference base fields or other element accessors.
+macro_rules! elements {
+    ($( $(#[$doc:meta])* $field:ident = $key:literal => |$t:ident| $fallback:expr ;)*) => {
+        #[derive(Debug, Clone, Copy, Default, PartialEq)]
+        pub struct Elements {
+            $( pub $field: Option<Color>, )*
+        }
+
+        impl Elements {
+            pub const NONE: Elements = Elements { $( $field: None, )* };
+
+            /// Every element key accepted in a theme file.
+            #[allow(dead_code)]
+            pub const KEYS: &'static [&'static str] = &[$($key),*];
+
+            fn slot(&mut self, key: &str) -> Option<&mut Option<Color>> {
+                match key {
+                    $( $key => Some(&mut self.$field), )*
+                    _ => None,
+                }
+            }
+        }
+
+        impl Theme {
+            $(
+                $(#[$doc])*
+                pub fn $field(&self) -> Color {
+                    let $t = self;
+                    self.el.$field.unwrap_or($fallback)
+                }
+            )*
+        }
+    };
+}
+
+elements! {
+    /// Completion popup, unselected row background.
+    autocomplete_bg = "autocomplete.bg" => |t| t.panel;
+    /// Completion popup, unselected row text.
+    autocomplete_fg = "autocomplete.fg" => |t| t.fg;
+    /// Completion popup, selected row background.
+    autocomplete_sel_bg = "autocomplete.sel_bg" => |t| t.accent;
+    /// Completion popup, selected row text.
+    autocomplete_sel_fg = "autocomplete.sel_fg" => |t| t.bg;
+    /// `+`/`@` sigil on the selected completion row.
+    autocomplete_sigil_sel = "autocomplete.sigil_sel" => |t| t.autocomplete_sel_fg();
+
+    /// Status-bar mode chip background (all modes).
+    mode_chip_bg = "mode.bg" => |t| t.mode_bg;
+    /// Status-bar mode chip text (all modes).
+    mode_chip_fg = "mode.fg" => |t| t.mode_fg;
+    /// Mode chip background in NORMAL.
+    mode_normal_bg = "mode.normal_bg" => |t| t.mode_chip_bg();
+    /// Mode chip background in INSERT.
+    mode_insert_bg = "mode.insert_bg" => |t| t.mode_chip_bg();
+    /// Mode chip background in SEARCH.
+    mode_search_bg = "mode.search_bg" => |t| t.mode_chip_bg();
+    /// Mode chip background in VISUAL.
+    mode_visual_bg = "mode.visual_bg" => |t| t.mode_chip_bg();
+
+    /// Dialog / overlay title text.
+    dialog_title = "dialog.title" => |t| t.accent;
+    /// Dialog / overlay border.
+    dialog_border = "dialog.border" => |t| t.border;
+    /// `›` prompt in the task editor.
+    dialog_prompt = "dialog.prompt" => |t| t.accent;
+
+    /// PROJECTS heading in the filters panel.
+    filters_projects_heading = "filters.projects_heading" => |t| t.project;
+    /// CONTEXTS heading in the filters panel.
+    filters_contexts_heading = "filters.contexts_heading" => |t| t.context;
+    /// SAVED heading in the filters panel.
+    filters_saved_heading = "filters.saved_heading" => |t| t.accent;
+    /// Saved filter names.
+    filters_saved = "filters.saved" => |t| t.accent;
+    /// `▸` marker on the active filter row.
+    filters_marker = "filters.marker" => |t| t.accent;
+
+    /// `▶`/`◀` of the header logo.
+    header_logo = "header.logo" => |t| t.accent;
+    /// `▮` knot of the header logo.
+    header_logo_knot = "header.logo_knot" => |t| t.pri_a;
+    /// `sort:` label in the header.
+    header_sort = "header.sort" => |t| t.accent;
+
+    /// `▸` / `✓` glyph on the cursor row of the task list.
+    list_cursor_marker = "list.cursor_marker" => |t| t.accent;
 }
 
 const fn rgb(r: u8, g: u8, b: u8) -> Color {
@@ -78,6 +173,7 @@ pub const MUTED: Theme = Theme {
     done: rgb(0x5a, 0x62, 0x70),
     selected: rgb(0x2f, 0x39, 0x47),
     matched: rgb(0xd4, 0xb0, 0x6a),
+    el: Elements::NONE,
 };
 
 pub const DAWN: Theme = Theme {
@@ -107,6 +203,7 @@ pub const DAWN: Theme = Theme {
     done: rgb(0xa8, 0x9a, 0x82),
     selected: rgb(0xed, 0xe0, 0xc8),
     matched: rgb(0xa3, 0x72, 0x2a),
+    el: Elements::NONE,
 };
 
 pub const NORD: Theme = Theme {
@@ -136,6 +233,7 @@ pub const NORD: Theme = Theme {
     done: rgb(0x4c, 0x56, 0x6a),
     selected: rgb(0x43, 0x4c, 0x5e),
     matched: rgb(0xeb, 0xcb, 0x8b),
+    el: Elements::NONE,
 };
 
 pub const MATRIX: Theme = Theme {
@@ -165,6 +263,7 @@ pub const MATRIX: Theme = Theme {
     done: rgb(0x3f, 0x6a, 0x3f),
     selected: rgb(0x1f, 0x3a, 0x1f),
     matched: rgb(0xff, 0xd6, 0x6e),
+    el: Elements::NONE,
 };
 
 pub const TERMINAL: Theme = Theme {
@@ -194,6 +293,7 @@ pub const TERMINAL: Theme = Theme {
     done: Color::DarkGray,
     selected: Color::DarkGray,
     matched: Color::Yellow,
+    el: Elements::NONE,
 };
 
 pub const BUILT_IN: &[&Theme] = &[&MUTED, &DAWN, &NORD, &MATRIX, &TERMINAL];
@@ -301,6 +401,7 @@ fn parse_theme(s: &str) -> Result<Theme, String> {
     let mut name: Option<String> = None;
     let mut colors: std::collections::BTreeMap<&'static str, Color> =
         std::collections::BTreeMap::new();
+    let mut el = Elements::NONE;
 
     for (lineno, raw) in s.lines().enumerate() {
         let line = raw.trim();
@@ -327,6 +428,14 @@ fn parse_theme(s: &str) -> Result<Theme, String> {
                 )
             })?;
             colors.insert(field, color);
+        } else if let Some(slot) = el.slot(k) {
+            let color = parse_color(v).ok_or_else(|| {
+                format!(
+                    "line {}: element '{k}' has invalid color '{v}' (expected #rrggbb or reset/transparent)",
+                    lineno + 1
+                )
+            })?;
+            *slot = Some(color);
         }
         // unknown keys are ignored for forward compatibility
     }
@@ -369,6 +478,7 @@ fn parse_theme(s: &str) -> Result<Theme, String> {
         done: get("done")?,
         selected: get("selected")?,
         matched: get("matched")?,
+        el,
     })
 }
 
@@ -524,6 +634,50 @@ matched = #b58900
         let body = format!("# hello\nbogus = whatever\n{FULL_THEME}");
         let t = parse_theme(&body).expect("parse should succeed");
         assert_eq!(t.name, "Solarized Dark");
+    }
+
+    #[test]
+    fn elements_fall_back_to_base_palette() {
+        let t = parse_theme(FULL_THEME).expect("parse should succeed");
+        assert_eq!(t.el, Elements::NONE);
+        assert_eq!(t.autocomplete_sel_bg(), t.accent);
+        assert_eq!(t.autocomplete_sel_fg(), t.bg);
+        assert_eq!(t.autocomplete_sigil_sel(), t.bg);
+        assert_eq!(t.mode_insert_bg(), t.mode_bg);
+        assert_eq!(t.dialog_border(), t.border);
+        assert_eq!(t.filters_contexts_heading(), t.context);
+        assert_eq!(t.header_logo_knot(), t.pri_a);
+    }
+
+    #[test]
+    fn elements_override_and_chain() {
+        let body = format!(
+            "{FULL_THEME}\nautocomplete.sel_fg = #111111\nmode.bg = #222222\nmode.insert_bg = #333333\n"
+        );
+        let t = parse_theme(&body).expect("parse should succeed");
+        assert_eq!(t.autocomplete_sel_fg(), rgb(0x11, 0x11, 0x11));
+        // sigil_sel chains to sel_fg when unset
+        assert_eq!(t.autocomplete_sigil_sel(), rgb(0x11, 0x11, 0x11));
+        // per-mode override wins, other modes chain to mode.bg
+        assert_eq!(t.mode_insert_bg(), rgb(0x33, 0x33, 0x33));
+        assert_eq!(t.mode_normal_bg(), rgb(0x22, 0x22, 0x22));
+        // base field untouched
+        assert_eq!(t.mode_bg, rgb(0xb5, 0x89, 0x00));
+    }
+
+    #[test]
+    fn elements_bad_color_names_element() {
+        let body = format!("{FULL_THEME}\ndialog.title = nope\n");
+        let err = parse_theme(&body).expect_err("bad element color must fail");
+        assert!(err.contains("element 'dialog.title'"), "{err}");
+    }
+
+    #[test]
+    fn elements_keys_are_unique() {
+        let mut keys = Elements::KEYS.to_vec();
+        keys.sort();
+        keys.dedup();
+        assert_eq!(keys.len(), Elements::KEYS.len());
     }
 
     fn unique_dir(label: &str) -> PathBuf {
